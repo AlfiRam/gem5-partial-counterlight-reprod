@@ -82,6 +82,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         processor: AbstractProcessor,
         memory: AbstractMemorySystem,
         cache_hierarchy: AbstractCacheHierarchy,
+        enable_cxl: Optional[bool] = False,
     ) -> None:
         super().__init__(
             clk_freq=clk_freq,
@@ -89,6 +90,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             memory=memory,
             cache_hierarchy=cache_hierarchy,
         )
+        self._enable_cxl = enable_cxl
 
         if self.get_processor().get_isa() != ISA.X86:
             raise Exception(
@@ -99,7 +101,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
     @overrides(AbstractSystemBoard)
     def _setup_board(self) -> None:
         if self.is_fullsystem():
-            self.pc = Pc()
+            self.pc = Pc(enable_cxl=self._enable_cxl)
 
             self.workload = X86FsLinux()
 

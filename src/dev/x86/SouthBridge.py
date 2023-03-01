@@ -39,6 +39,7 @@ from m5.objects.X86Ide import X86IdeController
 from m5.params import *
 from m5.proxy import *
 from m5.SimObject import SimObject
+from m5.objects.CxlMemory import CxlMemory
 
 
 def x86IOAddress(port):
@@ -76,8 +77,13 @@ class SouthBridge(SimObject):
     )
     io_apic = Param.I82094AA(I82094AA(pio_addr=0xFEC00000), "I/O APIC")
 
+    enable_cxl = Param.Bool(False, "Enable CXL functionality.")
+
     # IDE controller
     ide = X86IdeController(disks=[], pci_func=0, pci_dev=4, pci_bus=0)
+    if enable_cxl:
+        # CxlMemory
+        cxlmemory = CxlMemory(pci_func=0, pci_dev=6, pci_bus=0)
 
     def attachIO(self, bus, dma_ports):
         # Route interrupt signals
@@ -99,8 +105,13 @@ class SouthBridge(SimObject):
         self.cmos.pio = bus.mem_side_ports
         self.dma1.pio = bus.mem_side_ports
         self.ide.pio = bus.mem_side_ports
+        if self.enable_cxl:
+            self.cxlmemory.pio = bus.mem_side_ports
         if dma_ports.count(self.ide.dma) == 0:
             self.ide.dma = bus.cpu_side_ports
+        if self.enable_cxl:
+            if dma_ports.count(self.cxlmemory.dma) == 0:
+                self.cxlmemory.dma = bus.cpu_side_ports
         self.keyboard.pio = bus.mem_side_ports
         self.pic1.pio = bus.mem_side_ports
         self.pic2.pio = bus.mem_side_ports
