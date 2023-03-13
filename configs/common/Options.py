@@ -353,6 +353,13 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
                       number of programs.""",
     )
     parser.add_argument(
+        "--enable-cxl",
+        action="store_true",
+        default=False,
+        help="""
+                      Enable CXL functionality.""",
+    )
+    parser.add_argument(
         "--elastic-trace-en",
         action="store_true",
         help="""Enable capture of data dependency and instruction

@@ -85,7 +85,7 @@ def cmd_line_template():
     return None
 
 
-def build_test_system(np, isa: ISA):
+def build_test_system(np, isa: ISA, enable_cxl: bool = False):
     cmdline = cmd_line_template()
     if isa == ISA.MIPS:
         test_sys = makeLinuxMipsSystem(test_mem_mode, bm[0], cmdline=cmdline)
@@ -97,7 +97,8 @@ def build_test_system(np, isa: ISA):
         )
     elif isa == ISA.X86:
         test_sys = makeLinuxX86System(
-            test_mem_mode, np, bm[0], args.ruby, cmdline=cmdline
+            test_mem_mode, np, bm[0], args.ruby, cmdline=cmdline,
+            enable_cxl=enable_cxl
         )
     elif isa == ISA.ARM:
         test_sys = makeArmSystem(
@@ -254,7 +255,7 @@ def build_test_system(np, isa: ISA):
     return test_sys
 
 
-def build_drive_system(np):
+def build_drive_system(np, enable_cxl: bool = False):
     # driver system CPU is always simple, so is the memory
     # Note this is an assignment of a class, not an instance.
     DriveCPUClass = AtomicSimpleCPU
@@ -268,7 +269,7 @@ def build_drive_system(np):
         drive_sys = makeSparcSystem(drive_mem_mode, bm[1], cmdline=cmdline)
     elif buildEnv["USE_X86_ISA"]:
         drive_sys = makeLinuxX86System(
-            drive_mem_mode, np, bm[1], cmdline=cmdline
+            drive_mem_mode, np, bm[1], cmdline=cmdline, enable_cxl=enable_cxl
         )
     elif buildEnv["USE_ARM_ISA"]:
         drive_sys = makeArmSystem(
@@ -381,12 +382,13 @@ else:
         ]
 
 np = args.num_cpus
+enable_cxl = args.enable_cxl
 
 isa = ObjectList.cpu_list.get_isa(args.cpu_type)
-test_sys = build_test_system(np, isa)
+test_sys = build_test_system(np, isa, enable_cxl=enable_cxl)
 
 if len(bm) == 2:
-    drive_sys = build_drive_system(np)
+    drive_sys = build_drive_system(np, enable_cxl=enable_cxl)
     root = makeDualRoot(True, test_sys, drive_sys, args.etherdump)
 elif len(bm) == 1 and args.dist:
     # This system is part of a dist-gem5 simulation

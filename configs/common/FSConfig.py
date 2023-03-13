@@ -475,9 +475,15 @@ def connectX86ClassicSystem(x86_sys, numCPUs):
     #  4) then the entire PCI address space and beyond.
     x86_sys.bridge.ranges = [
         AddrRange(0xC0000000, 0xFFFF0000),
-        AddrRange(IO_address_space_base, interrupts_address_space_base - 1),
-        AddrRange(pci_config_address_space_base, Addr.max),
     ]
+    if x86_sys.enable_cxl:
+        x86_sys.bridge.ranges.append(AddrRange(0x100000000, 0x300000000))
+    x86_sys.bridge.ranges.append(
+        AddrRange(IO_address_space_base, interrupts_address_space_base - 1)
+    )
+    x86_sys.bridge.ranges.append(
+        AddrRange(pci_config_address_space_base, Addr.max)
+    )
 
     # Create a bridge from the IO bus to the memory bus to allow access to
     # the local APIC (two pages)
@@ -507,8 +513,17 @@ def connectX86RubySystem(x86_sys):
     x86_sys.pc.attachIO(x86_sys.iobus, x86_sys._dma_ports)
 
 
-def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
+def makeX86System(
+    mem_mode,
+    numCPUs=1,
+    mdesc=None,
+    workload=None,
+    Ruby=False,
+    enable_cxl=False,
+):
     self = System()
+
+    self.enable_cxl = enable_cxl
 
     self.m5ops_base = 0xFFFF0000
 
@@ -658,10 +673,13 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
 
 
 def makeLinuxX86System(
-    mem_mode, numCPUs=1, mdesc=None, Ruby=False, cmdline=None
+    mem_mode, numCPUs=1, mdesc=None, Ruby=False, cmdline=None,
+    enable_cxl=False
 ):
     # Build up the x86 system and then specialize it for Linux
-    self = makeX86System(mem_mode, numCPUs, mdesc, X86FsLinux(), Ruby)
+    self = makeX86System(
+        mem_mode, numCPUs, mdesc, X86FsLinux(), Ruby, enable_cxl
+    )
 
     # We assume below that there's at least 1MiB of memory. We'll require 2
     # just to avoid corner cases.
