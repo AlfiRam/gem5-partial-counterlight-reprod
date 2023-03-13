@@ -464,7 +464,7 @@ def connectX86ClassicSystem(x86_sys, numCPUs):
 
     # North Bridge
     x86_sys.iobus = IOXBar()
-    x86_sys.bridge = Bridge(delay="50ns")
+    x86_sys.bridge = Bridge(delay="50ns", enable_cxl=x86_sys.enable_cxl)
     x86_sys.bridge.mem_side_port = x86_sys.iobus.cpu_side_ports
     x86_sys.bridge.cpu_side_port = x86_sys.membus.mem_side_ports
     # Allow the bridge to pass through:
@@ -474,9 +474,10 @@ def connectX86ClassicSystem(x86_sys, numCPUs):
     #  3) everything in the IO address range up to the local APIC, and
     #  4) then the entire PCI address space and beyond.
     x86_sys.bridge.ranges = [
-        AddrRange(0xC0000000, 0xFFFF0000),
+        AddrRange(0xC0000000, 0xFFFF0000),      # (3GB,4GB-64kB)
     ]
     if x86_sys.enable_cxl:
+        # (4GB,12GB)
         x86_sys.bridge.ranges.append(AddrRange(0x100000000, 0x300000000))
     x86_sys.bridge.ranges.append(
         AddrRange(IO_address_space_base, interrupts_address_space_base - 1)
@@ -487,7 +488,7 @@ def connectX86ClassicSystem(x86_sys, numCPUs):
 
     # Create a bridge from the IO bus to the memory bus to allow access to
     # the local APIC (two pages)
-    x86_sys.apicbridge = Bridge(delay="50ns")
+    x86_sys.apicbridge = Bridge(delay="50ns", enable_cxl=x86_sys.enable_cxl)
     x86_sys.apicbridge.cpu_side_port = x86_sys.iobus.mem_side_ports
     x86_sys.apicbridge.mem_side_port = x86_sys.membus.cpu_side_ports
     x86_sys.apicbridge.ranges = [

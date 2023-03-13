@@ -64,3 +64,5 @@ class Bridge(ClockedObject):
     ranges = VectorParam.AddrRange(
         [AllMemory], "Address ranges to pass through the bridge"
     )
+
+    enable_cxl = Param.Bool(False, "Enable CXL functionality")

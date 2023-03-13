@@ -328,6 +328,9 @@ class Bridge : public ClockedObject
     /** Request port of the bridge. */
     BridgeRequestPort memSidePort;
 
+    /** Enable CXL functionality. */
+    bool enable_cxl;
+
   public:
 
     Port &getPort(const std::string &if_name,

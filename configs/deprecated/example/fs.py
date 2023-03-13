@@ -187,7 +187,8 @@ def build_test_system(np, isa: ISA, enable_cxl: bool = False):
             test_sys.iocache.mem_side = test_sys.membus.cpu_side_ports
         elif not args.external_memory_system:
             test_sys.iobridge = Bridge(
-                delay="50ns", ranges=test_sys.mem_ranges
+                delay="50ns", ranges=test_sys.mem_ranges,
+                enable_cxl=enable_cxl
             )
             test_sys.iobridge.cpu_side_port = test_sys.iobus.mem_side_ports
             test_sys.iobridge.mem_side_port = test_sys.membus.cpu_side_ports
@@ -309,7 +310,8 @@ def build_drive_system(np, enable_cxl: bool = False):
     if ObjectList.is_kvm_cpu(DriveCPUClass):
         drive_sys.kvm_vm = KvmVM()
 
-    drive_sys.iobridge = Bridge(delay="50ns", ranges=drive_sys.mem_ranges)
+    drive_sys.iobridge = Bridge(delay="50ns", ranges=drive_sys.mem_ranges,
+                                enable_cxl=enable_cxl)
     drive_sys.iobridge.cpu_side_port = drive_sys.iobus.mem_side_ports
     drive_sys.iobridge.mem_side_port = drive_sys.membus.cpu_side_ports
 
