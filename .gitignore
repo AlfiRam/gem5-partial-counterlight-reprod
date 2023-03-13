@@ -36,3 +36,7 @@ configs/dram/lowp_sweep.cfg
 .vscode
 typings
 .DS_Store
+
+# CXL-DMSim
+/fs-result
+/full-system-image
