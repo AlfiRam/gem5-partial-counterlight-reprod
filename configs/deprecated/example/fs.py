@@ -218,6 +218,28 @@ def build_test_system(np, isa: ISA, enable_cxl: bool = False):
                     test_sys.cpu[i].branchPred.indirectBranchPred = (
                         IndirectBPClass()
                     )
+                if args.cpu_cache_store_ports:
+                    test_sys.cpu[i].cacheStorePorts = args.cpu_cache_store_ports
+                if args.cpu_cache_load_ports:
+                    test_sys.cpu[i].cacheLoadPorts = args.cpu_cache_load_ports
+                if args.cpu_fetch_queue_size:
+                    test_sys.cpu[i].fetchQueueSize = args.cpu_fetch_queue_size
+                if args.cpu_load_queue_entries:
+                    test_sys.cpu[i].LQEntries = args.cpu_load_queue_entries
+                if args.cpu_store_queue_entries:
+                    test_sys.cpu[i].SQEntries = args.cpu_store_queue_entries
+                if args.cpu_lfst_size:
+                    test_sys.cpu[i].LFSTSize = args.cpu_lfst_size
+                if args.cpu_ssit_size:
+                    test_sys.cpu[i].SSITSize = args.cpu_ssit_size
+                if args.cpu_iq_entries:
+                    test_sys.cpu[i].numIQEntries = args.cpu_iq_entries
+                if args.cpu_rob_entries:
+                    test_sys.cpu[i].numROBEntries = args.cpu_rob_entries
+                if isa == ISA.X86:
+                    if args.x86tlb_size:
+                        test_sys.cpu[i].mmu.itb.size = args.x86tlb_size
+                        test_sys.cpu[i].mmu.dtb.size = args.x86tlb_size
             test_sys.cpu[i].createThreads()
 
         # If elastic tracing is enabled when not restoring from checkpoint and

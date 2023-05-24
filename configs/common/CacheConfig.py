@@ -72,7 +72,37 @@ def _get_cache_opts(level, options):
     if hasattr(options, prefetcher_attr):
         opts["prefetcher"] = _get_hwp(getattr(options, prefetcher_attr))
 
+    tag_latency_attr = f"{level}_tag_latency"
+    if hasattr(options, tag_latency_attr):
+        opts["tag_latency"] = getattr(options, tag_latency_attr)
+
+    data_latency_attr = f"{level}_data_latency"
+    if hasattr(options, data_latency_attr):
+        opts["data_latency"] = getattr(options, data_latency_attr)
+
+    response_latency_attr = f"{level}_response_latency"
+    if hasattr(options, response_latency_attr):
+        opts["response_latency"] = getattr(options, response_latency_attr)
+
+    mshrs_attr = f"{level}_mshrs"
+    if hasattr(options, mshrs_attr):
+        opts["mshrs"] = getattr(options, mshrs_attr)
+
+    write_buffers_attr = f"{level}_write_buffers"
+    if hasattr(options, write_buffers_attr):
+        opts["write_buffers"] = getattr(options, write_buffers_attr)
+
     return opts
+
+def apply_prefetcher_options(cache, options):
+    if options.hwp_queue_size:
+        cache.prefetcher.queue_size = options.hwp_queue_size
+    if options.hwp_table_entries:
+        cache.prefetcher.pt_table_entries = options.hwp_table_entries
+    if options.hwp_prefetch_confidence_thresh:
+        cache.prefetcher.prefetch_confidence_threshold = options.hwp_prefetch_confidence_thresh
+    if options.hwp_lookahead_confidence_thresh:
+        cache.prefetcher.lookahead_confidence_threshold = options.hwp_lookahead_confidence_thresh
 
 
 def config_cache(options, system):
@@ -134,6 +164,8 @@ def config_cache(options, system):
         system.l2 = l2_cache_class(
             clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options)
         )
+        system.l2.enable_cxl = options.enable_cxl
+        apply_prefetcher_options(system.l2, options)
 
         system.tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
         system.l2.cpu_side = system.tol2bus.mem_side_ports
@@ -145,15 +177,23 @@ def config_cache(options, system):
     for i in range(options.num_cpus):
         if options.caches:
             icache = icache_class(**_get_cache_opts("l1i", options))
+            icache.enable_cxl = options.enable_cxl
+            apply_prefetcher_options(icache, options)
             dcache = dcache_class(**_get_cache_opts("l1d", options))
+            dcache.enable_cxl = options.enable_cxl
+            apply_prefetcher_options(dcache, options)
 
             # If we are using ISA.X86 or ISA.RISCV, we set walker caches.
             if ObjectList.cpu_list.get_isa(options.cpu_type) in [
                 ISA.RISCV,
                 ISA.X86,
             ]:
-                iwalkcache = PageTableWalkerCache()
-                dwalkcache = PageTableWalkerCache()
+                iwalkcache = PageTableWalkerCache(**_get_cache_opts("ptwc", options))
+                iwalkcache.enable_cxl = options.enable_cxl
+                apply_prefetcher_options(iwalkcache, options)
+                dwalkcache = PageTableWalkerCache(**_get_cache_opts("ptwc", options))
+                dwalkcache.enable_cxl = options.enable_cxl
+                apply_prefetcher_options(dwalkcache, options)
             else:
                 iwalkcache = None
                 dwalkcache = None

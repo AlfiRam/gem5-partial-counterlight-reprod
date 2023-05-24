@@ -283,4 +283,9 @@ def config_mem(options, system):
             # Connect the controllers to the membus
             mem_ctrls[i].port = xbar.mem_side_ports
 
+        if options.memctrl_write_thresh_high:
+            mem_ctrls[i].write_high_thresh_perc = options.memctrl_write_thresh_high
+        if options.memctrl_write_thresh_low:
+            mem_ctrls[i].write_low_thresh_perc = options.memctrl_write_thresh_low
+
     subsystem.mem_ctrls = mem_ctrls
