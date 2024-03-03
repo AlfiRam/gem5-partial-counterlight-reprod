@@ -42,3 +42,4 @@ typings
 /full-system-image
 Doxygen.config
 /include/cxl_kvs/viper/build
+/accel_result
