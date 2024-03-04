@@ -464,11 +464,7 @@ def connectX86ClassicSystem(x86_sys, numCPUs):
 
     # North Bridge
     x86_sys.iobus = IOXBar()
-    if x86_sys.enable_cxl:
-        bridge_delay = "25ns"
-    else:
-        bridge_delay = "50ns"
-    x86_sys.bridge = Bridge(delay=bridge_delay, enable_cxl=x86_sys.enable_cxl)
+    x86_sys.bridge = Bridge(delay="50ns", cxl_delay="25ns", enable_cxl=x86_sys.enable_cxl)
     x86_sys.bridge.mem_side_port = x86_sys.iobus.cpu_side_ports
     x86_sys.bridge.cpu_side_port = x86_sys.membus.mem_side_ports
     # Allow the bridge to pass through:
@@ -704,14 +700,14 @@ def makeLinuxX86System(
         ),
     ]
 
-    if enable_cxl:
-        entries.append(
-            X86E820Entry(
-                addr=0x100000000,
-                size='2GB',
-                range_type=1,
-            ),
-        )
+    # if enable_cxl:
+    #     entries.append(
+    #         X86E820Entry(
+    #             addr=0x100000000,
+    #             size='2GB',
+    #             range_type=1,
+    #         ),
+    #     )
 
     # Mark [mem_size, 3iB) as reserved if memory less than 3GiB, which force
     # IO devices to be mapped to [0xC0000000, 0xFFFF0000). Requests to this

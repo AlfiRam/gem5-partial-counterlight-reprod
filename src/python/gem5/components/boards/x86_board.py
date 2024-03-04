@@ -133,7 +133,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma])
         else:
             if self._enable_cxl:
-                bridge_delay = "25ns"
+                bridge_delay = "75ns"
             else:
                 bridge_delay = "50ns"
             self.bridge = Bridge(delay=bridge_delay, enable_cxl=self._enable_cxl)

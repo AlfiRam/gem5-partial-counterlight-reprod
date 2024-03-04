@@ -41,9 +41,13 @@ scons build/X86/gem5.opt
 """
 
 import m5
+from m5.objects import (
+    IndirectMemoryPrefetcher,
+    L2MultiPrefetcher,
+)
 from gem5.utils.requires import requires
 from gem5.components.boards.x86_board import X86Board
-from gem5.components.memory.single_channel import SingleChannelDDR4_2400
+from gem5.components.memory.single_channel import SingleChannelDDR4_2400, DIMM_DDR5_4400
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
@@ -82,29 +86,36 @@ cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
     l2_assoc=16,
 )
 for l1i in cache_hierarchy.l1icaches:
-  l1i.tag_latency = 4
-  l1i.data_latency = 4
-  l1i.response_latency = 4
-  l1i.mshrs = 20
-  l1i.write_buffers = 20
-  apply_prefetcher_options(l1i)
+    # l1i.tag_latency = 4
+    # l1i.data_latency = 4
+    # l1i.response_latency = 4
+    l1i.mshrs = 20
+    # l1i.write_buffers = 20
+    l1i.prefetcher = IndirectMemoryPrefetcher()
+    apply_prefetcher_options(l1i)
 for l1d in cache_hierarchy.l1dcaches:
-  l1d.tag_latency = 4
-  l1d.data_latency = 4
-  l1d.response_latency = 4
-  l1d.mshrs = 20
-  l1d.write_buffers = 20
-  apply_prefetcher_options(l1d)
-cache_hierarchy.l2cache.tag_latency = 12
-cache_hierarchy.l2cache.data_latency = 12
-cache_hierarchy.l2cache.response_latency = 12
+    # l1d.tag_latency = 4
+    # l1d.data_latency = 4
+    # l1d.response_latency = 4
+    l1d.mshrs = 20
+    l1d.write_buffers = 12
+    l1d.prefetcher = IndirectMemoryPrefetcher()
+    apply_prefetcher_options(l1d)
+# cache_hierarchy.l2cache.tag_latency = 12
+# cache_hierarchy.l2cache.data_latency = 12
+# cache_hierarchy.l2cache.response_latency = 12
 cache_hierarchy.l2cache.mshrs = 32
-cache_hierarchy.l2cache.write_buffers = 32
+cache_hierarchy.l2cache.write_buffers = 20
+cache_hierarchy.l2cache.prefetcher = L2MultiPrefetcher()
 apply_prefetcher_options(cache_hierarchy.l2cache)
+
+cache_hierarchy.iocache.mshrs = 32
+cache_hierarchy.iocache.size = "256KiB"
+cache_hierarchy.iocache.write_buffers = 32
 
 
 # Setup the system memory.
-memory = SingleChannelDDR4_2400(size="2GB")
+memory = DIMM_DDR5_4400(size="2GB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
@@ -141,7 +152,7 @@ processor = SimpleSwitchableProcessor(
 
 # Here we setup the board. The X86Board allows for Full-System X86 simulations.
 board = X86Board(
-    clk_freq="3GHz",
+    clk_freq="2.1GHz",
     processor=processor,
     memory=memory,
     cache_hierarchy=cache_hierarchy,
@@ -149,8 +160,8 @@ board = X86Board(
 )
 
 for ctrl in board.get_memory().get_memory_controllers():
-   ctrl.write_high_thresh_perc = 60
-   ctrl.write_low_thresh_perc = 40
+    ctrl.write_high_thresh_perc = 60
+    ctrl.write_low_thresh_perc = 40
 
 
 # Here we set the Full System workload.
