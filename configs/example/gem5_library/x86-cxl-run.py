@@ -53,7 +53,6 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.isas import ISA
-from gem5.coherence_protocol import CoherenceProtocol
 from gem5.simulate.simulator import Simulator
 from gem5.simulate.exit_event import ExitEvent
 from gem5.resources.workload import Workload
@@ -63,11 +62,10 @@ from gem5.resources.resource import DiskImageResource, KernelResource
 # MESI Two Level coherence protocol.
 requires(
     isa_required=ISA.X86,
-    coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL,
     # kvm_required=True,
 )
-from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy import (
-    PrivateL1SharedL2CacheHierarchy,
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_shared_l3_cache_hierarchy import (
+    PrivateL1PrivateL2SharedL3CacheHierarchy,
 )
 
 def apply_prefetcher_options(cache):
@@ -77,13 +75,15 @@ def apply_prefetcher_options(cache):
     cache.prefetcher.lookahead_confidence_threshold = 0.275
 
 # Here we setup a MESI Two Level Cache Hierarchy.
-cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
+cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
     l1d_size="512kB",
     l1d_assoc=8,
     l1i_size="512kB",
     l1i_assoc=8,
     l2_size="8192kB",
     l2_assoc=16,
+    l3_size="8192kB",
+    l3_assoc=32,
 )
 for l1i in cache_hierarchy.l1icaches:
     # l1i.tag_latency = 4
@@ -103,11 +103,13 @@ for l1d in cache_hierarchy.l1dcaches:
     apply_prefetcher_options(l1d)
 # cache_hierarchy.l2cache.tag_latency = 12
 # cache_hierarchy.l2cache.data_latency = 12
-# cache_hierarchy.l2cache.response_latency = 12
+cache_hierarchy.l2cache.response_latency = 10
 cache_hierarchy.l2cache.mshrs = 32
 cache_hierarchy.l2cache.write_buffers = 20
-cache_hierarchy.l2cache.prefetcher = L2MultiPrefetcher()
+cache_hierarchy.l2cache.prefetcher = IndirectMemoryPrefetcher()
 apply_prefetcher_options(cache_hierarchy.l2cache)
+cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
+apply_prefetcher_options(cache_hierarchy.l3cache)
 
 cache_hierarchy.iocache.mshrs = 32
 cache_hierarchy.iocache.size = "256KiB"
