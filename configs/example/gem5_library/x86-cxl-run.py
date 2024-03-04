@@ -43,7 +43,7 @@ scons build/X86/gem5.opt
 import m5
 from gem5.utils.requires import requires
 from gem5.components.boards.x86_board import X86Board
-from gem5.components.memory.single_channel import SingleChannelDDR3_1600
+from gem5.components.memory.single_channel import SingleChannelDDR4_2400
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
@@ -74,11 +74,11 @@ def apply_prefetcher_options(cache):
 
 # Here we setup a MESI Two Level Cache Hierarchy.
 cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
-    l1d_size="16kB",
+    l1d_size="512kB",
     l1d_assoc=8,
-    l1i_size="16kB",
+    l1i_size="512kB",
     l1i_assoc=8,
-    l2_size="256kB",
+    l2_size="8192kB",
     l2_assoc=16,
 )
 for l1i in cache_hierarchy.l1icaches:
@@ -104,7 +104,7 @@ apply_prefetcher_options(cache_hierarchy.l2cache)
 
 
 # Setup the system memory.
-memory = SingleChannelDDR3_1600(size="2GB")
+memory = SingleChannelDDR4_2400(size="2GB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
@@ -145,6 +145,7 @@ board = X86Board(
     processor=processor,
     memory=memory,
     cache_hierarchy=cache_hierarchy,
+    enable_cxl=True,
 )
 
 for ctrl in board.get_memory().get_memory_controllers():
@@ -168,9 +169,9 @@ command = (
 )
 
 board.set_kernel_disk_workload(
-    # kernel=KernelResource(local_path='/home/wyj/gem5/full-system-image/kernel/vmlinux-5.4.49'),
-    kernel=KernelResource(local_path='/home/wyj/gem5/full-system-image/kernel/vmlinux_numa'),
-    disk_image=DiskImageResource(local_path='/home/wyj/gem5/full-system-image/disks/parsec.img'),
+    # kernel=KernelResource(local_path='/home/wyj/code/fs_image/vmlinux-5.4.49'),
+    kernel=KernelResource(local_path='/home/wyj/code/fs_image/vmlinux_numa'),
+    disk_image=DiskImageResource(local_path='/home/wyj/code/fs_image/parsec.img'),
     readfile_contents=command,
 )
 
