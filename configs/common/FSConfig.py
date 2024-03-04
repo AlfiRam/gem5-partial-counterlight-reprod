@@ -704,6 +704,15 @@ def makeLinuxX86System(
         ),
     ]
 
+    if enable_cxl:
+        entries.append(
+            X86E820Entry(
+                addr=0x100000000,
+                size='2GB',
+                range_type=1,
+            ),
+        )
+
     # Mark [mem_size, 3iB) as reserved if memory less than 3GiB, which force
     # IO devices to be mapped to [0xC0000000, 0xFFFF0000). Requests to this
     # specific range can pass though bridge to iobus.

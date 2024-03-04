@@ -146,11 +146,21 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
             self.bridge.ranges = [
                 AddrRange(0xC0000000, 0xFFFF0000),
+            ]
+
+            if self._enable_cxl:
+                self.bridge.ranges.append(
+                    AddrRange(0x100000000, 0x300000000),
+                )
+
+            self.bridge.ranges.append(
                 AddrRange(
                     IO_address_space_base, interrupts_address_space_base - 1
                 ),
+            )
+            self.bridge.ranges.append(
                 AddrRange(pci_config_address_space_base, Addr.max),
-            ]
+            )
 
             self.apicbridge = Bridge(delay="50ns", enable_cxl=self._enable_cxl)
             self.apicbridge.cpu_side_port = self.get_io_bus().mem_side_ports
@@ -285,6 +295,14 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 range_type=1,
             ),
         ]
+        if self._enable_cxl:
+            entries.append(
+                X86E820Entry(
+                    addr=0x100000000,
+                    size='2GB',
+                    range_type=1,
+                ),
+            )
 
         # Reserve the last 16KiB of the 32-bit address space for m5ops
         entries.append(
@@ -356,7 +374,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
     @overrides(KernelDiskWorkload)
     def get_disk_device(self):
-        return "/dev/hda"
+        if self._enable_cxl:
+            return "/dev/hda1"
+        else:
+            return "/dev/hda"
 
     @overrides(KernelDiskWorkload)
     def _add_disk_to_board(self, disk_image: AbstractResource):
