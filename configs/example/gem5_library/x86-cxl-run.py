@@ -101,15 +101,21 @@ for l1d in cache_hierarchy.l1dcaches:
     l1d.write_buffers = 12
     l1d.prefetcher = IndirectMemoryPrefetcher()
     apply_prefetcher_options(l1d)
-# cache_hierarchy.l2cache.tag_latency = 12
-# cache_hierarchy.l2cache.data_latency = 12
-cache_hierarchy.l2cache.response_latency = 10
-cache_hierarchy.l2cache.mshrs = 32
-cache_hierarchy.l2cache.write_buffers = 20
-cache_hierarchy.l2cache.prefetcher = IndirectMemoryPrefetcher()
-apply_prefetcher_options(cache_hierarchy.l2cache)
+for l2 in cache_hierarchy.l2caches:
+    l2.tag_latency = 5
+    l2.data_latency = 5
+    l2.response_latency = 4
+    l2.mshrs = 32
+    l2.write_buffers = 20
+    l2.prefetcher = IndirectMemoryPrefetcher()
+    apply_prefetcher_options(l2)
+for l2bus in cache_hierarchy.l2buses:
+    l2bus.width = 64
+    l2bus.snoop_filter.max_capacity = "48MiB"
 cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
 apply_prefetcher_options(cache_hierarchy.l3cache)
+cache_hierarchy.l3bus.width = 64
+cache_hierarchy.l3bus.snoop_filter.max_capacity = "48MiB"
 
 cache_hierarchy.iocache.mshrs = 32
 cache_hierarchy.iocache.size = "256KiB"
