@@ -43,3 +43,4 @@ typings
 Doxygen.config
 /include/cxl_kvs/viper/build
 /accel_result
+include/cxl_benchmark/lmbench3
