@@ -97,7 +97,7 @@ def build_test_system(np, isa: ISA, enable_cxl: bool = False):
         )
     elif isa == ISA.X86:
         test_sys = makeLinuxX86System(
-            test_mem_mode, np, bm[0], args.ruby, cmdline=cmdline,
+            test_mem_mode, args.cxl_mem_size, args.cxl_numa, np, bm[0], args.ruby, cmdline=cmdline,
             enable_cxl=enable_cxl
         )
     elif isa == ISA.ARM:
@@ -259,6 +259,9 @@ def build_test_system(np, isa: ISA, enable_cxl: bool = False):
         CacheConfig.config_cache(args, test_sys)
 
         MemConfig.config_mem(args, test_sys)
+
+        if enable_cxl:
+            MemConfig.config_cxl(args, test_sys)
 
     if ObjectList.is_kvm_cpu(TestCPUClass) or ObjectList.is_kvm_cpu(
         FutureClass

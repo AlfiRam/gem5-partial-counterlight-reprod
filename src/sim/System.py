@@ -61,13 +61,9 @@ class System(SimObject):
         PyBindMethod("setMemoryMode"),
     ]
 
-    # TODO Add CXL toggle
     memories = VectorParam.AbstractMemory(
-        [], "All memories in the system"
+        Self.all, "All memories in the system"
     )
-    # memories = VectorParam.AbstractMemory(
-    #     Self.all, "All memories in the system"
-    # )
     mem_mode = Param.MemoryMode("atomic", "The mode the memory system is in")
 
     thermal_model = Param.ThermalModel(NULL, "Thermal model")

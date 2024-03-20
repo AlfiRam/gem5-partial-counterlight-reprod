@@ -289,3 +289,8 @@ def config_mem(options, system):
             mem_ctrls[i].write_low_thresh_perc = options.memctrl_write_thresh_low
 
     subsystem.mem_ctrls = mem_ctrls
+
+def config_cxl(options, system):
+
+    system.pc.south_bridge.cxlmemory.BAR0.size = options.cxl_mem_size
+    system.pc.south_bridge.cxlmemory.numa_flag = options.cxl_numa

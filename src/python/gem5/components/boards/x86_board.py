@@ -35,6 +35,7 @@ from m5.objects import (
     AddrRange,
     BaseXBar,
     Bridge,
+    CXLBridge,
     CowDiskImage,
     IdeDisk,
     IOXBar,
@@ -66,6 +67,13 @@ from ..processors.abstract_processor import AbstractProcessor
 from .abstract_system_board import AbstractSystemBoard
 from .kernel_disk_workload import KernelDiskWorkload
 
+
+cxl_mem_size_ = "2GB"
+cxl_numa_ = True
+
+def setup_cxl_mem(cxl_mem_size: str, cxl_numa: bool):
+    cxl_mem_size_ = cxl_mem_size
+    cxl_numa_ = cxl_numa
 
 class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
     """
@@ -132,7 +140,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         if self.get_cache_hierarchy().is_ruby():
             self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma])
         else:
-            self.bridge = Bridge(delay="50ns", cxl_delay="30ns", enable_cxl=self._enable_cxl)
+            if self._enable_cxl:
+                self.bridge = CXLBridge(delay="50ns", cxl_delay="10ns", req_size=64, resp_size=64)
+            else:
+                self.bridge = Bridge(delay="50ns", cxl_delay="30ns")
             self.bridge.mem_side_port = self.get_io_bus().cpu_side_ports
             self.bridge.cpu_side_port = (
                 self.get_cache_hierarchy().get_mem_side_port()
@@ -144,13 +155,17 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             interrupts_address_space_base = 0xA000000000000000
             APIC_range_size = 1 << 12
 
+            if self._enable_cxl:
+                cxl_mem_start = 0x100000000
+                cxl_mem_range = AddrRange(cxl_mem_size_).size()
+                cxl_mem_end = cxl_mem_start + cxl_mem_range
             self.bridge.ranges = [
                 AddrRange(0xC0000000, 0xFFFF0000),
             ]
 
             if self._enable_cxl:
                 self.bridge.ranges.append(
-                    AddrRange(0x100000000, 0x300000000),
+                    AddrRange(cxl_mem_start, cxl_mem_end),
                 )
 
             self.bridge.ranges.append(
@@ -162,7 +177,12 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 AddrRange(pci_config_address_space_base, Addr.max),
             )
 
-            self.apicbridge = Bridge(delay="50ns", enable_cxl=self._enable_cxl)
+            # Configure the CXL memory
+            self.pc.south_bridge.cxlmemory.cxl_mem_range = AddrRange(cxl_mem_start, cxl_mem_end)
+            self.pc.south_bridge.cxlmemory.BAR0.size = cxl_mem_size_
+            self.pc.south_bridge.cxlmemory.numa_flag = cxl_numa_
+
+            self.apicbridge = Bridge(delay="50ns")
             self.apicbridge.cpu_side_port = self.get_io_bus().mem_side_ports
             self.apicbridge.mem_side_port = (
                 self.get_cache_hierarchy().get_cpu_side_port()
@@ -315,6 +335,9 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             X86E820Entry(addr=0xFFFF0000, size="64KiB", range_type=2)
         )
 
+        if cxl_numa_:
+            entries.append(X86E820Entry(addr=0x100000000, size=cxl_mem_size_, range_type=1))
+
         self.workload.e820_table.entries = entries
 
     @overrides(AbstractSystemBoard)
@@ -363,7 +386,6 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
     @overrides(AbstractSystemBoard)
     def _setup_memory_ranges(self):
         memory = self.get_memory()
-        # cxl_memory = SingleChannelDDR3_1600(size="2GB")
 
         if memory.get_size() > toMemorySize("3GiB"):
             raise Exception(
@@ -371,16 +393,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 "to 3GiB because of the I/O hole."
             )
         data_range = AddrRange(memory.get_size())
-        # TODO Add CXL toggle
-        # cxl_range = AddrRange(0x100000000, size=0x80000000)
-
         memory.set_memory_range([data_range])
-        # TODO Add CXL toggle
-        # cxl_memory.set_memory_range([cxl_range])
         cpu_abstract_mems = []
         for mc in memory.get_memory_controllers():
             cpu_abstract_mems.append(mc.dram)
-        # cpu_abstract_mems.append(cxl_memory.get_memory_controllers()[0].dram)
         self.memories = cpu_abstract_mems
 
         # Add the address range for the IO
