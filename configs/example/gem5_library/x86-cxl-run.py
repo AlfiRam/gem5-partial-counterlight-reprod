@@ -125,6 +125,7 @@ cache_hierarchy.iocache.write_buffers = 32
 
 # Setup the system memory.
 memory = DIMM_DDR5_4400(size="2GB")
+# memory = DIMM_DDR5_4400(size="256MB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
@@ -167,8 +168,8 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
     enable_cxl=True,
 )
-board.bridge.req_size = 24
-board.bridge.resp_size = 24
+board.bridge.req_size = 28
+board.bridge.resp_size = 28
 
 for ctrl in board.get_memory().get_memory_controllers():
     ctrl.write_high_thresh_perc = 60
