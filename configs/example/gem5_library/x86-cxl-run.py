@@ -105,18 +105,19 @@ for l2 in cache_hierarchy.l2caches:
     l2.data_latency = 6
     l2.response_latency = 4
     l2.mshrs = 32
+    l2.tgts_per_mshr = 24
     l2.write_buffers = 20
     l2.writeback_clean = True
     l2.prefetcher = L2MultiPrefetcher()
     apply_prefetcher_options(l2)
 for l2bus in cache_hierarchy.l2buses:
     l2bus.width = 64
-    l2bus.snoop_filter.max_capacity = "64MiB"
+    l2bus.snoop_filter.max_capacity = "80MiB"
 cache_hierarchy.l3cache.clusivity = "mostly_excl"
 cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
 apply_prefetcher_options(cache_hierarchy.l3cache)
 cache_hierarchy.l3bus.width = 64
-cache_hierarchy.l3bus.snoop_filter.max_capacity = "64MiB"
+cache_hierarchy.l3bus.snoop_filter.max_capacity = "80MiB"
 
 cache_hierarchy.iocache.mshrs = 32
 cache_hierarchy.iocache.size = "256KiB"
@@ -137,7 +138,7 @@ processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.ATOMIC,
     switch_core_type=CPUTypes.TIMING,
     isa=ISA.X86,
-    num_cores=4,
+    num_cores=12,
 )
 # TODO Set TLB size, other CPU options
 # Example
@@ -168,8 +169,8 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
     enable_cxl=True,
 )
-board.bridge.req_size = 28
-board.bridge.resp_size = 28
+board.bridge.req_size = 26
+board.bridge.resp_size = 26
 
 for ctrl in board.get_memory().get_memory_controllers():
     ctrl.write_high_thresh_perc = 60
