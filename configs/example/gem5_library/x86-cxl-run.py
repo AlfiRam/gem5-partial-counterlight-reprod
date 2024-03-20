@@ -81,7 +81,7 @@ cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
     l1i_assoc=8,
     l2_size="2MB",
     l2_assoc=16,
-    l3_size="16MB",
+    l3_size="32MB",
     l3_assoc=16,
 )
 for l1i in cache_hierarchy.l1icaches:
@@ -105,8 +105,8 @@ for l2 in cache_hierarchy.l2caches:
     l2.data_latency = 8
     l2.response_latency = 6
     l2.mshrs = 32
-    l2.tgts_per_mshr = 24
-    l2.write_buffers = 20
+    l2.tgts_per_mshr = 64
+    l2.write_buffers = 32
     l2.writeback_clean = True
     l2.prefetcher = L2MultiPrefetcher()
     apply_prefetcher_options(l2)
@@ -126,7 +126,7 @@ cache_hierarchy.iocache.write_buffers = 32
 
 # Setup the system memory.
 memory = DIMM_DDR5_4400(size="2GB")
-# memory = DIMM_DDR5_4400(size="256MB")
+# memory = DIMM_DDR5_4400(size="232MB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
@@ -138,7 +138,7 @@ processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.ATOMIC,
     switch_core_type=CPUTypes.TIMING,
     isa=ISA.X86,
-    num_cores=1,
+    num_cores=12,
 )
 # TODO Set TLB size, other CPU options
 # Example
@@ -169,8 +169,10 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
     enable_cxl=True,
 )
-board.bridge.req_size = 26
-board.bridge.resp_size = 26
+# board.bridge.req_size = 26
+# board.bridge.resp_size = 26
+board.bridge.req_size = 48
+board.bridge.resp_size = 48
 
 for ctrl in board.get_memory().get_memory_controllers():
     ctrl.write_high_thresh_perc = 60
@@ -189,16 +191,19 @@ for ctrl in board.get_memory().get_memory_controllers():
 # output.
 command = (
     "m5 exit;"
-    "cd ../home/cxl_benchmark;"
-    # + "numactl -H;"
+    + "cd ../home/cxl_benchmark;"
+    # + "cd ../home/gem5;"
+    + "numactl -H;"
     + "echo 'This is running on Timing CPU cores.';"
     + "./benchmark.sh;"
+    # + "./test_redis.sh;"
 )
 
 board.set_kernel_disk_workload(
     # kernel=KernelResource(local_path='/home/wyj/code/fs_image/vmlinux-5.4.49'),
     kernel=KernelResource(local_path='/home/wyj/code/fs_image/vmlinux_numa'),
     disk_image=DiskImageResource(local_path='/home/wyj/code/fs_image/parsec.img'),
+    # disk_image=DiskImageResource(local_path='/home/wyj/code/fs_image/npb.img'),
     readfile_contents=command,
 )
 
