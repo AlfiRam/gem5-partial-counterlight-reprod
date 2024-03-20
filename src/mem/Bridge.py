@@ -61,7 +61,7 @@ class Bridge(ClockedObject):
     req_size = Param.Unsigned(16, "The number of requests to buffer")
     resp_size = Param.Unsigned(16, "The number of responses to buffer")
     delay = Param.Latency("50ns", "The latency of this bridge")
-    cxl_delay = Param.Latency("25ns", "Conversion delay of cxl protocol in bridge")
+    cxl_delay = Param.Latency("30ns", "Conversion delay of cxl protocol in bridge")
     ranges = VectorParam.AddrRange(
         [AllMemory], "Address ranges to pass through the bridge"
     )

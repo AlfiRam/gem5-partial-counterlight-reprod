@@ -47,7 +47,7 @@ from m5.objects import (
 )
 from gem5.utils.requires import requires
 from gem5.components.boards.x86_board import X86Board
-from gem5.components.memory.single_channel import SingleChannelDDR4_2400, DIMM_DDR5_4400
+from gem5.components.memory.single_channel import DIMM_DDR5_4400
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
@@ -62,7 +62,6 @@ from gem5.resources.resource import DiskImageResource, KernelResource
 # MESI Two Level coherence protocol.
 requires(
     isa_required=ISA.X86,
-    # kvm_required=True,
 )
 from gem5.components.cachehierarchies.classic.private_l1_private_l2_shared_l3_cache_hierarchy import (
     PrivateL1PrivateL2SharedL3CacheHierarchy,
@@ -76,13 +75,13 @@ def apply_prefetcher_options(cache):
 
 # Here we setup a MESI Two Level Cache Hierarchy.
 cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
-    l1d_size="512kB",
+    l1d_size="64kB",
     l1d_assoc=8,
-    l1i_size="512kB",
+    l1i_size="64kB",
     l1i_assoc=8,
-    l2_size="8192kB",
+    l2_size="2MB",
     l2_assoc=16,
-    l3_size="8192kB",
+    l3_size="16MB",
     l3_assoc=32,
 )
 for l1i in cache_hierarchy.l1icaches:
@@ -94,28 +93,30 @@ for l1i in cache_hierarchy.l1icaches:
     l1i.prefetcher = IndirectMemoryPrefetcher()
     apply_prefetcher_options(l1i)
 for l1d in cache_hierarchy.l1dcaches:
-    # l1d.tag_latency = 4
-    # l1d.data_latency = 4
+    l1d.tag_latency = 2
+    l1d.data_latency = 2
     # l1d.response_latency = 4
     l1d.mshrs = 20
     l1d.write_buffers = 12
     l1d.prefetcher = IndirectMemoryPrefetcher()
     apply_prefetcher_options(l1d)
 for l2 in cache_hierarchy.l2caches:
-    l2.tag_latency = 5
-    l2.data_latency = 5
+    l2.tag_latency = 6
+    l2.data_latency = 6
     l2.response_latency = 4
     l2.mshrs = 32
     l2.write_buffers = 20
-    l2.prefetcher = IndirectMemoryPrefetcher()
+    l2.writeback_clean = True
+    l2.prefetcher = L2MultiPrefetcher()
     apply_prefetcher_options(l2)
 for l2bus in cache_hierarchy.l2buses:
     l2bus.width = 64
-    l2bus.snoop_filter.max_capacity = "48MiB"
+    l2bus.snoop_filter.max_capacity = "64MiB"
+cache_hierarchy.l3cache.clusivity = "mostly_excl"
 cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
 apply_prefetcher_options(cache_hierarchy.l3cache)
 cache_hierarchy.l3bus.width = 64
-cache_hierarchy.l3bus.snoop_filter.max_capacity = "48MiB"
+cache_hierarchy.l3bus.snoop_filter.max_capacity = "64MiB"
 
 cache_hierarchy.iocache.mshrs = 32
 cache_hierarchy.iocache.size = "256KiB"
@@ -135,7 +136,7 @@ processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.ATOMIC,
     switch_core_type=CPUTypes.TIMING,
     isa=ISA.X86,
-    num_cores=1,
+    num_cores=4,
 )
 # TODO Set TLB size, other CPU options
 # Example
@@ -166,6 +167,8 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
     enable_cxl=True,
 )
+board.bridge.req_size = 24
+board.bridge.resp_size = 24
 
 for ctrl in board.get_memory().get_memory_controllers():
     ctrl.write_high_thresh_perc = 60
@@ -183,8 +186,10 @@ for ctrl in board.get_memory().get_memory_controllers():
 # has ended you may inspect `m5out/system.pc.com_1.device` to see the echo
 # output.
 command = (
-    "m5 switchcpu;"
+    "m5 exit;"
+    "cd ../home/cxl_benchmark;"
     + "echo 'This is running on Timing CPU cores.';"
+    + "./benchmark.sh;"
 )
 
 board.set_kernel_disk_workload(
