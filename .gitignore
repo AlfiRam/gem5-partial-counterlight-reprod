@@ -38,7 +38,7 @@ typings
 .DS_Store
 
 # CXL-DMSim
-/fs-result
+/fs_result
 /full-system-image
 Doxygen.config
 /include/cxl_kvs/viper/build

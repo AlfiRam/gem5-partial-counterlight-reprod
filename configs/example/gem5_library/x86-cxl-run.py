@@ -59,7 +59,7 @@ from gem5.resources.workload import Workload
 from gem5.resources.resource import DiskImageResource, KernelResource
 
 # This runs a check to ensure the gem5 binary is compiled to X86 and to the
-# MESI Two Level coherence protocol.
+# MESI Three Level coherence protocol.
 requires(
     isa_required=ISA.X86,
 )
@@ -73,7 +73,7 @@ def apply_prefetcher_options(cache):
     cache.prefetcher.prefetch_confidence_threshold = 0.25
     cache.prefetcher.lookahead_confidence_threshold = 0.275
 
-# Here we setup a MESI Two Level Cache Hierarchy.
+# Here we setup a MESI Three Level Cache Hierarchy.
 cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
     l1d_size="64kB",
     l1d_assoc=8,
@@ -82,7 +82,7 @@ cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
     l2_size="2MB",
     l2_assoc=16,
     l3_size="16MB",
-    l3_assoc=32,
+    l3_assoc=16,
 )
 for l1i in cache_hierarchy.l1icaches:
     # l1i.tag_latency = 4
@@ -97,13 +97,13 @@ for l1d in cache_hierarchy.l1dcaches:
     l1d.data_latency = 2
     # l1d.response_latency = 4
     l1d.mshrs = 20
-    l1d.write_buffers = 12
+    l1d.write_buffers = 20
     l1d.prefetcher = IndirectMemoryPrefetcher()
     apply_prefetcher_options(l1d)
 for l2 in cache_hierarchy.l2caches:
-    l2.tag_latency = 6
-    l2.data_latency = 6
-    l2.response_latency = 4
+    l2.tag_latency = 8
+    l2.data_latency = 8
+    l2.response_latency = 6
     l2.mshrs = 32
     l2.tgts_per_mshr = 24
     l2.write_buffers = 20
@@ -138,7 +138,7 @@ processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.ATOMIC,
     switch_core_type=CPUTypes.TIMING,
     isa=ISA.X86,
-    num_cores=12,
+    num_cores=1,
 )
 # TODO Set TLB size, other CPU options
 # Example
@@ -190,6 +190,7 @@ for ctrl in board.get_memory().get_memory_controllers():
 command = (
     "m5 exit;"
     "cd ../home/cxl_benchmark;"
+    # + "numactl -H;"
     + "echo 'This is running on Timing CPU cores.';"
     + "./benchmark.sh;"
 )
