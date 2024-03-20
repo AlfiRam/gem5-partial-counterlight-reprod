@@ -112,12 +112,16 @@ for l2 in cache_hierarchy.l2caches:
     apply_prefetcher_options(l2)
 for l2bus in cache_hierarchy.l2buses:
     l2bus.width = 64
-    l2bus.snoop_filter.max_capacity = "80MiB"
+    l2bus.snoop_filter.max_capacity = "384MiB"
+    l2bus.max_outstanding_snoops = 1024
+    l2bus.max_routing_table_size = 1024
 cache_hierarchy.l3cache.clusivity = "mostly_excl"
 cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
 apply_prefetcher_options(cache_hierarchy.l3cache)
 cache_hierarchy.l3bus.width = 64
-cache_hierarchy.l3bus.snoop_filter.max_capacity = "80MiB"
+cache_hierarchy.l3bus.snoop_filter.max_capacity = "384MiB"
+cache_hierarchy.l3bus.max_outstanding_snoops = 1024
+cache_hierarchy.l3bus.max_routing_table_size = 1024
 
 cache_hierarchy.iocache.mshrs = 32
 cache_hierarchy.iocache.size = "256KiB"

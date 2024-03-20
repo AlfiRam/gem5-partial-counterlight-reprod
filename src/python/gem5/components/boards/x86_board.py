@@ -141,7 +141,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma])
         else:
             if self._enable_cxl:
-                self.bridge = CXLBridge(delay="50ns", cxl_delay="10ns", req_size=64, resp_size=64)
+                self.bridge = CXLBridge(delay="50ns", cxl_delay="14ns", req_size=64, resp_size=64)
             else:
                 self.bridge = Bridge(delay="50ns", cxl_delay="30ns")
             self.bridge.mem_side_port = self.get_io_bus().cpu_side_ports
@@ -178,9 +178,11 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             )
 
             # Configure the CXL memory
-            self.pc.south_bridge.cxlmemory.cxl_mem_range = AddrRange(cxl_mem_start, cxl_mem_end)
-            self.pc.south_bridge.cxlmemory.BAR0.size = cxl_mem_size_
-            self.pc.south_bridge.cxlmemory.numa_flag = cxl_numa_
+            if self._enable_cxl:
+                self.cxl_mem_range = AddrRange(cxl_mem_start, cxl_mem_end)
+                self.pc.south_bridge.cxlmemory.cxl_mem_range = AddrRange(cxl_mem_start, cxl_mem_end)
+                self.pc.south_bridge.cxlmemory.BAR0.size = cxl_mem_size_
+                self.pc.south_bridge.cxlmemory.numa_flag = cxl_numa_
 
             self.apicbridge = Bridge(delay="50ns")
             self.apicbridge.cpu_side_port = self.get_io_bus().mem_side_ports
