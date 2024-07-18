@@ -186,6 +186,7 @@ class L3XBar(CoherentXBar):
     response_latency = 1
     snoop_response_latency = 1
     snoop_filter = SnoopFilter(lookup_latency = 0)
+    point_of_unification = True
 
 
 # One of the key coherent crossbar instances is the system

@@ -26,10 +26,9 @@
 
 """
 
-This script shows an example of running a full system Ubuntu boot simulation
-using the gem5 library. This simulation boots Ubuntu 18.04 using 2 Atomic CPU
-cores. The simulation then switches to 2 Timing CPU cores before running an
-echo statement.
+This script shows an example of running a CXL-DMSim simulation
+using the gem5 library. This simulation boots Ubuntu 18.04 using 1 Atomic CPU
+cores. The simulation then switches to 1 O3 CPU cores to run the lmbench_cxl.sh.
 
 Usage
 -----
@@ -93,56 +92,60 @@ for l1i in cache_hierarchy.l1icaches:
     l1i.prefetcher = IndirectMemoryPrefetcher()
     apply_prefetcher_options(l1i)
 for l1d in cache_hierarchy.l1dcaches:
-    l1d.tag_latency = 4
-    l1d.data_latency = 4
+    l1d.tag_latency = 3
+    l1d.data_latency = 3
     l1d.response_latency = 2
     l1d.mshrs = 20
-    l1d.write_buffers = 20
+    l1d.write_buffers = 16
     l1d.prefetcher = IndirectMemoryPrefetcher()
     apply_prefetcher_options(l1d)
 for l2 in cache_hierarchy.l2caches:
-    l2.tag_latency = 12
-    l2.data_latency = 12
-    l2.response_latency = 10
-    l2.mshrs = 32
-    l2.tgts_per_mshr = 64
-    l2.write_buffers = 64
+    l2.tag_latency = 7
+    l2.data_latency = 7
+    l2.response_latency = 5
+    l2.mshrs = 20
+    l2.tgts_per_mshr = 12
+    l2.write_buffers = 20
     l2.writeback_clean = True
     l2.prefetcher = L2MultiPrefetcher()
     apply_prefetcher_options(l2)
 for l2bus in cache_hierarchy.l2buses:
     l2bus.width = 64
     l2bus.snoop_filter.max_capacity = "384MiB"
-    l2bus.max_outstanding_snoops = 1024
-    l2bus.max_routing_table_size = 1024
+    l2bus.max_outstanding_snoops = 2048
+    l2bus.max_routing_table_size = 2048
 cache_hierarchy.l3cache.clusivity = "mostly_excl"
 cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
 apply_prefetcher_options(cache_hierarchy.l3cache)
 cache_hierarchy.l3bus.width = 64
 cache_hierarchy.l3bus.snoop_filter.max_capacity = "384MiB"
-cache_hierarchy.l3bus.max_outstanding_snoops = 1024
-cache_hierarchy.l3bus.max_routing_table_size = 1024
+cache_hierarchy.l3bus.max_outstanding_snoops = 2048
+cache_hierarchy.l3bus.max_routing_table_size = 2048
 
 cache_hierarchy.iocache.mshrs = 32
 cache_hierarchy.iocache.size = "256KiB"
 cache_hierarchy.iocache.write_buffers = 32
 
+for iptw_cache in cache_hierarchy.iptw_caches:
+    iptw_cache.size = "256KiB"
+for dptw_cache in cache_hierarchy.dptw_caches:
+    dptw_cache.size = "256KiB"
+
 
 # Setup the system memory.
 memory = DIMM_DDR5_4400(size="3GB")
-# memory = DIMM_DDR5_4400(size="384MB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
 # configuration is instantiated a user may call `processor.switch()` to switch
 # from the starting core types to the switch core types. In this simulation
-# we start with KVM cores to simulate the OS boot, then switch to the Timing
+# we start with ATOMIC cores to simulate the OS boot, then switch to the O3
 # cores for the command we wish to run after boot.
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.ATOMIC,
-    switch_core_type=CPUTypes.TIMING,
+    switch_core_type=CPUTypes.O3,
     isa=ISA.X86,
-    num_cores=2,
+    num_cores=1,
 )
 # TODO Set TLB size, other CPU options
 # Example
@@ -163,16 +166,18 @@ processor = SimpleSwitchableProcessor(
 # processor....SSITSize=2048
 # processor....numIQEntries=128
 # processor....numROBEntries=320
+# processor....backComSize=24
+# processor....forwardComSize=24
 
 
-# Here we setup the board. The X86Board allows for Full-System X86 simulations.
+# Here we setup the board and CXL device memory size. The X86Board allows for Full-System X86 simulations.
 board = X86Board(
-    clk_freq="3.8GHz",
+    clk_freq="2.4GHz",
     processor=processor,
     memory=memory,
     cache_hierarchy=cache_hierarchy,
     enable_cxl=True,
-    cxl_mem_size="4GB",
+    cxl_mem_size="16GB",
     is_asic=True,
 )
 # board.bridge.req_size = 26
@@ -190,33 +195,26 @@ for ctrl in board.get_memory().get_memory_controllers():
 # disk image, and, optionally, a command to run.
 
 # This is the command to run after the system has booted. The first `m5 exit`
-# will stop the simulation so we can switch the CPU cores from KVM to timing
-# and continue the simulation to run the echo command, sleep for a second,
-# then, again, call `m5 exit` to terminate the simulation. After simulation
-# has ended you may inspect `m5out/system.pc.com_1.device` to see the echo
+# will stop the simulation so we can switch the CPU cores from ATOMIC to O3
+# and continue the simulation to run the command. After simulation
+# has ended you may inspect `m5out/board.pc.com_1.device` to see the echo
 # output.
 command = (
     "m5 exit;"
     + "cd ../home/cxl_benchmark;"
     + "numactl -H;"
-    + "./benchmark.sh;"
+    + "./lmbench_cxl.sh;"
 )
 
 board.set_kernel_disk_workload(
-    # kernel=KernelResource(local_path='/home/wyj/code/fs_image/vmlinux-5.4.49'),
     kernel=KernelResource(local_path='/home/wyj/code/fs_image/vmlinux'),
     disk_image=DiskImageResource(local_path='/home/wyj/code/fs_image/parsec.img'),
-    # disk_image=DiskImageResource(local_path='/home/wyj/code/fs_image/npb.img'),
     readfile_contents=command,
 )
 
 simulator = Simulator(
     board=board,
     on_exit_event={
-        # Here we want override the default behavior for the first m5 exit
-        # exit event. Instead of exiting the simulator, we just want to
-        # switch the processor. The 2nd m5 exit after will revert to using
-        # default behavior where the simulator run will exit.
         ExitEvent.EXIT: (func() for func in [processor.switch])
     },
 )
