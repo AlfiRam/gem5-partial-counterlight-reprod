@@ -27,7 +27,7 @@
 """
 
 This script shows an example of running a full system Ubuntu boot simulation
-using the gem5 library. This simulation boots Ubuntu 18.04 using 2 KVM CPU
+using the gem5 library. This simulation boots Ubuntu 18.04 using 2 Atomic CPU
 cores. The simulation then switches to 2 Timing CPU cores before running an
 echo statement.
 
@@ -36,7 +36,7 @@ Usage
 
 ```
 scons build/X86/gem5.opt
-./build/X86/gem5.opt configs/example/gem5_library/x86-cxl-run.py
+build/X86/gem5.opt configs/example/gem5_library/x86-cxl-run.py
 ```
 """
 
@@ -46,8 +46,8 @@ from m5.objects import (
     L2MultiPrefetcher,
 )
 from gem5.utils.requires import requires
-from gem5.components.boards.x86_board import X86Board, setup_cxl_mem
-from gem5.components.memory.single_channel import DIMM_DDR5_6400
+from gem5.components.boards.x86_board import X86Board
+from gem5.components.memory.single_channel import DIMM_DDR5_4400
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
@@ -75,8 +75,8 @@ def apply_prefetcher_options(cache):
 
 # Here we setup a MESI Three Level Cache Hierarchy.
 cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
-    l1d_size="64kB",
-    l1d_assoc=8,
+    l1d_size="48kB",
+    l1d_assoc=6,
     l1i_size="32kB",
     l1i_assoc=8,
     l2_size="2MB",
@@ -129,8 +129,8 @@ cache_hierarchy.iocache.write_buffers = 32
 
 
 # Setup the system memory.
-memory = DIMM_DDR5_6400(size="2GB")
-# memory = DIMM_DDR5_6400(size="256MB")
+memory = DIMM_DDR5_4400(size="3GB")
+# memory = DIMM_DDR5_4400(size="384MB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
@@ -140,9 +140,9 @@ memory = DIMM_DDR5_6400(size="2GB")
 # cores for the command we wish to run after boot.
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.ATOMIC,
-    switch_core_type=CPUTypes.O3,
+    switch_core_type=CPUTypes.TIMING,
     isa=ISA.X86,
-    num_cores=12,
+    num_cores=2,
 )
 # TODO Set TLB size, other CPU options
 # Example
@@ -172,6 +172,8 @@ board = X86Board(
     memory=memory,
     cache_hierarchy=cache_hierarchy,
     enable_cxl=True,
+    cxl_mem_size="4GB",
+    is_asic=True,
 )
 # board.bridge.req_size = 26
 # board.bridge.resp_size = 26
@@ -182,10 +184,6 @@ for ctrl in board.get_memory().get_memory_controllers():
     ctrl.write_high_thresh_perc = 60
     ctrl.write_low_thresh_perc = 40
 
-
-cxl_mem_size="3GB",
-cxl_numa=True,
-setup_cxl_mem(cxl_mem_size, cxl_numa)
 
 # Here we set the Full System workload.
 # The `set_kernel_disk_workload` function for the X86Board takes a kernel, a
@@ -200,11 +198,8 @@ setup_cxl_mem(cxl_mem_size, cxl_numa)
 command = (
     "m5 exit;"
     + "cd ../home/cxl_benchmark;"
-    # + "cd ../home/gem5;"
     + "numactl -H;"
-    + "echo 'This is running on Timing CPU cores.';"
     + "./benchmark.sh;"
-    # + "./test_redis.sh;"
 )
 
 board.set_kernel_disk_workload(
