@@ -64,4 +64,5 @@ class L1DCache(Cache):
         self.mshrs = mshrs
         self.tgts_per_mshr = tgts_per_mshr
         self.writeback_clean = writeback_clean
+        # self.prefetcher = PrefetcherCls(degree=2, queue_size=8,confidence_threshold=70)
         self.prefetcher = PrefetcherCls()
