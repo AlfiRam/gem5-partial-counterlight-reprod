@@ -48,7 +48,7 @@ from m5.objects import (
 )
 from gem5.utils.requires import requires
 from gem5.components.boards.x86_board import X86Board
-from gem5.components.memory.single_channel import DIMM_DDR5_4400
+from gem5.components.memory.single_channel import DIMM_DDR5_4400, SingleChannelDDR4_2400
 from gem5.components.memory.dram_interfaces.cxl_ddr import CXL_DDR4_2400_8x8, CXL_DDR4_2400_16x4
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
@@ -149,8 +149,8 @@ for dptw_cache in cache_hierarchy.dptw_caches:
 
 
 # Setup the system memory.
-memory = DIMM_DDR5_4400(size="3GB")
-cxl_memory = CXL_DDR4_2400_16x4()
+memory = SingleChannelDDR4_2400(size="3GB")
+cxl_memory = CXL_DDR4_2400_8x8()
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
 # configuration is instantiated a user may call `processor.switch()` to switch

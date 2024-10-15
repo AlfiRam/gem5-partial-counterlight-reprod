@@ -150,7 +150,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 APIC_range_size = 1 << 12
 
                 if self._is_asic:
-                    self.bridge = CXLBridge(bridge_lat="50ns", host_proto_proc_lat="14ns", req_fifo_depth=52, resp_fifo_depth=52)
+                    self.bridge = CXLBridge(bridge_lat="50ns", host_proto_proc_lat="14ns", req_fifo_depth=128, resp_fifo_depth=128)
                 else:
                     self.bridge = CXLBridge(bridge_lat="50ns", host_proto_proc_lat="14ns", req_fifo_depth=48, resp_fifo_depth=48)
             else:
