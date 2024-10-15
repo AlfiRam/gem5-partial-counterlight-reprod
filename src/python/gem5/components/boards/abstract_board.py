@@ -81,9 +81,9 @@ class AbstractBoard:
         processor: "AbstractProcessor",
         memory: "AbstractMemorySystem",
         cache_hierarchy: Optional["AbstractCacheHierarchy"],
+        cxl_memory: "AbstractMemorySystem",
         cxl_mem_size: str,
         is_asic: bool,
-        cxl_mem_type: str,
         enable_cxl: Optional[bool] = False,
     ) -> None:
         """
@@ -111,9 +111,9 @@ class AbstractBoard:
             self.cache_hierarchy = cache_hierarchy
 
         # Set the CXL memory size and whether the device is an ASIC or not.
+        self.cxl_memory = cxl_memory
         self._cxl_mem_size = cxl_mem_size
         self._is_asic = is_asic
-        self._cxl_mem_type = cxl_mem_type
         self._enable_cxl = enable_cxl
         # This variable determines whether the board is to be executed in
         # full-system or syscall-emulation mode. This is set when the workload
@@ -144,6 +144,13 @@ class AbstractBoard:
         :returns: The memory system.
         """
         return self.memory
+
+    def get_cxl_memory(self) -> "AbstractMemory":
+        """Get the cxl memory (RAM) connected to the board.
+
+        :returns: The memory system.
+        """
+        return self.cxl_memory
 
     def get_mem_ports(self) -> Sequence[Tuple[AddrRange, Port]]:
         """Get the memory ports exposed on this board

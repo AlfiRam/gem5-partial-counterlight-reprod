@@ -49,9 +49,9 @@ class AbstractSystemBoard(System, AbstractBoard):
         processor: "AbstractProcessor",
         memory: "AbstractMemorySystem",
         cache_hierarchy: "AbstractCacheHierarchy",
+        cxl_memory: "AbstractMemorySystem",
         cxl_mem_size: str,
         is_asic: bool,
-        cxl_mem_type: str,
         enable_cxl: Optional[bool] = False,
     ):
         System.__init__(self)
@@ -61,9 +61,9 @@ class AbstractSystemBoard(System, AbstractBoard):
             processor=processor,
             memory=memory,
             cache_hierarchy=cache_hierarchy,
+            cxl_memory=cxl_memory,
             cxl_mem_size=cxl_mem_size,
             is_asic=is_asic,
-            cxl_mem_type=cxl_mem_type,
             enable_cxl=enable_cxl,
         )
 
