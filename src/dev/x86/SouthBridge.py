@@ -107,6 +107,7 @@ class SouthBridge(SimObject):
         self.ide.pio = bus.mem_side_ports
         if self.enable_cxl:
             self.cxlmemory.pio = bus.mem_side_ports
+            self.cxlmemory.cxl_rsp_port = bus.mem_side_ports
         if dma_ports.count(self.ide.dma) == 0:
             self.ide.dma = bus.cpu_side_ports
         if self.enable_cxl:
