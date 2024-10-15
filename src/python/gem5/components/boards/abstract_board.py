@@ -83,6 +83,7 @@ class AbstractBoard:
         cache_hierarchy: Optional["AbstractCacheHierarchy"],
         cxl_mem_size: str,
         is_asic: bool,
+        cxl_mem_type: str,
         enable_cxl: Optional[bool] = False,
     ) -> None:
         """
@@ -112,6 +113,7 @@ class AbstractBoard:
         # Set the CXL memory size and whether the device is an ASIC or not.
         self._cxl_mem_size = cxl_mem_size
         self._is_asic = is_asic
+        self._cxl_mem_type = cxl_mem_type
         self._enable_cxl = enable_cxl
         # This variable determines whether the board is to be executed in
         # full-system or syscall-emulation mode. This is set when the workload
