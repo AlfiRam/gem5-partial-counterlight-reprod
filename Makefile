@@ -87,7 +87,7 @@ run: run-x86
 
 # 'run-all' is an alias for 'run-all-opt'.
 .PHONY: run-all
-run: run-all-opt
+run-all: run-all-opt
 
 # Run gem5 with the ALL 'fast' build. You must specify a Python script to run.
 .PHONY: run-all-fast
@@ -121,7 +121,7 @@ run-all-debug:
 
 # 'run-x86' is an alias for 'run-x86-opt'.
 .PHONY: run-x86
-run: run-x86-opt
+run-x86: run-x86-opt
 
 # Run gem5 with the x86 'fast' build. You must specify a Python script to run.
 .PHONY: run-x86-fast
