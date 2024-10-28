@@ -33,3 +33,7 @@ For simple tasks, you may find the Makefile in the root directory of the project
 For example, the Makefile is configured so you can just use `make build` as an alias for `scons build/X86/gem5.opt -j6`. This configuration is specific to my needs, but you may choose to adjust this Makefile for something that suits you more.
 
 Run `make` or `make help` to see the full list of commands provided.
+
+## Points of Interest
+
+See [Points of Interest](poi.md) for information on where are good places to look for certain aspects of coding.
