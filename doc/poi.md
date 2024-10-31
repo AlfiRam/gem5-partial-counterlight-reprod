@@ -46,6 +46,29 @@ Debug tags (including new created ones):
 #include "debug/<TagName>.hh"
 ```
 
+
+## Create and Use Debugging Flag
+
+Add to `SConscript` file:
+
+``` py
+DebugFlag("<TagName>")
+```
+
+Import in your C++ file of choice:
+
+``` cpp
+#include "base/trace.hh"       // For the DPRINTF, etc. functions
+#include "debug/<TagName>.hh"
+```
+
+Create debugging statement:
+
+``` cpp
+DPRINTF(<TagName>, "My message with some value %d\n", value);
+```
+
+
 ## Parameter Types for Python `SimObject`s
 
 *See `src/python/m5/params.py` for full source code.*
