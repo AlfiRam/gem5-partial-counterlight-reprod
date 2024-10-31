@@ -47,6 +47,98 @@ Debug tags (including new created ones):
 ```
 
 
+## Create a New `SimObject`
+
+Basic Python declaration for object:
+
+``` py
+from m5.params import *
+from m5.SimObject import SimObject
+
+class ObjectName(SimObject):
+    type = "ObjectName"
+    cxx_header = "directory_path/to/file.hh"
+    cxx_class = "gem5::ObjectName"
+
+    # Add params here...
+    # For example:
+    # parameter = Param.Int(default_value, "Description")
+```
+
+Basic C++ header for object:
+
+``` cpp
+// Suppose this is located at directory_path/to/file.hh
+#ifndef __DIRECTORY_PATH_TO_FILE_HH__
+#define __DIRECTORY_PATH_TO_FILE_HH__
+
+#include "params/ObjectName.hh"
+#include "sim/sim_object.hh"
+
+namespace gem5
+{
+
+class ObjectName : public SimObject
+{
+  private:
+    void processEvent();
+
+    MemberEventWrapper<&ObjectName::processEvent> event;
+
+  public:
+    ObjectName(const ObjectNameParams &p);
+
+    void startup() override;
+};
+
+} // namespace gem5
+
+#endif // __DIRECTORY_PATH_TO_FILE_HH__
+```
+
+Basic C++ code for object:
+
+``` cpp
+#include "directory_path/to/file.hh"
+
+namespace gem5
+{
+
+ObjectName::ObjectName(const ObjectNameParams &params) :
+  SimObject(params), event(*this)
+{
+  // Write constructor code here...
+  // You can also set initial values with member initializer lists
+}
+
+void
+ObjectName::processEvent()
+{
+  // Write code to process an event here...
+}
+
+void
+ObjectName::startup()
+{
+  // Executed for any last initialization before the simulation starts.
+  // For example, can be used to schedule some initial events to start.
+  // schedule(...)
+}
+
+} // namespace gem5
+```
+
+Add to `SConscript` file:
+
+``` py
+Import("*")
+
+SimObject("ObjectName.py", sim_objects=["ObjectName", ...])
+Source("object_name.cc")
+...
+```
+
+
 ## Create and Use Debugging Flag
 
 Add to `SConscript` file:
