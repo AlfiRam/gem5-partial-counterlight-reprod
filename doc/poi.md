@@ -2,6 +2,50 @@
 
 This document intends to list some information about where to find certain pieces of information that may otherwise be difficult to find quickly. Highlights will be provided here.
 
+## Imports
+
+### For Python
+
+Extend a `SimObject`:
+
+``` py
+from m5.SimObject import SimObject
+```
+
+Create parameters in an object:
+
+``` py
+from m5.params import *
+```
+
+### For C++ Header
+
+Extend a `SimObject`:
+
+``` cpp
+#include "sim/sim_object.hh"
+```
+
+Add parameters from Python side of code:
+
+``` cpp
+#include "params/<ObjectName>.hh"
+```
+
+### For C++ Code
+
+Debugging functions (e.g., `DPRINTF`):
+
+``` cpp
+#include "base/trace.hh"
+```
+
+Debug tags (including new created ones):
+
+``` cpp
+#include "debug/<TagName>.hh"
+```
+
 ## Parameter Types for Python `SimObject`s
 
 *See `src/python/m5/params.py` for full source code.*
