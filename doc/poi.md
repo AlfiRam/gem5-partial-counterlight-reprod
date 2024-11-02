@@ -46,6 +46,13 @@ Debug tags (including new created ones):
 #include "debug/<TagName>.hh"
 ```
 
+Panics:
+
+``` cpp
+#include "base/logging.hh"
+// Alternatively, this is included implicitly with "base/trace.hh".
+```
+
 
 ## Create a New `SimObject`
 
@@ -158,6 +165,28 @@ Create debugging statement:
 
 ``` cpp
 DPRINTF(<TagName>, "My message with some value %d\n", value);
+```
+
+
+## Panics
+
+Add import:
+
+``` cpp
+#include "base/logging.hh"
+// Alternatively, this is included implicitly with "base/trace.hh".
+```
+
+Create panic statement:
+
+``` cpp
+// Unconditional panic:
+panic("Description of the panic.");
+
+// Conditional panic:
+panic_if(condition, "Description of the panic.");
+
+// For either of these, you can use printf() formatting.
 ```
 
 
