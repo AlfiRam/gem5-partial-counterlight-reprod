@@ -33,6 +33,7 @@ help:
 	@echo "    run-x86-debug script=<script-name>  Run gem5 with the x86 'debug' build. You must specify a Python script to run."
 	@echo
 	@echo "  Miscellaneous:"
+	@echo "    clean                           Clean all build files."
 	@echo "    help                            Show this message."
 
 
@@ -152,3 +153,9 @@ run-x86-debug:
 	fi;\
 	echo "$(CMD_X86_PREFIX)debug $(script)";\
 	$(CMD_X86_PREFIX)debug $(script)
+
+
+# Clean all build files.
+.PHONY: clean
+clean:
+	scons --clean --no-cache
