@@ -823,6 +823,11 @@ class Packet : public Printable, public Extensible<Packet>
      */
     AddrRange getAddrRange() const;
 
+    /**
+     * Get the offset of this packet's address relative to the block size.
+     * 
+     * @return Amount of offset from beginning of the block.
+     */
     Addr getOffset(unsigned int blk_size) const
     {
         return getAddr() & Addr(blk_size - 1);
