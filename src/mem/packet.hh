@@ -303,7 +303,7 @@ class Packet : public Printable, public Extensible<Packet>
         // Flags to transfer across when copying a packet
         COPY_FLAGS             = 0x000000FF,
 
-        // Flags that are used to create reponse packets
+        // Flags that are used to create response packets
         RESPONDER_FLAGS        = 0x00000009,
 
         // Does this packet have sharers (which means it should not be
@@ -424,7 +424,7 @@ class Packet : public Printable, public Extensible<Packet>
     /**
      * The extra delay from seeing the packet until the header is
      * transmitted. This delay is used to communicate the crossbar
-     * forwarding latency to the neighbouring object (e.g. a cache)
+     * forwarding latency to the neighboring object (e.g. a cache)
      * that actually makes the packet wait. As the delay is relative,
      * a 32-bit unsigned should be sufficient.
      */
@@ -459,8 +459,8 @@ class Packet : public Printable, public Extensible<Packet>
      *
      * As multiple SimObjects may add their SenderState throughout the
      * memory system, the SenderStates create a stack, where a
-     * SimObject can add a new Senderstate, as long as the
-     * predecessing SenderState is restored when the response comes
+     * SimObject can add a new SenderState, as long as the
+     * predecessor SenderState is restored when the response comes
      * back. For this reason, the predecessor should always be
      * populated with the current SenderState of a packet before
      * modifying the senderState field in the request packet.
@@ -547,7 +547,7 @@ class Packet : public Printable, public Extensible<Packet>
     /**
      * Push a new sender state to the packet and make the current
      * sender state the predecessor of the new one. This should be
-     * prefered over direct manipulation of the senderState member
+     * preferred over direct manipulation of the senderState member
      * variable.
      *
      * @param sender_state SenderState to push at the top of the stack
@@ -667,13 +667,13 @@ class Packet : public Printable, public Extensible<Packet>
      * The hasSharers flag is also used by upstream caches to inform a
      * downstream cache that they have the block (by calling
      * setHasSharers on snoop request packets that hit in upstream
-     * cachs tags or MSHRs). If the snoop packet has sharers, a
+     * cache tags or MSHRs). If the snoop packet has sharers, a
      * downstream cache is prevented from passing a dirty line upwards
      * if it was not explicitly asked for a writable copy. See
      * Cache::satisfyCpuSideRequest.
      *
      * The hasSharers flag is also used on writebacks, in
-     * combination with the WritbackClean or WritebackDirty commands,
+     * combination with the WritebackClean or WritebackDirty commands,
      * to allocate the block downstream either as:
      *
      * command        hasSharers state
@@ -720,8 +720,8 @@ class Packet : public Printable, public Extensible<Packet>
     { return flags.isSet(RESPONDER_HAD_WRITABLE); }
 
     /**
-     * Copy the reponse flags from an input packet to this packet. The
-     * reponse flags determine whether a responder has been found and
+     * Copy the response flags from an input packet to this packet. The
+     * response flags determine whether a responder has been found and
      * the state at which the block will be at the destination.
      *
      * @pkt The packet that we will copy flags from
@@ -825,7 +825,7 @@ class Packet : public Printable, public Extensible<Packet>
 
     /**
      * Get the offset of this packet's address relative to the block size.
-     * 
+     *
      * @return Amount of offset from beginning of the block.
      */
     Addr getOffset(unsigned int blk_size) const
@@ -1298,7 +1298,7 @@ class Packet : public Printable, public Extensible<Packet>
     setData(const uint8_t *p)
     {
         // we should never be copying data onto itself, which means we
-        // must idenfity packets with static data, as they carry the
+        // must identify packets with static data, as they carry the
         // same pointer from source to destination and back
         assert(p != getPtr<uint8_t>() || flags.isSet(STATIC_DATA));
 
@@ -1355,7 +1355,7 @@ class Packet : public Printable, public Extensible<Packet>
 
     /**
      * delete the data pointed to in the data pointer. Ok to call to
-     * matter how data was allocted.
+     * matter how data was allocated.
      */
     void
     deleteData()
