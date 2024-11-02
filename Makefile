@@ -1,5 +1,5 @@
 # Default number of cores.
-CORES = 6
+CORES = 7
 
 # Set the default build destination when running gem5 Python scripts.
 CMD_ALL_PREFIX = "./build/ALL/gem5."
