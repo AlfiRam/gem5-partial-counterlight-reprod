@@ -246,3 +246,60 @@ Some example types:
 - `exitSimLoop()`
 - `exitSimLoopNow()`
 - `schedule()`
+
+## Statistics
+
+To have statistics associated with your `SimObject`, you will override the `regStats()` function in your object's C++ header file:
+
+``` cpp
+class MyObject : public SimObject
+{
+  private:
+    // ...
+
+    statistics::Scalar stat1;
+    // Add more statistics as desired...
+
+  public:
+    // ...
+
+    void regStats() override;
+};
+```
+
+Then add in the statistics upon saving the exported data by implementing `regStats()` in C++:
+
+``` cpp
+void
+MyObject::regStats()
+{
+  // Call the superclass statistic registration first.
+  MemObject::regStats();
+
+  // Specify the name and description to identify this statistic.
+  stat1
+    .name(name() + ".stat1"
+    .desc("Statistic description")
+    .unit(statistics::units::InsertUnitTypeHere::get());
+
+  // Additional statistics as desired...
+}
+```
+
+## Common Statistic Types
+
+*For all statistic data types, see `src/base/statistics.hh`.*
+
+<!-- TODO -->
+
+- Scalar
+- Histogram
+  - Also needs number of buckets
+- Formula
+  - Requires other special sauce to define
+
+## Common Statistics Unit Types
+
+*For all unit types, see `src/base/stats/units.hh`.*
+
+<!-- TODO -->
