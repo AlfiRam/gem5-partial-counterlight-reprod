@@ -237,3 +237,12 @@ Some example types:
 - `String`: Just a string.
 - `Tick`: Unsigned 64-bit integer.
 - `Unsigned`: Unsigned (32-bit) integer.
+
+## gem5 Common Functions
+
+<!-- TODO -->
+
+- `curTick()`
+- `exitSimLoop()`
+- `exitSimLoopNow()`
+- `schedule()`
