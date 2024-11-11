@@ -363,7 +363,7 @@ def switchCpus(system, cpuList, verbose=True):
     """
 
     if verbose:
-        print("switching cpus")
+        print("python/m5/simulate.py: Switching CPUs")
 
     if not isinstance(cpuList, list):
         raise RuntimeError("Must pass a list to this function")
