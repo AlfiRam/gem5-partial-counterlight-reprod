@@ -240,12 +240,18 @@ Some example types:
 
 ## gem5 Common Functions
 
-<!-- TODO -->
+Within the gem5 library are some functions that may come in handy for a wide range of situations.
 
-- `curTick()`
-- `exitSimLoop()`
-- `exitSimLoopNow()`
-- `schedule()`
+### In C++
+
+- `curTick()`: Returns a copy of the current tick as a `Tick` object.
+  - Defined in `src/sim/cur_tick.hh`
+- `exitSimLoop(message[, exit_code])`: Schedule an event to exit the simulation loop. Returns the `message` string to Python to indicate why the simulation stopped. An exit code can also be optionally provided.
+  - Defined in `src/sim/sim_exit.hh`
+- `exitSimLoopNow(message[, exit_code])`: Schedule an event to exit the simulation loop, but with high priority so it runs before any normal events which are scheduled at the current time. Returns the `message` string to Python to indicate why the simulation stopped. An exit code can also be optionally provided.
+  - Defined in `src/sim/sim_exit.hh`
+- `schedule(event, when)`: Schedule an event `event` at some tick `when`.
+  - Defined in `src/sim/eventq.hh`
 
 ## Statistics
 
