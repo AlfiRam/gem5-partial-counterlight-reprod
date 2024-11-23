@@ -47,7 +47,7 @@
 /**
 * @todo
 *
-* Generalized N-dimensinal vector
+* Generalized N-dimensional vector
 * documentation
 * key stats
 * interval stats
@@ -1318,7 +1318,7 @@ class DistBase : public DataWrap<Derived, DistInfoProxy>
     }
 
     /**
-     * Add a value to the distribtion n times. Calls sample on the storage
+     * Add a value to the distribution n times. Calls sample on the storage
      * class.
      * @param v The value to add.
      * @param n The number of times to add it, defaults to 1.
@@ -2455,7 +2455,7 @@ class SparseHistBase : public DataWrap<Derived, SparseHistInfoProxy>
     }
 
     /**
-     * Add a value to the distribtion n times. Calls sample on the storage
+     * Add a value to the distribution n times. Calls sample on the storage
      * class.
      * @param v The value to add.
      * @param n The number of times to add it, defaults to 1.
@@ -2544,7 +2544,7 @@ class Formula : public DataWrapVec<Formula, FormulaInfoProxy>
 
   public:
     /**
-     * Create and initialize thie formula, and register it with the database.
+     * Create and initialize the formula, and register it with the database.
      */
     Formula(Group *parent = nullptr, const char *name = nullptr,
             const char *desc = nullptr);
@@ -2559,7 +2559,7 @@ class Formula : public DataWrapVec<Formula, FormulaInfoProxy>
             const char *desc, const Temp &r);
 
     /**
-     * Set an unitialized Formula to the given root.
+     * Set an uninitialized Formula to the given root.
      * @param r The root of the expression tree.
      * @return a reference to this formula.
      */
@@ -2587,7 +2587,7 @@ class Formula : public DataWrapVec<Formula, FormulaInfoProxy>
     const Formula &operator/=(Temp r);
 
     /**
-     * Return the result of the Fomula in a vector.  If there were no Vector
+     * Return the result of the Formula in a vector.  If there were no Vector
      * components to the Formula, then the vector is size 1.  If there were,
      * like x/y with x being a vector of size 3, then the result returned will
      * be x[0]/y, x[1]/y, x[2]/y, respectively.
@@ -2670,7 +2670,7 @@ class Temp
     operator NodePtr&() { return node; }
 
     /**
-     * Makde gcc < 4.6.3 happy and explicitly get the underlying node.
+     * Make gcc < 4.6.3 happy and explicitly get the underlying node.
      */
     NodePtr getNodePtr() const { return node; }
 

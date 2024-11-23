@@ -444,7 +444,7 @@ class HistStor
      * Given a bucket size B, and a range of values [0, N], this function
      * doubles the bucket size to double the range of values towards the
      * negative infinite; that is, it doubles the lower range of this
-     * storage so that the middle buckes contaihs zero as a lower bound. As
+     * storage so that the middle buckets contain zero as a lower bound. As
      * such, the storage range becomes [-N, N+B] if there is an odd number
      * of buckets, and [-N-B, N+B] if there is an even number of buckets.
      *
