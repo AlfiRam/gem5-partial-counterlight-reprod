@@ -290,16 +290,54 @@ MyObject::regStats()
 
 *For all statistic data types, see `src/base/statistics.hh`.*
 
-<!-- TODO -->
+To use a statistic, you will first need to determine what type of data you are collecting. For example, this may be a single number or a collection of data points.
 
-- Scalar
-- Histogram
-  - Also needs number of buckets
-- Formula
-  - Requires other special sauce to define
+- `Scalar`: A simple counter based on the `double` C++ data type.
+  - Can be incremented and decremented with with the standard `++` operator, for example.
+- `Histogram`: A set of counters that are arranged in some initially-set number of buckets.
+  - To use the `Histogram` type, you must also set the number of buckets for the variable:
+
+      ```cpp
+      histogramStat
+        .name(name() + ".histogramStat")
+        .desc("Statistic description")
+        .init(<Number of buckets>)
+        .unit(statistics::units::InsertUnitTypeHere::get());
+      ```
+- `Formula`: A formula that is calculated once statistics are printed.
+  - After setting the name, description, and units of the statistic, you will also need to define the actual formula to be used:
+
+      ```cpp
+      formulaStat
+        .name(name() + ".formulaStat")
+        .desc("Statistic description")
+        .unit(statistics::units::InsertUnitTypeHere::get());
+
+      // Example
+      formulaStat = (stat1 + stat2) / stat2;
+      ```
 
 ## Common Statistics Unit Types
 
 *For all unit types, see `src/base/stats/units.hh`.*
 
-<!-- TODO -->
+The unit type does not affect the calculation or organization of the statistic, but is more of an additional piece of information to more accurately describe a statistic.
+
+- `Bit`: Represents the number of computer bits.
+- `Byte`: Represents 8 bits.
+- `Count`: Represents the count of a quantity not otherwise defined.
+- `Cycle`: Represents clock cycles.
+- `Rate<T1, T2>`: Represents the unit of a quantity of `T1` divided by a quantity of `T2`.
+  - Typically used with the `Formula` type.
+  - Example use (bits per second):
+
+    ```cpp
+    effectiveBandwidth
+      .name(name() + ".effectiveBandwidth")
+      .desc("Example statistic description (bits per second)")
+      .unit(statistics::units::Rate<statistics::units::Bit, statistics::units::Second>::get());
+
+    effectiveBandwidth = totalBits / executionTimeSeconds;
+    ```
+- `Second`: Represents the base unit of time defined by SI.
+- `Tick`: Represents the count of gem5's `Tick`.
