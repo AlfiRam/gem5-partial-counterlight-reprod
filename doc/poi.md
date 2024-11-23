@@ -274,11 +274,11 @@ void
 MyObject::regStats()
 {
   // Call the superclass statistic registration first.
-  MemObject::regStats();
+  SimObject::regStats();
 
   // Specify the name and description to identify this statistic.
   stat1
-    .name(name() + ".stat1"
+    .name(name() + ".stat1")
     .desc("Statistic description")
     .unit(statistics::units::InsertUnitTypeHere::get());
 
