@@ -65,7 +65,7 @@ class MemCtrl(QoSMemCtrl):
 
     # Interface to memory media
     dram = Param.MemInterface(
-        "Memory interface, can be a DRAMor an NVM interface "
+        "Memory interface, can be a DRAM or an NVM interface"
     )
 
     # read and write buffer depths are set in the interface
