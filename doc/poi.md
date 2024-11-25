@@ -294,7 +294,7 @@ MyObject::regStats()
 }
 ```
 
-## Common Statistic Types
+### Common Statistic Types
 
 *For all statistic data types, see `src/base/statistics.hh`.*
 
@@ -325,7 +325,7 @@ To use a statistic, you will first need to determine what type of data you are c
       formulaStat = (stat1 + stat2) / stat2;
       ```
 
-## Common Statistics Unit Types
+### Common Statistics Unit Types
 
 *For all unit types, see `src/base/stats/units.hh`.*
 
