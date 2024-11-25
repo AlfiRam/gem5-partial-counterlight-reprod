@@ -246,6 +246,8 @@ Some example types:
 - `Tick`: Unsigned 64-bit integer.
 - `Unsigned`: Unsigned (32-bit) integer.
 
+In addition to the provided types, you can use any other `SimObject` straightaway as a parameter, without additional code. In this case, use the Python class name in place of the `<TypeName>`, as written in the previous example.
+
 
 ## gem5 Common Functions
 
