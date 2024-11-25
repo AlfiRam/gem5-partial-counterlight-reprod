@@ -343,6 +343,116 @@ ObjectName::ObjectName(const ObjectNameParams &params) :
 
 Now you are free to use this `number_of_beans` variable anywhere in the class as needed.
 
+### Enum Parameters
+
+This section describes two things: (1) How to create an enum in Python and export it to C++, and (2) how to use a newly-created enum as a parameter for a `SimObject`.
+
+First, you can define your enum anywhere you'd like. For simplicity, it will be defined in the same file as Python class. To define the enum, create a new Python class that derives the `Enum` class (from `src/python/m5/params.py`), and set a member `vals` to a list of strings representing all the enum values.
+
+This is an example where we create an enum for some object's "speed mode." It can either be "fast" or "slow."
+
+``` py
+# Assume this is being written in the same place as the SimObject that will use the enum. (ObjectName.py for example.)
+# ...
+
+# Needed for the `Enum` object.
+from m5.params import *
+
+class SpeedMode(Enum):
+    vals = ["fast", "slow"]
+
+# ...
+```
+
+To allow the enum to be used as a parameter, thus being "translated" into C++, you will first need to export it to be compiled in your `SConscript` file:
+
+``` py
+SimObject("ObjectName.py", sim_objects=["ObjectName"], enums=["SpeedMode"])
+```
+
+Note the addition of the `enums` part of the `SimObject` function call.
+
+> **Note:** While the function is called `SimObject`, you could technically define the enum in its own file in the same way. In this case, you can omit the `sim_objects` part and just have the `enums` part. If `SpeedMode` had been defined within its own file, it could look something like this:
+>
+> ``` py
+> SimObject("SpeedMode.py", enums=["SpeedMode"])
+> ```
+
+Now that your enum is defined, you can use it as a parameter!
+
+In your Python object, add the parameter in the same way you would with other parameter types:
+
+``` py
+# ...
+
+class ObjectName(SimObject):
+    # Define details about the object here...
+
+    speed_mode = Param.SpeedMode("fast", "The speed of the object")
+
+    # Add more parameters as desired...
+```
+
+Note that in Python, you write the enum parameter value as a string, based on the list of strings defined earlier. (Using a string that is not part of the list will result in an error.)
+
+This is how it would look if you were setting the value from the Python config file:
+
+``` py
+# ...
+
+my_object = ObjectName(speed_mode="slow")
+
+# Alternatively...
+
+my_object = ObjectName()
+my_object.speed_mode = "slow"
+
+# ...
+```
+
+To bring this over to the C++ side of the code, similar with other parameters, you will first likely want to define a new member variable to save it for use throughout the class:
+
+``` cpp
+// ...
+
+// Note that for the case of a new enum, you will also need to include
+// the corresponding C++ header, which is automatically generated during
+// compilation. By default, the header will be in the `enums` folder and
+// have the same name as the enum name.
+#include "enums/SpeedMode.hh"
+
+// ...
+
+class ObjectName : public SimObject
+{
+  // ...
+
+  private:
+    enums::SpeedMode speed_mode;
+
+  public:
+    ObjectName(const ObjectNameParams &p);
+
+  // ...
+};
+
+// ...
+```
+
+Then as with other parameters, you can copy the value from the generated C++ parameter object in the constructor:
+
+``` cpp
+// ...
+
+ObjectName::ObjectName(const ObjectNameParams &params) :
+  SimObject(params), speed_mode(params.speed_mode)
+{
+  // Write constructor code here...
+}
+
+// ...
+```
+
 
 ## gem5 Common Functions
 
