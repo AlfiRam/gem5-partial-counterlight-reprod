@@ -248,6 +248,101 @@ Some example types:
 
 In addition to the provided types, you can use any other `SimObject` straightaway as a parameter, without additional code. In this case, use the Python class name in place of the `<TypeName>`, as written in the previous example.
 
+### Using Parameters from Python in C++
+
+Parameters can be defined within a `SimObject` class definition in Python, and further set within your Python config file. This section describes how you can bring values from the parameters in Python into C++ code, such that you can adjust functionality based on the parameters.
+
+First, you will need to add the parameter to the Python class. For this example, a simple integer parameter will be used, but you can use any other type as desired.
+
+``` py
+# ...
+
+class ObjectName(SimObject):
+    # Define details about the object here...
+
+    # Parameters
+    # parameter_name = Param.<TypeName>([default_value, ]"Description")
+    number_of_beans = Param.Int(5, "The number of beans that the object has")
+
+    # Add more parameters as desired...
+```
+
+In this case, we have defined an integer parameter called `number_of_beans`, with a default value of 5.
+
+If the parameter doesn't have a default value, or you would otherwise like to override the value, this is done in your Python config script:
+
+``` py
+# ...
+
+my_object = ObjectName(number_of_beans=20)
+
+# Alternatively...
+
+my_object = ObjectName()
+my_object.number_of_beans = 20
+
+# ...
+```
+
+Finally, you will bring the parameter from Python into C++ using the class constructor.
+
+> For a full example structure of how a class looks, see earlier in this document. This section is just focused on parameters.
+
+Recall the general structure of the header file, including the constructor. To bring over the parameter in C++, you will likely also want to add a class member that can store the value. (Note that the name here does not need to match, but it can be the same for convenience.)
+
+``` cpp
+// ...
+
+class ObjectName : public SimObject
+{
+  // ...
+
+  private:
+    int number_of_beans;
+
+  public:
+    ObjectName(const ObjectNameParams &p);
+
+  // ...
+};
+
+// ...
+```
+
+Within the C++ code, you will then use the constructor to bring over the parameter.
+
+This is then saved into a class member within C++ using a member initializer list.
+
+``` cpp
+// ...
+
+ObjectName::ObjectName(const ObjectNameParams &params) :
+  SimObject(params), number_of_beans(params.number_of_beans)
+{
+  // Write constructor code here...
+}
+
+// ...
+```
+
+Note that in this example, the Python parameter is referred to by `params.number_of_beans`. The name after "`params.`" will be the same as what is defined within the Python class.
+
+Alternatively, if you have more complex logic, you could also write this within the constructor function body:
+
+``` cpp
+// ...
+
+ObjectName::ObjectName(const ObjectNameParams &params) :
+  SimObject(params)
+{
+  number_of_beans = params.number_of_beans;
+}
+
+// ...
+```
+
+Now you are free to use this `number_of_beans` variable anywhere in the class as needed.
+
 
 ## gem5 Common Functions
 
