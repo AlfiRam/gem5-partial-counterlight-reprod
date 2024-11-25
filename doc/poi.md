@@ -93,6 +93,8 @@ class ObjectName : public SimObject
     MemberEventWrapper<&ObjectName::processEvent> event;
 
   public:
+    // Note that the ObjectNameParams class will be generated automatically,
+    // and be placed in the included "params/ObjectName.hh" header file.
     ObjectName(const ObjectNameParams &p);
 
     void startup() override;
