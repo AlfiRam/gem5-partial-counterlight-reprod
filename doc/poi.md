@@ -192,9 +192,11 @@ panic_if(condition, "Description of the panic.");
 ```
 
 
-## Parameter Types for Python `SimObject`s
+## Parameters
 
-*See `src/python/m5/params.py` for full source code.*
+Parameters are incredibly useful in gem5, as they allow you to tweak and adjust behavior to an object without recompiling.
+
+### Basic Parameter Usage
 
 First, import in Python with:
 
@@ -211,6 +213,10 @@ param_name = Param.<TypeName>("Description")
 # With a default value
 param_name = Param.<TypeName>(default_value, "Description")
 ```
+
+### Parameter Types for Python `SimObject`s
+
+*See `src/python/m5/params.py` for full source code.*
 
 Some example types:
 
@@ -239,6 +245,7 @@ Some example types:
 - `String`: Just a string.
 - `Tick`: Unsigned 64-bit integer.
 - `Unsigned`: Unsigned (32-bit) integer.
+
 
 ## gem5 Common Functions
 
