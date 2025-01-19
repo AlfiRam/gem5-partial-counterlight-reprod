@@ -158,4 +158,4 @@ run-x86-debug:
 # Clean all build files.
 .PHONY: clean
 clean:
-	scons --clean --no-cache
+	rm -rf build
