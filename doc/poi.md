@@ -590,3 +590,78 @@ The unit type does not affect the calculation or organization of the statistic, 
     ```
 - `Second`: Represents the base unit of time defined by SI.
 - `Tick`: Represents the count of gem5's `Tick`.
+
+
+## Scheduling Events
+
+You are ready to start simulating, and you want to be able to call some other function, but only after some delay. Perhaps you want to simulate how long certain processes take.
+
+gem5 itself works as an event-based system. This means that gem5 components continuously schedule events until there are no more events, or the maximum internal tick value is reached. Thus, if you can instantiate an event, you can put it into gem5's event queue.
+
+First, note that events are scheduled using the `schedule()` function in the C++ side of code. As shown above, the function is structured as `schedule(event, when)`, which schedules an event `event` at some tick `when`. (This is defined in `src/sim/eventq.hh`.)
+
+You can create a custom event in C++ by deriving the `Event` class like the following:
+
+``` cpp
+// You likely don't need to import the C++ header associated with the
+// Event class (it should already be there from another component),
+// but if you get errors you can include it.
+//
+// #include "sim/eventq.hh"
+
+class ExampleEvent : public Event
+{
+  // Add in values to be stored with the event. This can include
+  // parameters you want to save for further use upon executing,
+  // and you can add a pointer to the object you want to call
+  // some internal function in. (For that case, you may want to
+  // declare the new event class within the same place as that
+  // object.)
+  private:
+    // ...
+
+  public:
+    // Constructor.
+    //
+    // Note the `priority` and `flags` variables. You must fill
+    // this in. The entire list of priorities and flags can be
+    // found in src/sim/eventq.hh.
+    //
+    // Initialize any of the other internal class members here.
+    AccessEvent(/* Parameters... */) : Event(priority, flags)
+    { }
+
+  // This function you override is the function that is called when
+  // the event is executed. You can even include executing within
+  // an arbitrary object, so long as a pointer to it is available.
+  void process() override {
+    // ...
+  }
+};
+```
+
+A full example of a complete class that derives `Event` may look like:
+
+``` cpp
+class AccessEvent : public Event
+{
+  private:
+    SimpleCache *cache;
+    PacketPtr pkt;
+
+  public:
+    AccessEvent(SimpleCache *cache, PacketPtr pkt) :
+      Event(Default_Pri, AutoDelete), cache(cache), pkt(pkt)
+    { }
+
+  void process() override {
+    cache->accessTiming(pkt);
+  }
+};
+```
+
+Then this event may be scheduled as follows:
+
+``` cpp
+schedule(new AccessEvent(this, pkt), clockEdge(latency));
+```
