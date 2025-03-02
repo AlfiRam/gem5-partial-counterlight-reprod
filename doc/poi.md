@@ -192,6 +192,33 @@ panic_if(condition, "Description of the panic.");
 ```
 
 
+## Building Extra Separate Vendor Code
+
+> Source: https://www.gem5.org/documentation/general_docs/building/EXTRAS
+
+You may want to be able to add code that is separate from the main `src/` directory, but still have it treated as though it were part of the same directory. This can be accomplished with an `EXTRAS` variable.
+
+Consider the standard command to compile:
+
+```
+scons build/<ISA>/gem5.<BUILD_VARIANT> -j<CORES>
+```
+
+You can add another directory by adding an `EXTRAS` option like the following:
+
+```
+scons EXTRAS=path/to/directory build/<ISA>/gem5.<BUILD_VARIANT> -j<CORES>
+```
+
+Note that the `EXTRAS` option is "sticky," meaning that it will persist for any future builds that go to the same build directory. Override this by making it blank (`EXTRAS=`).
+
+You can have multiple directories by separating with a colon:
+
+```
+scons EXTRAS=path/to/directory:path/to/other_directory build/<ISA>/gem5.<BUILD_VARIANT> -j<CORES>
+```
+
+
 ## Parameters
 
 Parameters are incredibly useful in gem5, as they allow you to tweak and adjust behavior to an object without recompiling.
