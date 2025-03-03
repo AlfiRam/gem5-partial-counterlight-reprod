@@ -169,6 +169,12 @@ Create debugging statement:
 DPRINTF(<TagName>, "My message with some value %d\n", value);
 ```
 
+Use the debugging flag in the command line when running gem5 (Use comma-separated list for multiple flags):
+
+```
+./build/<ISA>/gem5.<BUILD_VARIANT> --debug-flags=<TagName> <config_file.py>
+```
+
 
 ## Panics
 
