@@ -34,6 +34,10 @@ import argparse
 import time
 
 import m5
+from m5.objects import (
+    BadAddr,
+    InstrumentedSystemXBar,
+)
 
 from gem5.components.boards.x86_board import X86Board
 from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy import (
@@ -178,6 +182,11 @@ for proc in processor.start:
 # Main memory
 memory = DIMM_DDR5_4400(size="3GiB")
 
+# Use custom memory bus
+membus = InstrumentedSystemXBar(width=64)
+membus.badaddr_responder = BadAddr()
+membus.default = membus.badaddr_responder.pio
+
 # Cache
 cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
     l1d_size="32KiB",
@@ -186,6 +195,7 @@ cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
     l1i_assoc=8,
     l2_size="512KiB",
     l2_assoc=16,
+    membus=membus,
 )
 
 # Here we setup the board. The X86Board allows for Full-System X86 simulations.
