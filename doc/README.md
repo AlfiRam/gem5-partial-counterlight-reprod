@@ -34,6 +34,14 @@ For example, the Makefile is configured so you can just use `make build` as an a
 
 Run `make` or `make help` to see the full list of commands provided.
 
+## Event System
+
+gem5 itself works as an event-based system. This means that gem5 components continuously schedule events until there are no more events, or the maximum internal tick value is reached.
+
+Internally, the duration of one "tick" is more granular than the length of a clock cycle, etc, to capture event timing more accurately.
+
+One tick is $\frac{1}{1000000000000}$ seconds, or 1 picosecond. In other words, there are 1000000000000 ticks for each second simulated. You can verify the tick rate in your simulation after running in the dumped stats file.
+
 ## Points of Interest
 
 See [Points of Interest](poi.md) for information on where are good places to look for certain aspects of coding.
