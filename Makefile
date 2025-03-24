@@ -37,6 +37,7 @@ help:
 	@echo
 	@echo "  Miscellaneous:"
 	@echo "    clean                           Clean all build files."
+	@echo "    bell                            Produce a bell. Can be used as an alert after build completion, etc."
 	@echo "    help                            Show this message."
 
 
@@ -162,3 +163,9 @@ run-x86-debug:
 .PHONY: clean
 clean:
 	rm -rf build
+
+
+.PHONY: bell
+bell:
+	@printf '\a';\
+	echo 'Ding!'
