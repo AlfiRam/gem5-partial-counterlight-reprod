@@ -36,7 +36,7 @@ import time
 import m5
 from m5.objects import (
     BadAddr,
-    InstrumentedSystemXBar,
+    SystemXBar,
 )
 
 from gem5.components.boards.x86_board import X86Board
@@ -182,8 +182,7 @@ for proc in processor.start:
 # Main memory
 memory = DIMM_DDR5_4400(size="3GiB")
 
-# Use custom memory bus
-membus = InstrumentedSystemXBar(width=64)
+membus = SystemXBar(width=64)
 membus.badaddr_responder = BadAddr()
 membus.default = membus.badaddr_responder.pio
 
@@ -214,15 +213,6 @@ board = X86Board(
 command = (
     "m5 exit;"  # Third exit event
     + "cd parsec-benchmark;"
-    + 'echo "/etc/hostname:";'
-    + "cat /etc/hostname;"
-    + 'echo "/etc/hosts:";'
-    + "cat /etc/hosts;"
-    + 'echo "hostname:";'
-    + 'echo "12345" | sudo -S hostname gem5;'
-    + "hostname;"
-    + 'echo "12345" | sudo -S hostname -F /etc/hostname'
-    # + "source env.sh;"
     + f'echo "12345" | sudo -S ./bin/parsecmgmt -a run -p {args.benchmark} -c gcc-hooks -i {args.size} -n {args.cores};'
     # The end of ROI hook will stop the simulation from here.
     + "sleep 5;"  # This delay is to allow any print statements to finish before the simulation abruptly stops.
@@ -302,7 +292,7 @@ def handle_workbegin():
     m5.stats.reset()
     print("Switching KVM cores to Timing cores.")
     processor.switch()
-    yield False
+    return False
 
 
 def handle_workend():
@@ -311,9 +301,9 @@ def handle_workend():
 
     # Stop the simulation immediately at the end of ROI
     if args.no_stop_after_roi:
-        yield False
+        return False
     else:
-        yield True
+        return True
 
 
 simulator = Simulator(
@@ -332,7 +322,9 @@ simulator.run()
 
 end_time = time.time()
 
-print("Performance statistics:")
+print(
+    f"Performance statistics (latency_switch_mode {membus.latency_switch_mode}):"
+)
 
 print("Simulated time in ROI: " + (str(simulator.get_roi_ticks()[0])))
 print(
