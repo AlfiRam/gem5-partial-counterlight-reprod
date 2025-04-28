@@ -45,3 +45,25 @@ One tick is $\frac{1}{1000000000000}$ seconds, or 1 picosecond. In other words, 
 ## Points of Interest
 
 See [Points of Interest](poi.md) for information on where are good places to look for certain aspects of coding.
+
+## Debugging (with GDB)
+
+> *Note:* See the gem5 documentation at [Debugger-based Debugging](https://www.gem5.org/documentation/general_docs/debugging_and_testing/debugging/debugger_based_debugging) for a general overview. Many of the notes there are simply copied here for convenience.
+
+To do debugging, first, you want to make sure you have built to the debug target `gem5.debug`. Since gem5 is event-based, you can start debugging by creating a `DebugEvent` that will pause execution and enter the debugger.
+
+### Creating `DebugEvent`s
+
+There are two main ways to do this:
+
+- Create a `DebugEvent` object yourself in the place of the code that you want to start debugging. This can also be done with the `schedBreak()` function. (This function can be used within the debugger as well.)
+  - For use in GDB, you could do something like: `call schedBreak(<tick>)`, where you specify the tick you want to break at next.
+- Using the `--debug-break` parameter to go to the debugger on a specific tick number.
+
+### Using GDB
+
+Run GDB example:
+
+```
+gdb ./build/X86/gem5.debug --args --debug-break=1000000 configs/config_name.py
+```
