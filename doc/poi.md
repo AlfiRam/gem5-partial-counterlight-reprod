@@ -198,6 +198,23 @@ panic_if(condition, "Description of the panic.");
 ```
 
 
+## Assertions
+
+Add import:
+
+``` cpp
+#include <cassert>
+// This may be included already, depending on other include statements.
+```
+
+
+Create assertion statement:
+
+``` cpp
+assert(condition);
+```
+
+
 ## Building Extra Separate Vendor Code
 
 > Source: https://www.gem5.org/documentation/general_docs/building/EXTRAS
