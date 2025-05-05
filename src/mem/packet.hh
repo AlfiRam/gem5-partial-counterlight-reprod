@@ -623,6 +623,18 @@ class Packet : public Printable, public Extensible<Packet>
     bool isPrint() const             { return cmd.isPrint(); }
     bool isFlush() const             { return cmd.isFlush(); }
 
+    bool _isMetadataRequest;
+    bool isMetadataRequest() const   { return _isMetadataRequest; }
+    void setMetadataRequest()        { _isMetadataRequest = true; }
+
+    /**
+     * The integrity structure node ID associated with this packet, if
+     * applicable.
+     */
+    size_t metadataNode;
+    size_t getMetadataNode() const     { return metadataNode; }
+    void setMetadataNode(size_t node)  { metadataNode = node; }
+
     bool isWholeLineWrite(unsigned blk_size)
     {
         return (cmd == MemCmd::WriteReq || cmd == MemCmd::WriteLineReq) &&
