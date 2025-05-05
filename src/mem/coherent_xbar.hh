@@ -299,6 +299,9 @@ class CoherentXBar : public BaseXBar
     /** Is this crossbar the point of unification? **/
     const bool pointOfUnification;
 
+    /** Should this crossbar use custom instrumentation? */
+    const bool useInstrumentation;
+
     /**
      * Upstream caches need this packet until true is returned, so
      * hold it for deletion until a subsequent call
