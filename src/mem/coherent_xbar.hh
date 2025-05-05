@@ -49,6 +49,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "mem/cache/metadata_cache.hh"
+#include "mem/mtree/timing_tree.hh"
 #include "mem/snoop_filter.hh"
 #include "mem/xbar.hh"
 #include "params/CoherentXBar.hh"
@@ -303,6 +305,90 @@ class CoherentXBar : public BaseXBar
     const bool useInstrumentation;
 
     /**
+     * Store the outstanding hash generation (for reads) while we wait for the
+     * hash to complete. Once it is done, we can use it to verify the
+     * integrity of a read response, and if everything passes, the original
+     * data response will be properly forwarded back to LLC.
+     */
+    std::unordered_set<RequestPtr> outstandingIntegrityHashes;
+
+    /**
+     * Store the outstanding request pkts that have not been verified yet. This
+     * may or may not be used based on whether there should be a lazy
+     * verification strategy (start speculatively using the data received
+     * before verification has completed). This also stores the original
+     * memory-side port ID for reference later.
+     */
+    std::unordered_map<PacketPtr, PortID> outstandingIntegrityVerification;
+
+    /**
+     * Store the outstanding requests for integrity metadata. For now, this is
+     * just a set of tree node IDs.
+     */
+    std::unordered_set<uint64_t> outstandingMetadataRequests;
+
+    typedef TimingTree IntegrityTree;
+    /**
+     * The simulated integrity tree. For now, this is a very basic tree.
+     */
+    IntegrityTree integrityTree;
+
+    /**
+     * Metadata cache.
+     */
+    SimpleMetadataCache metadataCache;
+
+    /**
+     * An event that represents when the hash generation for the data in a
+     * response packet is finished. This will usually trigger verification
+     * by comparing the generated hash to a parent integrity node.
+     */
+    class HashCompletionEvent : public Event
+    {
+      private:
+        // Pointer to the related XBar.
+        CoherentXBar *xbar;
+
+        // Pointer to the original request packet that we are verifying.
+        PacketPtr pkt;
+
+        // The original memory-side port that this request would be going to.
+        PortID mem_side_port_id;
+
+      public:
+        HashCompletionEvent(
+          CoherentXBar *xbar,
+          PacketPtr pkt,
+          PortID mem_side_port_id
+        ) : Event(Default_Pri, AutoDelete),
+          xbar(xbar),
+          pkt(pkt),
+          mem_side_port_id(mem_side_port_id)
+        { }
+
+        void process() override {
+          xbar->completeIntegrityHash(pkt, mem_side_port_id);
+        }
+    };
+
+    /**
+     * Called when hash generation for a (read) response packet is received.
+     */
+    void completeIntegrityHash(PacketPtr pkt, PortID mem_side_port_id);
+
+    /**
+     * Called when a request should attempt to be verified, and the original
+     * data request packet can be properly forwarded back to the CPU side if
+     * the leaf was verified.
+     */
+    void completeIntegrityVerification(PacketPtr pkt, PortID mem_side_port_id);
+
+    /**
+     * Time (in ticks) to complete hashing.
+     */
+    Tick integrityHashingLatency = 800;
+
+    /**
      * Upstream caches need this packet until true is returned, so
      * hold it for deletion until a subsequent call
      */
@@ -310,6 +396,11 @@ class CoherentXBar : public BaseXBar
 
     bool recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id);
     bool recvTimingResp(PacketPtr pkt, PortID mem_side_port_id);
+    /**
+     * Just the functionality of actually returning a packet back to the CPU
+     * side is isolated from `recvTimingResp` to be used in other functions.
+     */
+    void finishPktResp(PacketPtr pkt, PortID mem_side_port_id);
     void recvTimingSnoopReq(PacketPtr pkt, PortID mem_side_port_id);
     bool recvTimingSnoopResp(PacketPtr pkt, PortID cpu_side_port_id);
     void recvReqRetry(PortID mem_side_port_id);

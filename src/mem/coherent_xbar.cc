@@ -50,6 +50,8 @@
 #include "base/trace.hh"
 #include "debug/AddrRanges.hh"
 #include "debug/CoherentXBar.hh"
+#include "debug/IntegrityMetadata.hh"
+#include "mem/packet.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -63,6 +65,8 @@ CoherentXBar::CoherentXBar(const CoherentXBarParams &p)
       pointOfCoherency(p.point_of_coherency),
       pointOfUnification(p.point_of_unification),
       useInstrumentation(p.use_instrumentation),
+      integrityTree(TimingTree(4, system->memSize())),
+      metadataCache(SimpleMetadataCache(1024)),
 
       ADD_STAT(snoops, statistics::units::Count::get(), "Total snoops"),
       ADD_STAT(snoopTraffic, statistics::units::Byte::get(), "Total snoop traffic"),
@@ -145,6 +149,71 @@ CoherentXBar::init()
     if (snoopFilter)
         snoopFilter->setCPUSidePorts(cpuSidePorts);
 }
+
+void
+CoherentXBar::completeIntegrityHash(PacketPtr pkt, PortID mem_side_port_id)
+{
+    // Take this request off the pending hash list.
+    assert(outstandingIntegrityHashes.find(pkt->req) !=
+           outstandingIntegrityHashes.end());
+    outstandingIntegrityHashes.erase(pkt->req);
+
+    // Attempt verification (we will call a separate function since
+    // we don't know if the hashing or potential parent node retrieval will
+    // complete first)
+    completeIntegrityVerification(pkt, mem_side_port_id);
+}
+
+
+void
+CoherentXBar::completeIntegrityVerification(
+    PacketPtr pkt,
+    PortID mem_side_port_id
+)
+{
+    // Check if both the hash generation is finished and the corresponding
+    // parent node is available. If not, keep waiting. This function will
+    // be called again for the second of the two that finish.
+    if (outstandingIntegrityHashes.find(pkt->req) !=
+        outstandingIntegrityHashes.end()) {
+        // We are not done generating the hash. We are not ready to verify.
+        DPRINTF(IntegrityMetadata, "%s: Not ready to verify pkt %s, "
+            "hash incomplete\n",
+            __func__, pkt->print());
+        return;
+    } else if (pkt->getMetadataNode() != 0 &&
+        !metadataCache.contains(
+            integrityTree.parentBlockIndex(pkt->getMetadataNode()))) {
+        DPRINTF(IntegrityMetadata, "%s: Not ready to verify pkt %s, "
+            "parent unavailable\n",
+        __func__, pkt->print());
+        // The parent node is not yet available. We are not ready to verify.
+        return;
+    }
+
+    // We are now ready to verify.
+    DPRINTF(IntegrityMetadata, "%s: Verifying pkt %s\n",
+        __func__, pkt->print());
+
+    // Assume that the verification was successful, and effectively instant.
+
+    if (pkt->isMetadataRequest()) {
+        // Add this to the cache. We are done here.
+        bool inserted = metadataCache.insert(pkt->getMetadataNode());
+        assert(inserted);
+        outstandingMetadataRequests.erase(pkt->getMetadataNode());
+        routeTo.erase(pkt->req);
+    } else {
+        // This packet can now be properly returned up to the CPU to complete.
+        finishPktResp(pkt, mem_side_port_id);
+    }
+
+    // Attempt to verify any applicable outstanding verifications.
+    for (auto pending : outstandingIntegrityVerification) {
+        completeIntegrityVerification(pending.first, pending.second);
+    }
+}
+
 
 bool
 CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
@@ -457,16 +526,21 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     assert(cpu_side_port_id != InvalidPortID);
     assert(cpu_side_port_id < respLayers.size());
 
-    // test if the crossbar should be considered occupied for the
-    // current port
-    if (!respLayers[cpu_side_port_id]->tryTiming(src_port)) {
-        DPRINTF(CoherentXBar, "%s: src %s packet %s BUSY\n", __func__,
-                src_port->name(), pkt->print());
-        return false;
-    }
+    if (!pkt->isMetadataRequest()) {
+        // test if the crossbar should be considered occupied for the
+        // current port
+        if (!respLayers[cpu_side_port_id]->tryTiming(src_port)) {
+            DPRINTF(CoherentXBar, "%s: src %s packet %s BUSY\n", __func__,
+                    src_port->name(), pkt->print());
+            return false;
+        }
 
-    DPRINTF(CoherentXBar, "%s: src %s packet %s\n", __func__,
-            src_port->name(), pkt->print());
+        DPRINTF(CoherentXBar, "%s: src %s packet %s\n", __func__,
+                src_port->name(), pkt->print());
+    } else if (useInstrumentation && pkt->isMetadataRequest()) {
+        DPRINTF(IntegrityMetadata, "%s: Got metadata resp %s", __func__,
+            pkt->print());
+    }
 
     // store size and command as they might be modified when
     // forwarding the packet
@@ -487,6 +561,174 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         snoopFilter->updateResponse(pkt, *cpuSidePorts[cpu_side_port_id]);
     }
 
+    // Read data must be verified first before it can be used.
+    if (useInstrumentation && pkt->isRead()) {
+        DPRINTF(IntegrityMetadata, "%s: Handling verification of packet %s\n",
+                __func__, pkt->print());
+
+        // TODO This will start with just basic integrity. No encryption. Just
+        // integrity/cryptographic hashing. The data is thus already decrypted.
+        // We just need to verify that this data is what we expect it to be.
+
+        // Kick off hashing. Add to a pending hashing list. Schedule an event
+        // when the hashing completes. Keep in mind we are essentially holding
+        // hostage the memory response until all verification is complete.
+        // TODO For now, we will assume there will be unlimited space in the
+        // pending hashing list. A response packet should never bounce back
+        // and clog up for now. However, in the future, there should be a
+        // capacity check here and ask packets to try again later.
+        schedule(
+            new HashCompletionEvent(this, pkt, mem_side_port_id),
+            curTick() + integrityHashingLatency
+        );
+        // This packet should not already be in the process of being verified.
+        assert(outstandingIntegrityHashes.find(pkt->req) ==
+               outstandingIntegrityHashes.end());
+        assert(outstandingIntegrityVerification.find(pkt) ==
+               outstandingIntegrityVerification.end());
+        outstandingIntegrityHashes.insert(pkt->req);
+        outstandingIntegrityVerification.emplace(pkt, mem_side_port_id);
+
+
+        // Check for the parent node in the metadata cache.
+        size_t parentNode;
+        if (!pkt->isMetadataRequest()) {
+            // If this was a data request, get the leaf block.
+            parentNode = integrityTree.addressToBlockIndex(pkt->getAddr());
+        } else if (pkt->getMetadataNode() != 0) {
+            // If this was a metadata request, get the parent node.
+            // If the parent node is the secure root, we skip this step.
+            parentNode = integrityTree.parentBlockIndex(
+                pkt->getMetadataNode());
+        }
+
+        if (pkt->getMetadataNode() == 0 ||
+            metadataCache.contains(parentNode)) {
+            // If the parent is the secure root, or the parent node exists in
+            // the metadata cache, we are just waiting for the hashing to
+            // complete. We are done here.
+
+            // Account for the request being complete.
+            completeIntegrityVerification(pkt, mem_side_port_id);
+
+            return true;
+        }
+
+        if (outstandingMetadataRequests.find(parentNode) !=
+            outstandingMetadataRequests.end()) {
+            panic("Unimplemented. Will need a separate list that can map "
+                  "requests that align to the same metadata node.");
+        }
+
+        // A request has not yet been sent. We will craft a request packet for
+        // metadata to memory to get the parent node. Then we schedule the
+        // request.
+
+        DPRINTF(IntegrityMetadata, "%s: Sending metadata req %s", __func__,
+            pkt->print());
+
+        // Create the metadata request and packet.
+        RequestPtr req = std::make_shared<Request>();
+        PacketPtr metadataRequestPkt = Packet::createRead(req);
+        // Set the flag that this is a metadata request.
+        metadataRequestPkt->setMetadataRequest();
+
+        // Indicate the integrity tree node that will be accessed.
+        auto block_id = integrityTree.addressToBlockIndex(pkt->getAddr());
+        metadataRequestPkt->setMetadataNode(block_id);
+
+        // Submit the packet to the memory controller. For this implementation,
+        // we will match the memory controller that was indicated in the
+        // original data request packet.
+        bool success = memSidePorts[mem_side_port_id]->sendTimingReq(
+                                                        metadataRequestPkt);
+
+        if (!success) {
+            DPRINTF(IntegrityMetadata, "%s: Metadata req %s RETRY", __func__,
+                    pkt->print());
+
+            // update the layer state and schedule an idle event
+            ResponsePort *src_port = cpuSidePorts[cpu_side_port_id];
+            reqLayers[mem_side_port_id]->failedTiming(src_port,
+                                                    clockEdge(Cycles(1)));
+        } else {
+            // Store where the original response would go to
+            assert(routeTo.find(pkt->req) == routeTo.end());
+            routeTo[pkt->req] = cpu_side_port_id;
+
+            panic_if(routeTo.size() > maxRoutingTableSizeCheck,
+                    "%s: Routing table exceeds %d packets\n",
+                    name(), maxRoutingTableSizeCheck);
+
+            // update the layer state and schedule an idle event
+            reqLayers[mem_side_port_id]->succeededTiming(packetFinishTime);
+
+            // Once you send successfully, add to outstanding metadata requests
+            outstandingMetadataRequests.insert(block_id);
+
+            // Update stats
+            pktCount[cpu_side_port_id][mem_side_port_id]++;
+            // pktSize[cpu_side_port_id][mem_side_port_id] += pkt_size;
+            // transDist[pkt_cmd]++;
+        }
+
+        // We will hold on to this packet until the time comes to forward this
+        // to the CPU.
+        return true;
+    }
+
+    // Use isolated code.
+    finishPktResp(pkt, mem_side_port_id);
+
+    return true;
+}
+
+
+void
+CoherentXBar::finishPktResp(PacketPtr pkt, PortID mem_side_port_id)
+{
+    // ============= Begin repeated code from `recvTimingResp`.
+    // Some code is repeated to initialize some variables needed.
+
+    // determine the source port based on the id
+    RequestPort *src_port = memSidePorts[mem_side_port_id];
+
+    // determine the destination
+    const auto route_lookup = routeTo.find(pkt->req);
+    assert(route_lookup != routeTo.end());
+    const PortID cpu_side_port_id = route_lookup->second;
+    assert(cpu_side_port_id != InvalidPortID);
+    assert(cpu_side_port_id < respLayers.size());
+
+    // test if the crossbar should be considered occupied for the
+    // current port
+    if (!respLayers[cpu_side_port_id]->tryTiming(src_port)) {
+        DPRINTF(CoherentXBar, "%s: src %s packet %s BUSY\n", __func__,
+                src_port->name(), pkt->print());
+        panic("TODO Schedule an event to retry the response.");
+    }
+
+    // store size and command as they might be modified when
+    // forwarding the packet
+    unsigned int pkt_size = pkt->hasData() ? pkt->getSize() : 0;
+    unsigned int pkt_cmd = pkt->cmdToIndex();
+
+    // We are NOT adding more delay to the packet, since we aren't re-reading
+    // the header on this packet. It's just been stalled here, which is already
+    // covered by the later response time.
+
+    // determine how long to be crossbar layer is busy
+    Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
+
+    // ============= End repeated code from `recvTimingResp`.
+
+    // Officially consider this packet to be finished being verified.
+    if (useInstrumentation && pkt->isRead()) {
+        outstandingIntegrityVerification.erase(pkt);
+    }
+
+    // ============= Begin response process from `recvTimingResp`.
+
     // send the packet through the destination CPU-side port and pay for
     // any outstanding header delay
     Tick latency = pkt->headerDelay;
@@ -504,7 +746,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     pktSize[cpu_side_port_id][mem_side_port_id] += pkt_size;
     transDist[pkt_cmd]++;
 
-    return true;
+    // ============= End response process from `recvTimingResp`.
 }
 
 void
