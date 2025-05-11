@@ -158,6 +158,9 @@ CoherentXBar::completeIntegrityHash(PacketPtr pkt, PortID mem_side_port_id)
            outstandingIntegrityHashes.end());
     outstandingIntegrityHashes.erase(pkt->req);
 
+    DPRINTF(IntegrityMetadata, "%s: Completed hash of pkt %s\n",
+        __func__, pkt->print());
+
     // Attempt verification (we will call a separate function since
     // we don't know if the hashing or potential parent node retrieval will
     // complete first)
@@ -538,7 +541,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         DPRINTF(CoherentXBar, "%s: src %s packet %s\n", __func__,
                 src_port->name(), pkt->print());
     } else if (useInstrumentation && pkt->isMetadataRequest()) {
-        DPRINTF(IntegrityMetadata, "%s: Got metadata resp %s", __func__,
+        DPRINTF(IntegrityMetadata, "%s: Got metadata resp %s\n", __func__,
             pkt->print());
     }
 
@@ -577,6 +580,8 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         // pending hashing list. A response packet should never bounce back
         // and clog up for now. However, in the future, there should be a
         // capacity check here and ask packets to try again later.
+        DPRINTF(IntegrityMetadata, "%s: Scheduling hash for pkt %s\n",
+            __func__, pkt->print());
         schedule(
             new HashCompletionEvent(this, pkt, mem_side_port_id),
             curTick() + integrityHashingLatency
@@ -602,13 +607,18 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
                 pkt->getMetadataNode());
         }
 
-        if (pkt->getMetadataNode() == 0 ||
+        DPRINTF(IntegrityMetadata,
+            "%s: Parent metadata node for pkt %s is %llu\n",
+            __func__, pkt->print(), parentNode);
+
             metadataCache.contains(parentNode)) {
             // If the parent is the secure root, or the parent node exists in
             // the metadata cache, we are just waiting for the hashing to
             // complete. We are done here.
 
             // Account for the request being complete.
+            DPRINTF(IntegrityMetadata, "%s: pkt %s has parent available\n",
+                __func__, pkt->print());
             completeIntegrityVerification(pkt, mem_side_port_id);
 
             return true;
@@ -616,6 +626,8 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
 
         if (outstandingMetadataRequests.find(parentNode) !=
             outstandingMetadataRequests.end()) {
+            DPRINTF(IntegrityMetadata, "%s: %d is already being requested\n",
+                __func__, parentNode);
             panic("Unimplemented. Will need a separate list that can map "
                   "requests that align to the same metadata node.");
         }
@@ -623,9 +635,6 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         // A request has not yet been sent. We will craft a request packet for
         // metadata to memory to get the parent node. Then we schedule the
         // request.
-
-        DPRINTF(IntegrityMetadata, "%s: Sending metadata req %s", __func__,
-            pkt->print());
 
         // Create the metadata request and packet.
         RequestPtr req = std::make_shared<Request>();
@@ -643,9 +652,12 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         bool success = memSidePorts[mem_side_port_id]->sendTimingReq(
                                                         metadataRequestPkt);
 
+        DPRINTF(IntegrityMetadata, "%s: Sending metadata req %s\n", __func__,
+            metadataRequestPkt->print());
+
         if (!success) {
-            DPRINTF(IntegrityMetadata, "%s: Metadata req %s RETRY", __func__,
-                    pkt->print());
+            DPRINTF(IntegrityMetadata, "%s: Metadata req %s RETRY\n", __func__,
+                metadataRequestPkt->print());
 
             // update the layer state and schedule an idle event
             ResponsePort *src_port = cpuSidePorts[cpu_side_port_id];
