@@ -422,7 +422,10 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     }
     prevArrival = curTick();
 
-    panic_if(!(dram->getAddrRange().contains(pkt->getAddr())),
+    // Ignore the address for metadata request packets, as the address is
+    // symbolic.
+    panic_if(!pkt->isMetadataRequest() &&
+             !(dram->getAddrRange().contains(pkt->getAddr())),
              "Can't handle address range for packet %s\n", pkt->print());
 
     // Find out how many memory packets a pkt translates to
@@ -627,7 +630,8 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
     bool needsResponse = pkt->needsResponse();
     // do the actual memory access which also turns the packet into a
     // response
-    panic_if(!mem_intr->getAddrRange().contains(pkt->getAddr()),
+    panic_if(!pkt->isMetadataRequest() &&
+             !mem_intr->getAddrRange().contains(pkt->getAddr()),
              "Can't handle address range for packet %s\n", pkt->print());
     mem_intr->access(pkt);
 
