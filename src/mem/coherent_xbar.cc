@@ -206,14 +206,13 @@ CoherentXBar::completeIntegrityVerification(
         assert(inserted);
         outstandingMetadataRequests.erase(pkt->getMetadataNode());
         routeTo.erase(pkt->req);
+        // Attempt to verify any applicable outstanding verifications.
+        for (auto pending : outstandingIntegrityVerification) {
+            completeIntegrityVerification(pending.first, pending.second);
+        }
     } else {
         // This packet can now be properly returned up to the CPU to complete.
-        finishPktResp(pkt, mem_side_port_id);
-    }
-
-    // Attempt to verify any applicable outstanding verifications.
-    for (auto pending : outstandingIntegrityVerification) {
-        completeIntegrityVerification(pending.first, pending.second);
+        finishPktResp(pkt, mem_side_port_id, true);
     }
 }
 
@@ -690,14 +689,15 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     }
 
     // Use isolated code.
-    finishPktResp(pkt, mem_side_port_id);
+    finishPktResp(pkt, mem_side_port_id, false);
 
     return true;
 }
 
 
 void
-CoherentXBar::finishPktResp(PacketPtr pkt, PortID mem_side_port_id)
+CoherentXBar::finishPktResp(PacketPtr pkt, PortID mem_side_port_id,
+    bool doTryTiming = true)
 {
     // ============= Begin repeated code from `recvTimingResp`.
     // Some code is repeated to initialize some variables needed.
@@ -714,7 +714,7 @@ CoherentXBar::finishPktResp(PacketPtr pkt, PortID mem_side_port_id)
 
     // test if the crossbar should be considered occupied for the
     // current port
-    if (!respLayers[cpu_side_port_id]->tryTiming(src_port)) {
+    if (doTryTiming && !respLayers[cpu_side_port_id]->tryTiming(src_port)) {
         DPRINTF(CoherentXBar, "%s: src %s packet %s BUSY\n", __func__,
                 src_port->name(), pkt->print());
         panic("TODO Schedule an event to retry the response.");

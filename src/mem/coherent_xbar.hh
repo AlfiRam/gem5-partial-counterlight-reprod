@@ -399,8 +399,13 @@ class CoherentXBar : public BaseXBar
     /**
      * Just the functionality of actually returning a packet back to the CPU
      * side is isolated from `recvTimingResp` to be used in other functions.
+     *
+     * @param doTryTiming Determine whether or not to use the `tryTiming()`
+     *                    call. This might not be necessary if previously
+     *                    called before this function.
      */
-    void finishPktResp(PacketPtr pkt, PortID mem_side_port_id);
+    void finishPktResp(PacketPtr pkt, PortID mem_side_port_id,
+      bool doTryTiming);
     void recvTimingSnoopReq(PacketPtr pkt, PortID mem_side_port_id);
     bool recvTimingSnoopResp(PacketPtr pkt, PortID cpu_side_port_id);
     void recvReqRetry(PortID mem_side_port_id);
