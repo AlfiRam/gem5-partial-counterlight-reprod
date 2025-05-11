@@ -372,6 +372,82 @@ class CoherentXBar : public BaseXBar
     };
 
     /**
+     * An event that represents when to try sending a response again. This can
+     * happen if the bus is busy at the time of sending.
+     */
+    class SendRespRetryEvent : public Event
+    {
+      private:
+        // Pointer to the related XBar.
+        CoherentXBar *xbar;
+
+        // Pointer to the original request packet that we are verifying.
+        PacketPtr pkt;
+
+        // The original memory-side port that this request would be going to.
+        PortID mem_side_port_id;
+
+      public:
+      SendRespRetryEvent(
+          CoherentXBar *xbar,
+          PacketPtr pkt,
+          PortID mem_side_port_id
+        ) : Event(Default_Pri, AutoDelete),
+          xbar(xbar),
+          pkt(pkt),
+          mem_side_port_id(mem_side_port_id)
+        { }
+
+        void process() override {
+          xbar->finishPktResp(pkt, mem_side_port_id, true);
+        }
+    };
+
+        /**
+     * An event that represents when to try sending a metadata request again.
+     * This can happen if the bus is busy at the time of sending.
+     */
+    class SendMetadataReqRetryEvent : public Event
+    {
+      private:
+        // Pointer to the related XBar.
+        CoherentXBar *xbar;
+
+        // Pointer to the metadata request packet.
+        PacketPtr pkt;
+
+        // The original CPU-side port that this request would come from.
+        PortID cpu_side_port_id;
+
+        // The destination memory-side port for this request.
+        PortID mem_side_port_id;
+
+      public:
+      SendMetadataReqRetryEvent(
+          CoherentXBar *xbar,
+          PacketPtr pkt,
+          PortID cpu_side_port_id,
+          PortID mem_side_port_id
+        ) : Event(Default_Pri, AutoDelete),
+          xbar(xbar),
+          pkt(pkt),
+          cpu_side_port_id(cpu_side_port_id),
+          mem_side_port_id(mem_side_port_id)
+        { }
+
+        void process() override {
+          xbar->retryMetadataReq(pkt, cpu_side_port_id, mem_side_port_id);
+        }
+    };
+
+    /**
+     * Called when attempting to resend a metadata request (in case the bus
+     * is busy).
+     */
+    void retryMetadataReq(PacketPtr pkt, PortID cpu_side_port_id,
+      PortID mem_side_port_id);
+
+    /**
      * Called when hash generation for a (read) response packet is received.
      */
     void completeIntegrityHash(PacketPtr pkt, PortID mem_side_port_id);

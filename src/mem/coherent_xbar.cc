@@ -150,6 +150,64 @@ CoherentXBar::init()
         snoopFilter->setCPUSidePorts(cpuSidePorts);
 }
 
+void CoherentXBar::retryMetadataReq(PacketPtr pkt, PortID cpu_side_port_id,
+    PortID mem_side_port_id)
+{
+    ResponsePort *src_cpu_port = cpuSidePorts[cpu_side_port_id];
+    if (!reqLayers[mem_side_port_id]->tryTiming(src_cpu_port)) {
+        // If the memory side is busy, we will have to try re-sending
+        // the metadata request.
+        DPRINTF(IntegrityMetadata, "%s: Metadata req %s BUSY\n", __func__,
+            pkt->print());
+        schedule(
+            new SendMetadataReqRetryEvent(
+                this, pkt, cpu_side_port_id, mem_side_port_id
+            ),
+            curTick() + clockEdge(Cycles(1))
+        );
+        return;
+    };
+
+    // Submit the packet to the memory controller. For this implementation,
+    // we will match the memory controller that was indicated in the
+    // original data request packet.
+    bool success = memSidePorts[mem_side_port_id]->sendTimingReq(
+        pkt);
+
+
+    DPRINTF(IntegrityMetadata, "%s: Sending metadata req %s\n", __func__,
+        pkt->print());
+
+    if (!success) {
+        // Restore the header delay
+
+        DPRINTF(IntegrityMetadata, "%s: Metadata req %s RETRY\n", __func__,
+            pkt->print());
+
+        // update the layer state and schedule an idle event
+        ResponsePort *src_port = cpuSidePorts[cpu_side_port_id];
+        reqLayers[mem_side_port_id]->failedTiming(src_port,
+                                                clockEdge(Cycles(1)));
+    } else {
+        // Store where the original response would go to
+        assert(routeTo.find(pkt->req) == routeTo.end());
+        routeTo[pkt->req] = cpu_side_port_id;
+
+        panic_if(routeTo.size() > maxRoutingTableSizeCheck,
+                "%s: Routing table exceeds %d packets\n",
+                name(), maxRoutingTableSizeCheck);
+
+        // update the layer state and schedule an idle event
+        Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
+        reqLayers[mem_side_port_id]->succeededTiming(packetFinishTime);
+
+        // Update stats
+        pktCount[cpu_side_port_id][mem_side_port_id]++;
+        // pktSize[cpu_side_port_id][mem_side_port_id] += pkt_size;
+        // transDist[pkt_cmd]++;
+    }
+}
+
 void
 CoherentXBar::completeIntegrityHash(PacketPtr pkt, PortID mem_side_port_id)
 {
@@ -679,6 +737,13 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
             // TODO RESUME - consider creating an event here to retry.
             DPRINTF(IntegrityMetadata, "%s: Metadata req %s BUSY\n", __func__,
                 metadataRequestPkt->print());
+            schedule(
+                new SendMetadataReqRetryEvent(
+                    this, pkt, cpu_side_port_id, mem_side_port_id
+                ),
+                curTick() + clockEdge(Cycles(1))
+            );
+            return true;
         }
 
         // Submit the packet to the memory controller. For this implementation,
@@ -752,7 +817,12 @@ CoherentXBar::finishPktResp(PacketPtr pkt, PortID mem_side_port_id,
     if (doTryTiming && !respLayers[cpu_side_port_id]->tryTiming(src_port)) {
         DPRINTF(CoherentXBar, "%s: src %s packet %s BUSY\n", __func__,
                 src_port->name(), pkt->print());
-        panic("TODO Schedule an event to retry the response.");
+        // panic("TODO Schedule an event to retry the response.");
+        schedule(
+            new SendRespRetryEvent(this, pkt, mem_side_port_id),
+            curTick() + clockEdge(Cycles(1))
+        );
+        return;
     }
 
     // store size and command as they might be modified when
