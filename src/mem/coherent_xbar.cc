@@ -649,7 +649,12 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         // request.
 
         // Create the metadata request and packet.
-        RequestPtr req = std::make_shared<Request>();
+        RequestPtr req = std::make_shared<Request>(
+            system->memSize() + pkt->getAddr(),
+            pkt->getSize(),
+            0, // No flags
+            pkt->requestorId()
+        );
         PacketPtr metadataRequestPkt = Packet::createRead(req);
         // Set the flag that this is a metadata request.
         metadataRequestPkt->setMetadataRequest();
@@ -657,6 +662,24 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         // Indicate the integrity tree node that will be accessed.
         auto block_id = integrityTree.addressToBlockIndex(pkt->getAddr());
         metadataRequestPkt->setMetadataNode(block_id);
+
+        // Add to outstanding metadata requests
+        outstandingMetadataRequests.insert(block_id);
+
+        // Set the packet delay
+        calcPacketTiming(metadataRequestPkt, xbar_delay);
+        Tick packetFinishTime = clockEdge(headerLatency)
+            + metadataRequestPkt->payloadDelay;
+
+
+        ResponsePort *src_cpu_port = cpuSidePorts[cpu_side_port_id];
+        if (!reqLayers[mem_side_port_id]->tryTiming(src_cpu_port)) {
+            // If the memory side is busy, we will have to try re-sending
+            // the metadata request.
+            // TODO RESUME - consider creating an event here to retry.
+            DPRINTF(IntegrityMetadata, "%s: Metadata req %s BUSY\n", __func__,
+                metadataRequestPkt->print());
+        }
 
         // Submit the packet to the memory controller. For this implementation,
         // we will match the memory controller that was indicated in the
@@ -677,7 +700,9 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
                                                     clockEdge(Cycles(1)));
         } else {
             // Store where the original response would go to
-            assert(routeTo.find(metadataRequestPkt->req) == routeTo.end());
+            assert(
+                routeTo.find(metadataRequestPkt->req) == routeTo.end()
+            );
             routeTo[metadataRequestPkt->req] = cpu_side_port_id;
 
             panic_if(routeTo.size() > maxRoutingTableSizeCheck,
@@ -686,9 +711,6 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
 
             // update the layer state and schedule an idle event
             reqLayers[mem_side_port_id]->succeededTiming(packetFinishTime);
-
-            // Once you send successfully, add to outstanding metadata requests
-            outstandingMetadataRequests.insert(block_id);
 
             // Update stats
             pktCount[cpu_side_port_id][mem_side_port_id]++;
