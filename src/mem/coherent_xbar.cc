@@ -184,9 +184,18 @@ CoherentXBar::completeIntegrityVerification(
             "hash incomplete\n",
             __func__, pkt->print());
         return;
-    } else if (pkt->getMetadataNode() != 0 &&
-        !metadataCache.contains(
-            integrityTree.parentBlockIndex(pkt->getMetadataNode()))) {
+    } else if (
+        (pkt->isMetadataRequest() &&
+            pkt->getMetadataNode() != 0 &&
+            !metadataCache.contains(
+                integrityTree.parentBlockIndex(pkt->getMetadataNode()))
+        ) ||
+        (!pkt->isMetadataRequest() &&
+            !metadataCache.contains(
+                integrityTree.addressToBlockIndex(pkt->getAddr())
+            )
+        )
+        ) {
         DPRINTF(IntegrityMetadata, "%s: Not ready to verify pkt %s, "
             "parent unavailable\n",
         __func__, pkt->print());
@@ -206,6 +215,8 @@ CoherentXBar::completeIntegrityVerification(
         assert(inserted);
         outstandingMetadataRequests.erase(pkt->getMetadataNode());
         routeTo.erase(pkt->req);
+        delete pkt;
+
         // Attempt to verify any applicable outstanding verifications.
         for (auto pending : outstandingIntegrityVerification) {
             completeIntegrityVerification(pending.first, pending.second);
@@ -546,8 +557,9 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
 
     // store size and command as they might be modified when
     // forwarding the packet
-    unsigned int pkt_size = pkt->hasData() ? pkt->getSize() : 0;
-    unsigned int pkt_cmd = pkt->cmdToIndex();
+    [[maybe_unused]] unsigned int pkt_size = pkt->hasData()
+                                    ? pkt->getSize() : 0;
+    [[maybe_unused]] unsigned int pkt_cmd = pkt->cmdToIndex();
 
     // a response sees the response latency
     Tick xbar_delay = responseLatency * clockPeriod();
@@ -610,6 +622,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
             "%s: Parent metadata node for pkt %s is %llu\n",
             __func__, pkt->print(), parentNode);
 
+        if ((pkt->isMetadataRequest() && pkt->getMetadataNode() == 0) ||
             metadataCache.contains(parentNode)) {
             // If the parent is the secure root, or the parent node exists in
             // the metadata cache, we are just waiting for the hashing to
@@ -664,8 +677,8 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
                                                     clockEdge(Cycles(1)));
         } else {
             // Store where the original response would go to
-            assert(routeTo.find(pkt->req) == routeTo.end());
-            routeTo[pkt->req] = cpu_side_port_id;
+            assert(routeTo.find(metadataRequestPkt->req) == routeTo.end());
+            routeTo[metadataRequestPkt->req] = cpu_side_port_id;
 
             panic_if(routeTo.size() > maxRoutingTableSizeCheck,
                     "%s: Routing table exceeds %d packets\n",
