@@ -2,6 +2,8 @@
 
 #include <iomanip>
 
+#include "base/trace.hh"
+#include "debug/IntegrityTree.hh"
 #include "mem/mtree/util.hh"
 
 namespace gem5 {
@@ -265,10 +267,10 @@ size_t IntegrityTree::relativeChildBlockIndex(size_t childIndex) {
 size_t IntegrityTree::addressToBlockIndex(size_t address) {
   // Get the index of the first leaf node.
   size_t firstLeafIndex = integerPower(arity, height - 1)/(arity - 1);
-  std::cout << "We have " << dataSize << " total nodes." << std::endl;
-  std::cout << "The first leaf is at index "
-    << firstLeafIndex << "." << std::endl;
-  std::cout << "The arity is " << arity << "." << std::endl;
+  DPRINTF(IntegrityTree, "%s: We have %d total nodes.\n", __func__, dataSize);
+  DPRINTF(IntegrityTree, "%s: The first leaf is at index %d.\n",
+    __func__, firstLeafIndex);
+  DPRINTF(IntegrityTree, "%s: The arity is %d.\n", __func__, arity);
 
   // unsigned int nodesOnLevel = 1;
   // unsigned int firstNodeIndex = 0;
@@ -291,8 +293,9 @@ size_t IntegrityTree::addressToBlockIndex(size_t address) {
   // One leaf block covers `inputHashSize * arity` bytes.
   // So take the address and divide by this amount.
   size_t leafOffset = address / (hashInputSize * arity);
-  std::cout << "The leaf that corresponds to this address is #"
-    << leafOffset << std::endl;
+  DPRINTF(IntegrityTree,
+    "%s: The leaf that corresponds to this address is #%d\n",
+    __func__, leafOffset);
 
   return firstLeafIndex + leafOffset;
 }
@@ -308,7 +311,7 @@ void IntegrityTree::updateBlockHash(size_t index) {
 void IntegrityTree::updateBlockHashPartial(size_t index, size_t childIndex) {
   // The block being updated.
   Block* block = data[index];
-  std::cout << "Updating block " << index << "." << std::endl;
+  DPRINTF(IntegrityTree, "%s: Updating block %d.\n", index);
 
   // The child block that has changed and needs to propagate its hash up.
   Block* childBlock = data[firstChildBlockIndex(index) + childIndex];
@@ -316,8 +319,8 @@ void IntegrityTree::updateBlockHashPartial(size_t index, size_t childIndex) {
   // Determine where to start changing data in the updated block.
   size_t byteOffset = childIndex * hashOutputSize;
 
-  std::cout << "Updating bytes #" << byteOffset
-    << " through #" << (byteOffset + hashOutputSize - 1) << "." << std::endl;
+  DPRINTF(IntegrityTree, "%s: Updating bytes #%d through #%d.\n",
+    __func__, byteOffset, (byteOffset + hashOutputSize - 1));
 
   // Time to start hashing!
   // Get the child block's data and hash it.
@@ -327,11 +330,11 @@ void IntegrityTree::updateBlockHashPartial(size_t index, size_t childIndex) {
   // Copy the hash to the parent block.
   // hash.getHash(&(block->value[byteOffset]));
 
-  std::cout << "Hash value: ";
-  printHex(&(block->value[byteOffset]), hashOutputSize);
+  // std::cout << "Hash value: ";
+  // printHex(&(block->value[byteOffset]), hashOutputSize);
 
-  std::cout << "New contents of block #" << index << ":" << std::endl;
-  std::cout << *block << std::endl;
+  // std::cout << "New contents of block #" << index << ":" << std::endl;
+  // std::cout << *block << std::endl;
 }
 
 
