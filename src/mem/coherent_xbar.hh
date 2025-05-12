@@ -158,17 +158,26 @@ class CoherentXBar : public BaseXBar
      * instantiated for each of the CPU-side-port interfaces connecting to the
      * crossbar.
      */
-    class CoherentXBarRequestPort : public RequestPort
+    class CoherentXBarRequestPort : public QueuedRequestPort
     {
       private:
         /** A reference to the crossbar to which this port belongs. */
         CoherentXBar &xbar;
 
+        /** A normal packet queue used to store requests. */
+        ReqPacketQueue _queue;
+
+        /** Packet queue used to store outgoing snoop responses. */
+        SnoopRespPacketQueue _snoopRespQueue;
+
       public:
 
         CoherentXBarRequestPort(const std::string &_name,
                               CoherentXBar &_xbar, PortID _id)
-            : RequestPort(_name, _id), xbar(_xbar)
+            : QueuedRequestPort(_name, _queue, _snoopRespQueue, _id),
+            xbar(_xbar),
+            _queue(xbar, *this),
+            _snoopRespQueue(xbar, *this)
         { }
 
       protected:
