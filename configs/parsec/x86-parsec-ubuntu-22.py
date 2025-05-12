@@ -292,7 +292,7 @@ def handle_workbegin():
     m5.stats.reset()
     print("Switching KVM cores to Timing cores.")
     processor.switch()
-    return False
+    yield False
 
 
 def handle_workend():
@@ -301,9 +301,9 @@ def handle_workend():
 
     # Stop the simulation immediately at the end of ROI
     if args.no_stop_after_roi:
-        return False
+        yield False
     else:
-        return True
+        yield True
 
 
 simulator = Simulator(
