@@ -38,8 +38,11 @@
 #ifndef __MEM_MEM_DELAY_HH__
 #define __MEM_MEM_DELAY_HH__
 
+#include "debug/MemDelay.hh"
+#include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
 #include "sim/clocked_object.hh"
+#include "sim/system.hh"
 
 namespace gem5
 {
@@ -125,12 +128,65 @@ class MemDelay : public ClockedObject
 
     bool trySatisfyFunctional(PacketPtr pkt);
 
+    void createSchedResp(PacketPtr pkt);
+
+    void createMetadataReq(PacketPtr pkt);
+
+    /**
+     * Keep a pointer to the system to allow querying memory properties.
+     */
+    System *system;
+
     RequestPort requestPort;
     ResponsePort responsePort;
 
     ReqPacketQueue reqQueue;
     RespPacketQueue respQueue;
     SnoopRespPacketQueue snoopRespQueue;
+
+    typedef TimingTree IntegrityTree;
+    /**
+     * The simulated integrity tree. For now, this is a very basic tree.
+     */
+    IntegrityTree integrityTree;
+
+    /**
+     * An event that represents when to schedule a response.
+     */
+    class RealRespEvent : public Event
+    {
+      private:
+        // Pointer to the related delay object.
+        MemDelay *mem_delay;
+
+        // Pointer to the original request packet that we are sending.
+        PacketPtr pkt;
+
+      public:
+        RealRespEvent(
+          MemDelay *mem_delay,
+          PacketPtr pkt
+        ) : Event(Default_Pri, AutoDelete),
+          mem_delay(mem_delay),
+          pkt(pkt)
+        { }
+
+        void process() override {
+          DPRINTF(MemDelay, "%s: Now scheduling %s\n", __func__, pkt->print());
+          const Tick receive_delay = pkt->headerDelay + pkt->payloadDelay;
+          pkt->headerDelay = pkt->payloadDelay = 0;
+
+          const Tick when = curTick()
+                              + mem_delay->delayResp(pkt) + receive_delay;
+
+          if (!mem_delay->didOneMetadataReq)
+          {
+            mem_delay->createMetadataReq(pkt);
+          }
+
+          mem_delay->responsePort.schedTimingResp(pkt, when);
+        }
+    };
 
   protected:
     /**
@@ -153,6 +209,8 @@ class MemDelay : public ClockedObject
      * @return Ticks to delay packet.
      */
     virtual Tick delaySnoopResp(PacketPtr pkt) { return 0; }
+
+    bool didOneMetadataReq;
 };
 
 /**

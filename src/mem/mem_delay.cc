@@ -45,11 +45,14 @@ namespace gem5
 
 MemDelay::MemDelay(const MemDelayParams &p)
     : ClockedObject(p),
+      system(p.system),
       requestPort(name() + "-mem_side_port", *this),
       responsePort(name() + "-cpu_side_port", *this),
       reqQueue(*this, requestPort),
       respQueue(*this, responsePort),
-      snoopRespQueue(*this, requestPort)
+      snoopRespQueue(*this, requestPort),
+      integrityTree(TimingTree(4, system->memSize())),
+      didOneMetadataReq(false)
 {
 }
 
@@ -86,9 +89,54 @@ MemDelay::RequestPort::RequestPort(const std::string &_name, MemDelay &_parent)
 {
 }
 
+void
+MemDelay::createSchedResp(PacketPtr pkt) {
+    schedule(new RealRespEvent(this, pkt), curTick() + 800);
+}
+
+void
+MemDelay::createMetadataReq(PacketPtr pkt) {
+    if (!didOneMetadataReq) {
+
+        // We will attempt a single metadata request to see as a test.
+        RequestPtr req = std::make_shared<Request>(
+            system->memSize() + pkt->getAddr(),
+            pkt->getSize(),
+            0, // No flags
+            pkt->requestorId()
+        );
+        PacketPtr metadataRequestPkt = Packet::createRead(req);
+        // Set the flag that this is a metadata request.
+        metadataRequestPkt->setMetadataRequest();
+
+        // Indicate the integrity tree node that will be accessed.
+        auto block_id = integrityTree.addressToBlockIndex(pkt->getAddr());
+        metadataRequestPkt->setMetadataNode(block_id);
+
+        DPRINTF(MemDelay, "%s: Creating metadata request %s\n",
+            __func__, metadataRequestPkt->print());
+
+        requestPort.schedTimingReq(metadataRequestPkt, curTick() + Cycles(1));
+
+        didOneMetadataReq = true;
+    }
+}
+
 bool
 MemDelay::RequestPort::recvTimingResp(PacketPtr pkt)
 {
+    DPRINTF(MemDelay, "%s: Recv resp %s\n", __func__, pkt->print());
+
+    if (pkt->isMetadataRequest()) {
+        // Eat the packet.
+        return true;
+    }
+
+    parent.createSchedResp(pkt);
+
+    return true;
+
+
     // technically the packet only reaches us after the header delay,
     // and typically we also need to deserialise any payload
     const Tick receive_delay = pkt->headerDelay + pkt->payloadDelay;
@@ -144,6 +192,14 @@ MemDelay::ResponsePort::recvAtomic(PacketPtr pkt)
 bool
 MemDelay::ResponsePort::recvTimingReq(PacketPtr pkt)
 {
+    // We want to just bypass immediately if this is an express snoop.
+    if (pkt->isExpressSnoop()) {
+        parent.requestPort.sendTimingReq(pkt);
+        return true;
+    }
+
+    DPRINTF(MemDelay, "%s: Recv req %s\n", __func__, pkt->print());
+
     // technically the packet only reaches us after the header
     // delay, and typically we also need to deserialise any
     // payload
