@@ -597,7 +597,8 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     assert(cpu_side_port_id != InvalidPortID);
     assert(cpu_side_port_id < respLayers.size());
 
-    if (!pkt->isMetadataRequest()) {
+    if ((useInstrumentation && !pkt->isMetadataRequest()) ||
+        (!useInstrumentation)) {
         // test if the crossbar should be considered occupied for the
         // current port
         if (!respLayers[cpu_side_port_id]->tryTiming(src_port)) {
