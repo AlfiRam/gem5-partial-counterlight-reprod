@@ -85,6 +85,12 @@ parser.add_argument(
     help="Add an 'integrity verifier' component to add integrity management behavior.",
 )
 
+parser.add_argument(
+    "--timing-from-start",
+    action="store_true",
+    help="Instead of switching from KVM cores to timing cores when reaching the POI, use timing cores starting at boot.",
+)
+
 args = parser.parse_args()
 
 
@@ -117,27 +123,29 @@ else:
         membus=membus,
     )
 
-# This is a switchable CPU. We first boot Ubuntu using KVM, then the guest
-# will exit the simulation by calling "m5 exit" (see the `command` variable
-# below, which contains the command to be run in the guest after booting).
-# Upon exiting from the simulation, the Exit Event handler will switch the
-# CPU type (see the ExitEvent.EXIT line below, which contains a map to
-# a function to be called when an exit event happens).
-processor = SimpleSwitchableProcessor(
-    starting_core_type=CPUTypes.KVM,
-    switch_core_type=CPUTypes.TIMING,
-    isa=ISA.X86,
-    num_cores=2,
-)
 
-# Example of a processor that starts in timing mode, rather than switching to timing after boot.
-# processor = SimpleProcessor(
-#     cpu_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=2
-# )
+if not args.timing_from_start:
+    # This is a switchable CPU. We first boot Ubuntu using KVM, then the guest
+    # will exit the simulation by calling "m5 exit" (see the `command` variable
+    # below, which contains the command to be run in the guest after booting).
+    # Upon exiting from the simulation, the Exit Event handler will switch the
+    # CPU type (see the ExitEvent.EXIT line below, which contains a map to
+    # a function to be called when an exit event happens).
+    processor = SimpleSwitchableProcessor(
+        starting_core_type=CPUTypes.KVM,
+        switch_core_type=CPUTypes.TIMING,
+        isa=ISA.X86,
+        num_cores=2,
+    )
 
-# Here we tell the KVM CPU (the starting CPU) not to use perf.
-for proc in processor.start:
-    proc.core.usePerf = False
+    # Here we tell the KVM CPU (the starting CPU) not to use perf.
+    for proc in processor.start:
+        proc.core.usePerf = False
+else:
+    # Example of a processor that starts in timing mode, rather than switching to timing after boot.
+    processor = SimpleProcessor(
+        cpu_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=2
+    )
 
 # Here we setup the board. The X86Board allows for Full-System X86 simulations.
 board = X86Board(
@@ -157,9 +165,10 @@ def exit_event_handler():
     print("Second exit: Started `after_boot.sh` script")
     # The after_boot.sh script is executed after the kernel and systemd have
     # booted.
-    # Here we switch the CPU type to Timing.
-    print("Switching to Timing CPU")
-    processor.switch()
+    if not args.timing_from_start:
+        # Here we switch the CPU type to Timing.
+        print("Switching to Timing CPU")
+        processor.switch()
     yield False  # gem5 is now executing the `after_boot.sh` script
     print("Third exit: Finished `after_boot.sh` script")
     # The after_boot.sh script will run a script if it is passed via
