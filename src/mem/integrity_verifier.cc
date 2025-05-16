@@ -98,9 +98,9 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier, "%s: Recv resp %s\n",
         __func__, pkt->print());
 
-   // Read data must be verified first before it can be used.
-   // Don't do anything special for memory requests that are not actually
-   // for memory.
+    // Read data must be verified first before it can be used.
+    // Don't do anything special for memory requests that are not actually
+    // for memory.
     if (pkt->isRead() && pkt->getAddr() < parent.system->memSize()) {
         return parent.handleResp(pkt);
     }
