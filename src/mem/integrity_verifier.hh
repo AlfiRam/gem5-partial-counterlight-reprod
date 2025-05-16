@@ -132,6 +132,8 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     bool handleResp(PacketPtr pkt);
 
+    bool handleReq(PacketPtr pkt);
+
     /**
      * Called when hash generation for a (read) response packet is received.
      */
