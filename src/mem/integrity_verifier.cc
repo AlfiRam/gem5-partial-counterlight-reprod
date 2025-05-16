@@ -53,7 +53,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       respQueue(*this, responsePort),
       snoopRespQueue(*this, requestPort),
       integrityTree(TimingTree(4, system->memSize())),
-      metadataCache(SimpleMetadataCache(40000))
+      metadataCache(SimpleMetadataCache(300000))
 {
 }
 
