@@ -368,25 +368,21 @@ void
 Packet::print(std::ostream &o, const int verbosity,
               const std::string &prefix) const
 {
+    ccprintf(o, "%s%s [", prefix, cmdString());
+
     if (!isMetadataRequest()) {
-        ccprintf(o, "%s%s [%x:%x]%s%s%s%s%s%s", prefix, cmdString(),
-                getAddr(), getAddr() + getSize() - 1,
-                req->isSecure() ? " (s)" : "",
-                req->isInstFetch() ? " IF" : "",
-                req->isUncacheable() ? " UC" : "",
-                isExpressSnoop() ? " ES" : "",
-                req->isToPOC() ? " PoC" : "",
-                req->isToPOU() ? " PoU" : "");
+        ccprintf(o, "%x:%x", getAddr(), getAddr() + getSize() - 1);
     } else {
-        ccprintf(o, "%s%s [METADATA %d]%s%s%s%s%s%s", prefix, cmdString(),
-                getMetadataNode(),
-                req->isSecure() ? " (s)" : "",
-                req->isInstFetch() ? " IF" : "",
-                req->isUncacheable() ? " UC" : "",
-                isExpressSnoop() ? " ES" : "",
-                req->isToPOC() ? " PoC" : "",
-                req->isToPOU() ? " PoU" : "");
+        ccprintf(o, "METADATA %lu", getMetadataNode());
     }
+
+    ccprintf(o, "]%s%s%s%s%s%s",
+            req->isSecure() ? " (s)" : "",
+            req->isInstFetch() ? " IF" : "",
+            req->isUncacheable() ? " UC" : "",
+            isExpressSnoop() ? " ES" : "",
+            req->isToPOC() ? " PoC" : "",
+            req->isToPOU() ? " PoU" : "");
 
 }
 
