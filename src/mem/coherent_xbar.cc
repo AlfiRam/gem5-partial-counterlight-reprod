@@ -360,7 +360,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
         // the packet is a memory-mapped request and should be
         // broadcasted to our snoopers but the source
-        if (snoopFilter) {
+        if (snoopFilter && !pkt->isMetadataRequest()) {
             // check with the snoop filter where to forward this packet
             auto sf_res = snoopFilter->lookupRequest(pkt, *src_port);
             // the time required by a packet to be delivered through
@@ -443,7 +443,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
         }
     }
 
-    if (snoopFilter && snoop_caches) {
+    if (snoopFilter && snoop_caches && !pkt->isMetadataRequest()) {
         // Let the snoop filter know about the success of the send operation
         snoopFilter->finishRequest(!success, addr, pkt->isSecure());
     }
@@ -629,7 +629,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // determine how long to be crossbar layer is busy
     Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
 
-    if (snoopFilter && !system->bypassCaches()) {
+    if (snoopFilter && !system->bypassCaches() && !pkt->isMetadataRequest()) {
         // let the snoop filter inspect the response and update its state
         snoopFilter->updateResponse(pkt, *cpuSidePorts[cpu_side_port_id]);
     }
