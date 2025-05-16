@@ -31,9 +31,9 @@ from m5.objects import (
     BaseXBar,
     Bridge,
     Cache,
+    IntegrityVerifier,
     L2XBar,
     Port,
-    SimpleMemDelay,
     SystemXBar,
 )
 
@@ -49,7 +49,7 @@ from .caches.l2cache import L2Cache
 from .caches.mmu_cache import MMUCache
 
 
-class PrivateL1SharedL2CacheHierarchyDelay(
+class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
     AbstractClassicCacheHierarchy, AbstractTwoLevelCacheHierarchy
 ):
     """
@@ -176,21 +176,17 @@ class PrivateL1SharedL2CacheHierarchyDelay(
                 cpu.connect_interrupt()
 
         self.l2bus.mem_side_ports = self.l2cache.cpu_side
-        # self.membus.cpu_side_ports = self.l2cache.mem_side
 
-        # New potential design
-        self.memdelay = SimpleMemDelay(
+        self.verifier = IntegrityVerifier(
             read_req="10ns",
             read_resp="10ns",
             write_req="10ns",
             write_resp="10ns",
             # req_size = 512,
             # resp_size = 512,
-            # (some parameter that enables integrity management)
-            # use_instrumentation = True,
         )
-        self.memdelay.cpu_side_port = self.l2cache.mem_side
-        self.membus.cpu_side_ports = self.memdelay.mem_side_port
+        self.verifier.cpu_side_port = self.l2cache.mem_side
+        self.membus.cpu_side_ports = self.verifier.mem_side_port
 
     def _setup_io_cache(self, board: AbstractBoard) -> None:
         """Create a cache for coherent I/O connections"""

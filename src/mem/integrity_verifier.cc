@@ -35,15 +35,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "mem/mem_delay.hh"
+#include "mem/integrity_verifier.hh"
 
-#include "params/MemDelay.hh"
-#include "params/SimpleMemDelay.hh"
+#include "debug/AbstractIntegrityVerifier.hh"
 
 namespace gem5
 {
 
-MemDelay::MemDelay(const MemDelayParams &p)
+AbstractIntegrityVerifier::AbstractIntegrityVerifier(
+    const AbstractIntegrityVerifierParams &p
+)
     : ClockedObject(p),
       system(p.system),
       requestPort(name() + "-mem_side_port", *this),
@@ -57,15 +58,15 @@ MemDelay::MemDelay(const MemDelayParams &p)
 }
 
 void
-MemDelay::init()
+AbstractIntegrityVerifier::init()
 {
     if (!responsePort.isConnected() || !requestPort.isConnected())
-        fatal("Memory delay is not connected on both sides.\n");
+        fatal("Integrity verifier is not connected on both sides.\n");
 }
 
 
 Port &
-MemDelay::getPort(const std::string &if_name, PortID idx)
+AbstractIntegrityVerifier::getPort(const std::string &if_name, PortID idx)
 {
     if (if_name == "mem_side_port") {
         return requestPort;
@@ -77,13 +78,14 @@ MemDelay::getPort(const std::string &if_name, PortID idx)
 }
 
 bool
-MemDelay::trySatisfyFunctional(PacketPtr pkt)
+AbstractIntegrityVerifier::trySatisfyFunctional(PacketPtr pkt)
 {
     return responsePort.trySatisfyFunctional(pkt) ||
         requestPort.trySatisfyFunctional(pkt);
 }
 
-MemDelay::RequestPort::RequestPort(const std::string &_name, MemDelay &_parent)
+AbstractIntegrityVerifier::RequestPort::RequestPort(
+    const std::string &_name, AbstractIntegrityVerifier &_parent)
     : QueuedRequestPort(_name, _parent.reqQueue, _parent.snoopRespQueue),
       parent(_parent)
 {
@@ -91,9 +93,10 @@ MemDelay::RequestPort::RequestPort(const std::string &_name, MemDelay &_parent)
 
 
 bool
-MemDelay::RequestPort::recvTimingResp(PacketPtr pkt)
+AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
 {
-    DPRINTF(MemDelay, "%s: Recv resp %s\n", __func__, pkt->print());
+    DPRINTF(AbstractIntegrityVerifier, "%s: Recv resp %s\n",
+        __func__, pkt->print());
 
    // Read data must be verified first before it can be used.
    // Don't do anything special for memory requests that are not actually
@@ -115,9 +118,10 @@ MemDelay::RequestPort::recvTimingResp(PacketPtr pkt)
 }
 
 bool
-MemDelay::handleResp(PacketPtr pkt)
+AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
 {
-    DPRINTF(MemDelay, "%s: Handling verification of packet %s\n",
+    DPRINTF(AbstractIntegrityVerifier,
+            "%s: Handling verification of packet %s\n",
             __func__, pkt->print());
 
     // TODO This will start with just basic integrity. No encryption. Just
@@ -131,7 +135,7 @@ MemDelay::handleResp(PacketPtr pkt)
     // pending hashing list. A response packet should never bounce back
     // and clog up for now. However, in the future, there should be a
     // capacity check here and ask packets to try again later.
-    DPRINTF(MemDelay, "%s: Scheduling hash for pkt %s\n",
+    DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling hash for pkt %s\n",
         __func__, pkt->print());
     schedule(
         new HashCompletionEvent(this, pkt),
@@ -151,11 +155,11 @@ MemDelay::handleResp(PacketPtr pkt)
     size_t parentNode;
     if (!parentNodeIsSecureRoot(pkt)) {
         parentNode = getParentNode(pkt);
-        DPRINTF(MemDelay,
+        DPRINTF(AbstractIntegrityVerifier,
             "%s: Parent metadata node for pkt %s is %llu\n",
             __func__, pkt->print(), parentNode);
     } else {
-        DPRINTF(MemDelay,
+        DPRINTF(AbstractIntegrityVerifier,
             "%s: Parent metadata node for pkt %s is secure root\n",
             __func__, pkt->print());
     }
@@ -166,7 +170,7 @@ MemDelay::handleResp(PacketPtr pkt)
         // complete. We are done here.
 
         // Account for the request being complete.
-        DPRINTF(MemDelay, "%s: pkt %s has parent available\n",
+        DPRINTF(AbstractIntegrityVerifier, "%s: pkt %s has parent available\n",
             __func__, pkt->print());
         completeIntegrityVerification(pkt);
 
@@ -177,7 +181,8 @@ MemDelay::handleResp(PacketPtr pkt)
     // batch this with the existing request.
     if (outstandingMetadataRequests.find(parentNode) !=
         outstandingMetadataRequests.end()) {
-        DPRINTF(MemDelay, "%s: %d is already being requested, batching\n",
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: %d is already being requested, batching\n",
             __func__, parentNode);
         outstandingMetadataRequests.insert({parentNode, pkt->req});
 
@@ -195,7 +200,9 @@ MemDelay::handleResp(PacketPtr pkt)
         0, // No flags
         pkt->requestorId()
     );
-    DPRINTF(MemDelay, "%s: Allocated request %p\n", __func__, req);
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Allocated request %p\n",
+        __func__, req);
     PacketPtr metadataRequestPkt = Packet::createRead(req);
     // Set the flag that this is a metadata request.
     metadataRequestPkt->setMetadataRequest();
@@ -209,8 +216,8 @@ MemDelay::handleResp(PacketPtr pkt)
     // TODO Set the packet delay
 
     // Submit the packet to the memory controller.
-    DPRINTF(MemDelay, "%s: Sending metadata req %s\n", __func__,
-        metadataRequestPkt->print());
+    DPRINTF(AbstractIntegrityVerifier, "%s: Sending metadata req %s\n",
+        __func__, metadataRequestPkt->print());
     requestPort.schedTimingReq(metadataRequestPkt, curTick() + Cycles(1));
 
     // TODO Update stats
@@ -222,14 +229,14 @@ MemDelay::handleResp(PacketPtr pkt)
 
 
 void
-MemDelay::completeIntegrityHash(PacketPtr pkt)
+AbstractIntegrityVerifier::completeIntegrityHash(PacketPtr pkt)
 {
     // Take this request off the pending hash list.
     assert(outstandingIntegrityHashes.find(pkt->req) !=
            outstandingIntegrityHashes.end());
     outstandingIntegrityHashes.erase(pkt->req);
 
-    DPRINTF(MemDelay, "%s: Completed hash of pkt %s\n",
+    DPRINTF(AbstractIntegrityVerifier, "%s: Completed hash of pkt %s\n",
         __func__, pkt->print());
 
     // Attempt verification (we will call a separate function since
@@ -240,7 +247,7 @@ MemDelay::completeIntegrityHash(PacketPtr pkt)
 
 
 size_t
-MemDelay::getParentNode(PacketPtr pkt)
+AbstractIntegrityVerifier::getParentNode(PacketPtr pkt)
 {
     if (pkt->isMetadataRequest()) {
         // This function should not be called if this is already the root
@@ -255,14 +262,14 @@ MemDelay::getParentNode(PacketPtr pkt)
 
 
 bool
-MemDelay::parentNodeIsSecureRoot(PacketPtr pkt)
+AbstractIntegrityVerifier::parentNodeIsSecureRoot(PacketPtr pkt)
 {
     return (pkt->isMetadataRequest() && pkt->getMetadataNode() == 0);
 }
 
 
 bool
-MemDelay::parentNodeAvailable(PacketPtr pkt)
+AbstractIntegrityVerifier::parentNodeAvailable(PacketPtr pkt)
 {
     if (parentNodeIsSecureRoot(pkt)) {
         // The parent of this node is the secure root.
@@ -275,7 +282,7 @@ MemDelay::parentNodeAvailable(PacketPtr pkt)
 
 
 void
-MemDelay::completeIntegrityVerification(PacketPtr pkt)
+AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
 {
     // Check if both the hash generation is finished and the corresponding
     // parent node is available. If not, keep waiting. This function will
@@ -283,13 +290,13 @@ MemDelay::completeIntegrityVerification(PacketPtr pkt)
     if (outstandingIntegrityHashes.find(pkt->req) !=
         outstandingIntegrityHashes.end()) {
         // We are not done generating the hash. We are not ready to verify.
-        DPRINTF(MemDelay, "%s: Not ready to verify pkt %s, "
+        DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
             "hash incomplete\n",
             __func__, pkt->print());
         return;
     } else if (!parentNodeAvailable(pkt)) {
         // The parent node is not yet available. We are not ready to verify.
-        DPRINTF(MemDelay, "%s: Not ready to verify pkt %s, "
+        DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
             "parent unavailable\n",
             __func__, pkt->print());
         return;
@@ -299,7 +306,8 @@ MemDelay::completeIntegrityVerification(PacketPtr pkt)
     // Assume that the verification was successful, and effectively instant.
     outstandingIntegrityVerification.erase(pkt);
     packetLookup.erase(pkt->req);
-    DPRINTF(MemDelay, "%s: Verified pkt %s\n", __func__, pkt->print());
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Verified pkt %s\n", __func__, pkt->print());
 
     if (pkt->isMetadataRequest()) {
         // Add this to the cache. We are done here.
@@ -310,7 +318,7 @@ MemDelay::completeIntegrityVerification(PacketPtr pkt)
         // We must handle here that if a metadata request is verified, we can
         // trigger to verify the node(s) below this one that are still waiting.
         // Attempt to verify any applicable outstanding verifications.
-        DPRINTF(MemDelay,
+        DPRINTF(AbstractIntegrityVerifier,
             "%s: Triggering requests that were waiting for %s to verify\n",
             __func__, pkt->print());
         auto range = outstandingMetadataRequests.equal_range(
@@ -327,7 +335,7 @@ MemDelay::completeIntegrityVerification(PacketPtr pkt)
         }
 
         for (auto packet : toVerify) {
-            DPRINTF(MemDelay,
+            DPRINTF(AbstractIntegrityVerifier,
                 "%s: %s is verified. %s is now ready for verification.\n",
                 __func__, pkt->print(), packet->print());
             completeIntegrityVerification(packet);
@@ -338,7 +346,7 @@ MemDelay::completeIntegrityVerification(PacketPtr pkt)
 
         delete pkt;
     } else {
-        DPRINTF(MemDelay, "%s: Sending back pkt %s to CPU\n",
+        DPRINTF(AbstractIntegrityVerifier, "%s: Sending back pkt %s to CPU\n",
             __func__, pkt->print());
         // This packet can now be properly returned up to the CPU to complete.
         Tick when = curTick() + Cycles(1);
@@ -348,7 +356,7 @@ MemDelay::completeIntegrityVerification(PacketPtr pkt)
 
 
 void
-MemDelay::RequestPort::recvFunctionalSnoop(PacketPtr pkt)
+AbstractIntegrityVerifier::RequestPort::recvFunctionalSnoop(PacketPtr pkt)
 {
     if (parent.trySatisfyFunctional(pkt)) {
         pkt->makeResponse();
@@ -358,7 +366,7 @@ MemDelay::RequestPort::recvFunctionalSnoop(PacketPtr pkt)
 }
 
 Tick
-MemDelay::RequestPort::recvAtomicSnoop(PacketPtr pkt)
+AbstractIntegrityVerifier::RequestPort::recvAtomicSnoop(PacketPtr pkt)
 {
     const Tick delay = parent.delaySnoopResp(pkt);
 
@@ -366,21 +374,21 @@ MemDelay::RequestPort::recvAtomicSnoop(PacketPtr pkt)
 }
 
 void
-MemDelay::RequestPort::recvTimingSnoopReq(PacketPtr pkt)
+AbstractIntegrityVerifier::RequestPort::recvTimingSnoopReq(PacketPtr pkt)
 {
     parent.responsePort.sendTimingSnoopReq(pkt);
 }
 
 
-MemDelay::ResponsePort::
-ResponsePort(const std::string &_name, MemDelay &_parent)
+AbstractIntegrityVerifier::ResponsePort::
+ResponsePort(const std::string &_name, AbstractIntegrityVerifier &_parent)
     : QueuedResponsePort(_name, _parent.respQueue),
       parent(_parent)
 {
 }
 
 Tick
-MemDelay::ResponsePort::recvAtomic(PacketPtr pkt)
+AbstractIntegrityVerifier::ResponsePort::recvAtomic(PacketPtr pkt)
 {
     const Tick delay = parent.delayReq(pkt) + parent.delayResp(pkt);
 
@@ -388,7 +396,7 @@ MemDelay::ResponsePort::recvAtomic(PacketPtr pkt)
 }
 
 bool
-MemDelay::ResponsePort::recvTimingReq(PacketPtr pkt)
+AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
 {
     // Under no means should we be getting a metadata request.
     // They are only sent from here.
@@ -400,7 +408,8 @@ MemDelay::ResponsePort::recvTimingReq(PacketPtr pkt)
         return true;
     }
 
-    DPRINTF(MemDelay, "%s: Recv req %s\n", __func__, pkt->print());
+    DPRINTF(AbstractIntegrityVerifier, "%s: Recv req %s\n",
+        __func__, pkt->print());
 
     // technically the packet only reaches us after the header
     // delay, and typically we also need to deserialise any
@@ -416,7 +425,7 @@ MemDelay::ResponsePort::recvTimingReq(PacketPtr pkt)
 }
 
 void
-MemDelay::ResponsePort::recvFunctional(PacketPtr pkt)
+AbstractIntegrityVerifier::ResponsePort::recvFunctional(PacketPtr pkt)
 {
     if (parent.trySatisfyFunctional(pkt)) {
         pkt->makeResponse();
@@ -426,7 +435,7 @@ MemDelay::ResponsePort::recvFunctional(PacketPtr pkt)
 }
 
 bool
-MemDelay::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
+AbstractIntegrityVerifier::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
 {
     const Tick when = curTick() + parent.delaySnoopResp(pkt);
 
@@ -437,8 +446,8 @@ MemDelay::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
 
 
 
-SimpleMemDelay::SimpleMemDelay(const SimpleMemDelayParams &p)
-    : MemDelay(p),
+IntegrityVerifier::IntegrityVerifier(const IntegrityVerifierParams &p)
+    : AbstractIntegrityVerifier(p),
       readReqDelay(p.read_req),
       readRespDelay(p.read_resp),
       writeReqDelay(p.write_req),
@@ -447,7 +456,7 @@ SimpleMemDelay::SimpleMemDelay(const SimpleMemDelayParams &p)
 }
 
 Tick
-SimpleMemDelay::delayReq(PacketPtr pkt)
+IntegrityVerifier::delayReq(PacketPtr pkt)
 {
     if (pkt->isRead()) {
         return readReqDelay;
@@ -459,7 +468,7 @@ SimpleMemDelay::delayReq(PacketPtr pkt)
 }
 
 Tick
-SimpleMemDelay::delayResp(PacketPtr pkt)
+IntegrityVerifier::delayResp(PacketPtr pkt)
 {
     if (pkt->isRead()) {
         return readRespDelay;

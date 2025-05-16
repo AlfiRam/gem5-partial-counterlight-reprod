@@ -53,8 +53,8 @@ from gem5.components.boards.x86_board import X86Board
 from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy import (
     PrivateL1SharedL2CacheHierarchy,
 )
-from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy_delay import (
-    PrivateL1SharedL2CacheHierarchyDelay,
+from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy_integrity_verifier import (
+    PrivateL1SharedL2CacheHierarchyIntegrityVerifier,
 )
 from gem5.components.memory.single_channel import DIMM_DDR5_4400
 from gem5.components.processors.cpu_types import CPUTypes
@@ -76,13 +76,13 @@ requires(
 
 # Argument parsing.
 parser = argparse.ArgumentParser(
-    description="Demonstration integrity bridge test."
+    description="Demonstration integrity verifier test."
 )
 
 parser.add_argument(
-    "--use-delay",
+    "--use-integrity-verifier",
     action="store_true",
-    help="Add a 'delay' component to add integrity management behavior.",
+    help="Add an 'integrity verifier' component to add integrity management behavior.",
 )
 
 args = parser.parse_args()
@@ -96,8 +96,8 @@ membus.badaddr_responder = BadAddr()
 membus.default = membus.badaddr_responder.pio
 
 # Cache
-if args.use_delay:
-    cache_hierarchy = PrivateL1SharedL2CacheHierarchyDelay(
+if args.use_integrity_verifier:
+    cache_hierarchy = PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         l1d_size="32KiB",
         l1d_assoc=8,
         l1i_size="32KiB",

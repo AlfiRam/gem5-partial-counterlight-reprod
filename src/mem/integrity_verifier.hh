@@ -35,25 +35,26 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __MEM_MEM_DELAY_HH__
-#define __MEM_MEM_DELAY_HH__
+#ifndef __MEM_INTEGRITY_VERIFIER_HH__
+#define __MEM_INTEGRITY_VERIFIER_HH__
 
-#include "debug/MemDelay.hh"
 #include "mem/cache/metadata_cache.hh"
 #include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
+#include "params/AbstractIntegrityVerifier.hh"
+#include "params/IntegrityVerifier.hh"
 #include "sim/clocked_object.hh"
 #include "sim/system.hh"
 
 namespace gem5
 {
 
-struct MemDelayParams;
-struct SimpleMemDelayParams;
+// struct AbstractIntegrityVerifierParams;
+// struct IntegrityVerifierParams;
 
 /**
- * This abstract component provides a mechanism to delay
- * packets. It can be spliced between arbitrary ports of the memory
+ * This abstract component provides a mechanism to perform integrity
+ * verification. It can be spliced between arbitrary ports of the memory
  * system and delays packets that pass through it.
  *
  * Specialisations of this abstract class should override at least one
@@ -63,14 +64,12 @@ struct SimpleMemDelayParams;
  * packets until they are ready. The intention is to use this
  * component for rapid prototyping of other memory system components
  * that introduce a packet processing delays.
- *
- * NOTE: Packets may be reordered if the delays aren't constant.
  */
-class MemDelay : public ClockedObject
+class AbstractIntegrityVerifier : public ClockedObject
 {
 
   public:
-    MemDelay(const MemDelayParams &params);
+    AbstractIntegrityVerifier(const AbstractIntegrityVerifierParams &params);
 
     void init() override;
 
@@ -81,7 +80,8 @@ class MemDelay : public ClockedObject
     class RequestPort : public QueuedRequestPort
     {
       public:
-        RequestPort(const std::string &_name, MemDelay &_parent);
+        RequestPort(const std::string &_name,
+          AbstractIntegrityVerifier &_parent);
 
       protected:
         bool recvTimingResp(PacketPtr pkt) override;
@@ -101,13 +101,14 @@ class MemDelay : public ClockedObject
         }
 
       private:
-        MemDelay& parent;
+        AbstractIntegrityVerifier& parent;
     };
 
     class ResponsePort : public QueuedResponsePort
     {
       public:
-        ResponsePort(const std::string &_name, MemDelay &_parent);
+        ResponsePort(const std::string &_name,
+          AbstractIntegrityVerifier &_parent);
 
       protected:
         Tick recvAtomic(PacketPtr pkt) override;
@@ -123,7 +124,7 @@ class MemDelay : public ClockedObject
 
       private:
 
-        MemDelay& parent;
+        AbstractIntegrityVerifier& parent;
 
     };
 
@@ -217,23 +218,23 @@ class MemDelay : public ClockedObject
     class HashCompletionEvent : public Event
     {
       private:
-        // Pointer to the related delay object.
-        MemDelay *mem_delay;
+        // Pointer to the related verifier object.
+        AbstractIntegrityVerifier *verifier;
 
         // Pointer to the original request packet that we are verifying.
         PacketPtr pkt;
 
       public:
         HashCompletionEvent(
-          MemDelay *mem_delay,
+          AbstractIntegrityVerifier *verifier,
           PacketPtr pkt
         ) : Event(Default_Pri, AutoDelete),
-          mem_delay(mem_delay),
+          verifier(verifier),
           pkt(pkt)
         { }
 
         void process() override {
-          mem_delay->completeIntegrityHash(pkt);
+          verifier->completeIntegrityHash(pkt);
         }
     };
 
@@ -268,10 +269,10 @@ class MemDelay : public ClockedObject
  * This class does not delay snoops or requests/responses that are
  * neither reads or writes.
  */
-class SimpleMemDelay : public MemDelay
+class IntegrityVerifier : public AbstractIntegrityVerifier
 {
   public:
-    SimpleMemDelay(const SimpleMemDelayParams &params);
+    IntegrityVerifier(const IntegrityVerifierParams &params);
 
   protected:
     Tick delayReq(PacketPtr pkt) override;
@@ -287,4 +288,4 @@ class SimpleMemDelay : public MemDelay
 
 } // namespace gem5
 
-#endif //__MEM_MEM_DELAY_HH__
+#endif //__MEM_INTEGRITY_VERIFIER_HH__
