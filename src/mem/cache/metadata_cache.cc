@@ -4,6 +4,7 @@
 
 #include "base/trace.hh"
 #include "debug/MetadataCache.hh"
+#include "debug/SimpleMetadataCache.hh"
 
 namespace gem5
 {
@@ -23,6 +24,9 @@ namespace gem5
   {
     if (isFull()) {
       // The cache is full. Do not insert more.
+      DPRINTF(SimpleMetadataCache,
+        "%s: Cannot insert %lu into metadata cache. Full. (Size: %lu)\n",
+      __func__, new_data, getSize());
       return false;
     }
 
@@ -30,6 +34,9 @@ namespace gem5
     assert(!contains(new_data));
 
     data.insert(new_data);
+    DPRINTF(SimpleMetadataCache,
+      "%s: Inserted %lu into metadata cache. (New size: %lu)\n",
+      __func__, new_data, getSize());
 
     return true;
   }
