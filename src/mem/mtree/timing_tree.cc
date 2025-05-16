@@ -2,6 +2,8 @@
 
 #include <iomanip>
 
+#include "base/trace.hh"
+#include "debug/TimingTree.hh"
 #include "mem/mtree/util.hh"
 
 namespace gem5 {
@@ -34,18 +36,26 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
   long long leafHashes = total_data / hashInputSize;
   // Handle possible extra remainder.
   if (total_data % hashInputSize != 0) leafHashes++;
+  // DPRINTF(TimingTree, "%s: %lld total leaf hashes needed.\n", __func__,
+  //     leafHashes);
 
   long long lastLevelNodes = leafHashes / arity;
   // Handle possible extra remainder.
   if (leafHashes % arity != 0) lastLevelNodes++;
+  DPRINTF(TimingTree, "%s: %lld last level nodes.\n",
+    __func__, lastLevelNodes);
 
   // Calculate how many levels you need to get that many leaves in the tree.
   unsigned int levels = integerLog(arity, lastLevelNodes) + 1;
+  height = levels;
+  DPRINTF(TimingTree, "%s: The height is %u.\n", __func__, levels);
 
   // Initialize the data size parameter. Take the number of nodes for all the
   // fully-filled levels, then add the number of leaf nodes.
   dataSize = integerPower(arity, levels - 1)/(arity - 1);
   dataSize += lastLevelNodes;
+  DPRINTF(TimingTree, "%s: Total number of nodes is %u.\n",
+    __func__, dataSize);
 
   // TODO Verify this constructor works as expected.
 }
@@ -162,10 +172,10 @@ size_t TimingTree::relativeChildBlockIndex(size_t childIndex) {
 size_t TimingTree::addressToBlockIndex(size_t address) {
   // Get the index of the first leaf node.
   size_t firstLeafIndex = integerPower(arity, height - 1)/(arity - 1);
-  std::cout << "We have " << dataSize << " total nodes." << std::endl;
-  std::cout << "The first leaf is at index "
-    << firstLeafIndex << "." << std::endl;
-  std::cout << "The arity is " << arity << "." << std::endl;
+  // DPRINTF(TimingTree, "%s: We have %d total nodes.\n", __func__, dataSize);
+  // DPRINTF(TimingTree, "%s: The first leaf is at index %d.\n",
+        // __func__, firstLeafIndex);
+  // DPRINTF(TimingTree, "%s: The arity is %d.\n", __func__, arity);
 
   // unsigned int nodesOnLevel = 1;
   // unsigned int firstNodeIndex = 0;
@@ -191,8 +201,9 @@ size_t TimingTree::addressToBlockIndex(size_t address) {
   // One leaf block covers `inputHashSize * arity` bytes.
   // So take the address and divide by this amount.
   size_t leafOffset = address / (hashInputSize * arity);
-  std::cout << "The leaf that corresponds to this address is #"
-    << leafOffset << std::endl;
+  // DPRINTF(TimingTree,
+      // "%s: The leaf that corresponds to this address is #%d\n",
+      // __func__, leafOffset);
 
   return firstLeafIndex + leafOffset;
 }

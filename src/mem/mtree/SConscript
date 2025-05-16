@@ -5,3 +5,4 @@ Source('tree.cc')
 Source('util.cc')
 
 DebugFlag('IntegrityTree')
+DebugFlag('TimingTree')
