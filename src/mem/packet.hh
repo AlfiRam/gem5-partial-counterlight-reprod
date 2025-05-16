@@ -898,7 +898,8 @@ class Packet : public Printable, public Extensible<Packet>
            htmReturnReason(HtmCacheFailure::NO_FAIL),
            htmTransactionUid(0),
            headerDelay(0), snoopDelay(0),
-           payloadDelay(0), senderState(NULL)
+           payloadDelay(0), senderState(NULL),
+           _isMetadataRequest(false), metadataNode(0)
     {
         flags.clear();
         if (req->hasPaddr()) {
@@ -939,7 +940,8 @@ class Packet : public Printable, public Extensible<Packet>
            htmReturnReason(HtmCacheFailure::NO_FAIL),
            htmTransactionUid(0),
            headerDelay(0),
-           snoopDelay(0), payloadDelay(0), senderState(NULL)
+           snoopDelay(0), payloadDelay(0), senderState(NULL),
+           _isMetadataRequest(false), metadataNode(0)
     {
         flags.clear();
         if (req->hasPaddr()) {
@@ -970,7 +972,9 @@ class Packet : public Printable, public Extensible<Packet>
            headerDelay(pkt->headerDelay),
            snoopDelay(0),
            payloadDelay(pkt->payloadDelay),
-           senderState(pkt->senderState)
+           senderState(pkt->senderState),
+           _isMetadataRequest(false),
+           metadataNode(0)
     {
         if (!clear_flags)
             flags.set(pkt->flags & COPY_FLAGS);
