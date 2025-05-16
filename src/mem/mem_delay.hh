@@ -39,6 +39,7 @@
 #define __MEM_MEM_DELAY_HH__
 
 #include "debug/MemDelay.hh"
+#include "mem/cache/metadata_cache.hh"
 #include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
 #include "sim/clocked_object.hh"
@@ -128,9 +129,28 @@ class MemDelay : public ClockedObject
 
     bool trySatisfyFunctional(PacketPtr pkt);
 
-    void createSchedResp(PacketPtr pkt);
+    bool handleResp(PacketPtr pkt);
 
-    void createMetadataReq(PacketPtr pkt);
+    /**
+     * Called when hash generation for a (read) response packet is received.
+     */
+    void completeIntegrityHash(PacketPtr pkt);
+
+    /**
+     * Get the parent integrity node ID associated with a packet.
+     */
+    size_t getParentNode(PacketPtr pkt);
+
+    bool parentNodeIsSecureRoot(PacketPtr pkt);
+
+    bool parentNodeAvailable(PacketPtr pkt);
+
+    /**
+     * Called when a request should attempt to be verified, and the original
+     * data request packet can be properly forwarded back to the CPU side if
+     * the leaf was verified.
+     */
+    void completeIntegrityVerification(PacketPtr pkt);
 
     /**
      * Keep a pointer to the system to allow querying memory properties.
@@ -151,19 +171,60 @@ class MemDelay : public ClockedObject
     IntegrityTree integrityTree;
 
     /**
-     * An event that represents when to schedule a response.
+     * Metadata cache.
      */
-    class RealRespEvent : public Event
+    SimpleMetadataCache metadataCache;
+
+    /**
+     * Store the outstanding hash generation (for reads) while we wait for the
+     * hash to complete. Once it is done, we can use it to verify the
+     * integrity of a read response, and if everything passes, the original
+     * data response will be properly forwarded back to LLC.
+     */
+    std::unordered_set<RequestPtr> outstandingIntegrityHashes;
+
+    /**
+     * Store the outstanding request pkts that have not been verified yet. This
+     * may or may not be used based on whether there should be a lazy
+     * verification strategy (start speculatively using the data received
+     * before verification has completed).
+     */
+    std::unordered_set<PacketPtr> outstandingIntegrityVerification;
+
+    /**
+     * Reverse search for a packet from its request pointer.
+     */
+    std::unordered_map<RequestPtr, PacketPtr> packetLookup;
+
+    /**
+     * Store the outstanding requests for integrity metadata. This associates
+     * a tree ID with a pointer to the (child) request that caused this.
+     */
+    std::unordered_multimap<uint64_t, RequestPtr> outstandingMetadataRequests;
+
+    /**
+     * Time (in ticks) to complete hashing.
+     *
+     * TODO Define a default value
+     */
+    Tick integrityHashingLatency = 800;
+
+    /**
+     * An event that represents when the hash generation for the data in a
+     * response packet is finished. This will usually trigger verification
+     * by comparing the generated hash to a parent integrity node.
+     */
+    class HashCompletionEvent : public Event
     {
       private:
         // Pointer to the related delay object.
         MemDelay *mem_delay;
 
-        // Pointer to the original request packet that we are sending.
+        // Pointer to the original request packet that we are verifying.
         PacketPtr pkt;
 
       public:
-        RealRespEvent(
+        HashCompletionEvent(
           MemDelay *mem_delay,
           PacketPtr pkt
         ) : Event(Default_Pri, AutoDelete),
@@ -172,19 +233,7 @@ class MemDelay : public ClockedObject
         { }
 
         void process() override {
-          DPRINTF(MemDelay, "%s: Now scheduling %s\n", __func__, pkt->print());
-          const Tick receive_delay = pkt->headerDelay + pkt->payloadDelay;
-          pkt->headerDelay = pkt->payloadDelay = 0;
-
-          const Tick when = curTick()
-                              + mem_delay->delayResp(pkt) + receive_delay;
-
-          if (!mem_delay->didOneMetadataReq)
-          {
-            mem_delay->createMetadataReq(pkt);
-          }
-
-          mem_delay->responsePort.schedTimingResp(pkt, when);
+          mem_delay->completeIntegrityHash(pkt);
         }
     };
 
@@ -209,8 +258,6 @@ class MemDelay : public ClockedObject
      * @return Ticks to delay packet.
      */
     virtual Tick delaySnoopResp(PacketPtr pkt) { return 0; }
-
-    bool didOneMetadataReq;
 };
 
 /**
