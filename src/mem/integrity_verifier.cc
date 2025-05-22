@@ -53,7 +53,9 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       respQueue(*this, responsePort),
       snoopRespQueue(*this, requestPort),
       integrityTree(TimingTree(4, system->memSize())),
-      metadataCache(SimpleMetadataCache(300000))
+      metadataCache(SimpleMetadataCache(300000)),
+      hasRequestorId(false),
+      _requestorId(0)
 {
 }
 
@@ -148,6 +150,12 @@ AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
             "%s: Handling verification of packet %s\n",
             __func__, pkt->print());
+
+    // Save a valid requestor ID internally just in case it is needed.
+    if (!hasRequestorId) {
+        _requestorId = pkt->requestorId();
+        hasRequestorId = true;
+    }
 
     // TODO This will start with just basic integrity. No encryption. Just
     // integrity/cryptographic hashing. The data is thus already decrypted.

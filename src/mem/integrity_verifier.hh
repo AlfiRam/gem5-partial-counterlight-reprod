@@ -185,6 +185,14 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     SimpleMetadataCache metadataCache;
 
+    bool hasRequestorId;
+
+    /**
+     * Used if a new metadata request is generated and a phony (but realistic)
+     * requestor ID is needed.
+     */
+    RequestorID _requestorId;
+
     /**
      * Store the outstanding hash generation (for reads) while we wait for the
      * hash to complete. Once it is done, we can use it to verify the
