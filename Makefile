@@ -54,17 +54,17 @@ build-all: build-all-opt
 # Build gem5 for ALL target, 'fast' build variant.
 .PHONY: build-all-fast
 build-all-fast:
-	$(SCONS) $(SCONS_OPTS) build/ALL/gem5.fast -j$(CORES)
+	$(SCONS) $(SCONS_OPTS) build/ALL/gem5.fast -j$(CORES) --linker=mold
 
 # Build gem5 for ALL target, 'opt' build variant.
 .PHONY: build-all-opt
 build-all-opt:
-	$(SCONS) $(SCONS_OPTS) build/ALL/gem5.opt -j$(CORES)
+	$(SCONS) $(SCONS_OPTS) build/ALL/gem5.opt -j$(CORES) --linker=mold
 
 # Build gem5 for ALL target, 'debug' build variant.
 .PHONY: build-all-debug
 build-all-debug:
-	$(SCONS) $(SCONS_OPTS) build/ALL/gem5.debug -j$(CORES)
+	$(SCONS) $(SCONS_OPTS) build/ALL/gem5.debug -j$(CORES) --linker=mold
 
 # 'build-x86' is an alias for 'build-x86-opt'.
 .PHONY: build-x86
@@ -73,17 +73,17 @@ build-x86: build-x86-opt
 # Build gem5 for x86 target, 'fast' build variant.
 .PHONY: build-x86-fast
 build-x86-fast:
-	$(SCONS) $(SCONS_OPTS) build/X86/gem5.fast -j$(CORES)
+	$(SCONS) $(SCONS_OPTS) build/X86/gem5.fast -j$(CORES) --linker=mold
 
 # Build gem5 for x86 target, 'opt' build variant.
 .PHONY: build-x86-opt
 build-x86-opt:
-	$(SCONS) $(SCONS_OPTS) build/X86/gem5.opt -j$(CORES)
+	$(SCONS) $(SCONS_OPTS) build/X86/gem5.opt -j$(CORES) --linker=mold
 
 # Build gem5 for x86 target, 'debug' build variant.
 .PHONY: build-x86-debug
 build-x86-debug:
-	$(SCONS) $(SCONS_OPTS) build/X86/gem5.debug -j$(CORES)
+	$(SCONS) $(SCONS_OPTS) build/X86/gem5.debug -j$(CORES) --linker=mold
 
 
 # 'run' is an alias for 'run-x86.'
