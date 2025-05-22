@@ -130,6 +130,13 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     bool trySatisfyFunctional(PacketPtr pkt);
 
+    /**
+     * Create a metadata request for the parent node of a given packet `pkt`.
+     *
+     * Returns the metadata request packet.
+     */
+    PacketPtr generateMetadataRequest(PacketPtr pkt);
+
     bool handleResp(PacketPtr pkt);
 
     bool handleReq(PacketPtr pkt);

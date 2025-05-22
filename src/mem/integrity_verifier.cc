@@ -117,6 +117,31 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
     return true;
 }
 
+PacketPtr
+AbstractIntegrityVerifier::generateMetadataRequest(PacketPtr pkt)
+{
+    size_t parentNode = getParentNode(pkt);
+
+    // Create the metadata request and packet.
+    RequestPtr req = std::make_shared<Request>(
+        pkt->getAddr(),
+        64, // Size
+        0, // No flags
+        pkt->requestorId()
+    );
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Allocated request %p\n",
+        __func__, req);
+    PacketPtr metadataRequestPkt = Packet::createRead(req);
+    // Set the flag that this is a metadata request.
+    metadataRequestPkt->setMetadataRequest();
+
+    // Indicate the integrity tree node that will be accessed.
+    metadataRequestPkt->setMetadataNode(parentNode);
+
+    return metadataRequestPkt;
+}
+
 bool
 AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
 {
@@ -193,22 +218,7 @@ AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
     // metadata to memory to get the parent node. Then we schedule the
     // request.
 
-    // Create the metadata request and packet.
-    RequestPtr req = std::make_shared<Request>(
-        pkt->getAddr(),
-        64, // Size
-        0, // No flags
-        pkt->requestorId()
-    );
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Allocated request %p\n",
-        __func__, req);
-    PacketPtr metadataRequestPkt = Packet::createRead(req);
-    // Set the flag that this is a metadata request.
-    metadataRequestPkt->setMetadataRequest();
-
-    // Indicate the integrity tree node that will be accessed.
-    metadataRequestPkt->setMetadataNode(parentNode);
+    PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
 
     // Add to outstanding metadata requests
     outstandingMetadataRequests.insert({parentNode, pkt->req});
@@ -511,22 +521,7 @@ AbstractIntegrityVerifier::handleReq(PacketPtr pkt)
     // metadata to memory to get the parent node. Then we schedule the
     // request.
 
-    // Create the metadata request and packet.
-    RequestPtr req = std::make_shared<Request>(
-        pkt->getAddr(),
-        64, // Size
-        0, // No flags
-        pkt->requestorId()
-    );
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Allocated request %p\n",
-        __func__, req);
-    PacketPtr metadataRequestPkt = Packet::createRead(req);
-    // Set the flag that this is a metadata request.
-    metadataRequestPkt->setMetadataRequest();
-
-    // Indicate the integrity tree node that will be accessed.
-    metadataRequestPkt->setMetadataNode(parentNode);
+    PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
 
     // Add to outstanding metadata requests
     outstandingMetadataRequests.insert({parentNode, pkt->req});
