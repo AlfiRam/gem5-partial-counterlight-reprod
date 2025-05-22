@@ -137,6 +137,13 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     PacketPtr generateMetadataRequest(PacketPtr pkt);
 
+    /**
+     * Create a metadata request for a specific metadata node.
+     *
+     * Returns the metadata request packet.
+     */
+    PacketPtr generateMetadataRequest(size_t node);
+
     bool handleResp(PacketPtr pkt);
 
     bool handleReq(PacketPtr pkt);
@@ -153,14 +160,40 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     bool parentNodeIsSecureRoot(PacketPtr pkt);
 
+    /**
+     * Check if the parent node for a given packet is currently pending
+     * eviction.
+     */
+    bool parentNodeIsPendingEviction(PacketPtr pkt);
+
     bool parentNodeAvailable(PacketPtr pkt);
 
     /**
-     * Called when a request should attempt to be verified, and the original
-     * data request packet can be properly forwarded back to the CPU side if
-     * the leaf was verified.
+     * Called when a request should attempt to be verified, and when the data
+     * is verified, a read response can be properly forwarded back to the CPU,
+     * a writeback can be properly forwarded to memory, or in the case of a
+     * metadata request, the metadata is inserted into the cache.
+     *
+     * This will also trigger other metadata verifications if needed.
      */
     void completeIntegrityVerification(PacketPtr pkt);
+
+    /**
+     * Called when a piece of metadata is being requested and has been
+     * verified. Now the metadata can be added to the cache, and (child)
+     * metadata requests that depend on this can be triggered to be fulfilled
+     * as well.
+     *
+     * In the case where data must be evicted, the eviction is completed first,
+     * new metadata can be added to the cache, and then the depending metadata
+     * requests can be fulfilled.
+     */
+    void handleMetadataAddition(PacketPtr pkt);
+
+    /**
+     * Schedule to try any requests again that were waiting on an eviction.
+     */
+    void rescheduleReqFromEviction(uint64_t data);
 
     /**
      * Keep a pointer to the system to allow querying memory properties.
@@ -218,9 +251,32 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     /**
      * Store the outstanding requests for integrity metadata. This associates
-     * a tree ID with a pointer to the (child) request that caused this.
+     * a tree ID with a pointer to the (child) request(s) that caused this.
+     *
+     * In the case of evictions, the request pointer may be null to act as a
+     * placeholder in case this tree node is requested again while processing.
+     * In this case, all evictions (and thus insertion) should be resolved
+     * first before handling metadata requests that were pending on this tree
+     * node.
      */
     std::unordered_multimap<uint64_t, RequestPtr> outstandingMetadataRequests;
+
+    /**
+     * Store the outstanding evictions for integrity metadata. This associates
+     * a (parent) tree ID with a tree ID to be evicted and the request that
+     * will have metadata to cache that takes the place of the evicted entry.
+     */
+    std::unordered_multimap<
+      uint64_t,
+      std::pair<uint64_t, RequestPtr>
+    > outstandingMetadataEvictions;
+
+    /**
+     * Requests that are specifically waiting for the eviction of a particular
+     * metadata node value, because they were requesting the node while it was
+     * pending eviction.
+     */
+    std::unordered_multimap<uint64_t, RequestPtr> reqWaitingForEviction;
 
     /**
      * Time (in ticks) to complete hashing.

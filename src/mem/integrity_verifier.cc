@@ -145,12 +145,44 @@ AbstractIntegrityVerifier::generateMetadataRequest(PacketPtr pkt)
     return metadataRequestPkt;
 }
 
+PacketPtr
+AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
+{
+    // Create the metadata request and packet.
+    RequestPtr req = std::make_shared<Request>(
+        integrityTree.blockIndexToAddress(node),
+        64, // Size
+        0, // No flags
+        _requestorId
+    );
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Allocated request %p\n",
+        __func__, req);
+    PacketPtr metadataRequestPkt = Packet::createRead(req);
+    // Set the flag that this is a metadata request.
+    metadataRequestPkt->setMetadataRequest();
+
+    // Indicate the integrity tree node that will be accessed.
+    metadataRequestPkt->setMetadataNode(node);
+
+    return metadataRequestPkt;
+}
+
 bool
 AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
 {
     DPRINTF(AbstractIntegrityVerifier,
             "%s: Handling verification of packet %s\n",
             __func__, pkt->print());
+
+    // We aren't ready for this packet. Don't accept it until the parent node
+    // is fully evicted.
+    if (parentNodeIsPendingEviction(pkt)) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Rejecting %s due to parent pending eviction.\n",
+            __func__, pkt->print());
+        return false;
+    }
 
     // Save a valid requestor ID internally just in case it is needed.
     if (!hasRequestorId) {
@@ -288,6 +320,23 @@ AbstractIntegrityVerifier::parentNodeIsSecureRoot(PacketPtr pkt)
 
 
 bool
+AbstractIntegrityVerifier::parentNodeIsPendingEviction(PacketPtr pkt)
+{
+    if (parentNodeIsSecureRoot(pkt)) {
+        return false;
+    }
+
+    auto parentNode = getParentNode(pkt);
+    if (!metadataCache.containsPendingOkay(parentNode)) {
+        return false;
+    }
+    auto search = metadataCache.find(parentNode);
+
+    return (search.second.pending_eviction);
+}
+
+
+bool
 AbstractIntegrityVerifier::parentNodeAvailable(PacketPtr pkt)
 {
     if (parentNodeIsSecureRoot(pkt)) {
@@ -323,48 +372,24 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
 
     // We are now ready to verify.
     // Assume that the verification was successful, and effectively instant.
+
+    // Metadata requests have more logic involved so this is handled
+    // separately.
+    if (pkt->isMetadataRequest()) {
+        handleMetadataAddition(pkt);
+        return;
+    }
+
+    // The rest of this is for handling data packets.
+    assert(!pkt->isMetadataRequest());
+
+    // Officially consider this verified.
     outstandingIntegrityVerification.erase(pkt);
     packetLookup.erase(pkt->req);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Verified pkt %s\n", __func__, pkt->print());
 
-    if (pkt->isMetadataRequest()) {
-        // Add this to the cache. We are done here.
-        bool inserted = metadataCache.insert(pkt->getMetadataNode());
-        // TODO Handle eviction.
-        assert(inserted);
-
-        // We must handle here that if a metadata request is verified, we can
-        // trigger to verify the node(s) below this one that are still waiting.
-        // Attempt to verify any applicable outstanding verifications.
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Triggering requests that were waiting for %s to verify\n",
-            __func__, pkt->print());
-        auto range = outstandingMetadataRequests.equal_range(
-                                                 pkt->getMetadataNode());
-        std::vector<PacketPtr> toVerify;
-        for (auto it = range.first; it != range.second; ++it) {
-            // Find the packet that is associated with this request.
-            if (it->second == pkt->req) {
-                // Skip the request we're already in the middle of doing.
-                continue;
-            }
-            PacketPtr packet = packetLookup.find(it->second)->second;
-            toVerify.push_back(packet);
-        }
-
-        for (auto packet : toVerify) {
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s: %s is verified. %s is now ready for verification.\n",
-                __func__, pkt->print(), packet->print());
-            completeIntegrityVerification(packet);
-        }
-
-        // Consider this metadata request now received.
-        outstandingMetadataRequests.erase(pkt->getMetadataNode());
-
-        delete pkt;
-    } else if (pkt->isRead()) {
+    if (pkt->isRead()) {
         // Handling finishing integrity verification for read responses.
         // This means we can now forward the data to the CPU to be used.
         DPRINTF(AbstractIntegrityVerifier, "%s: Sending back pkt %s to CPU\n",
@@ -374,13 +399,167 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         responsePort.schedTimingResp(pkt, when);
     } else if (pkt->isWrite()) {
         // Handling finishing integrity verification for write requests.
-        // This means we can now forward the data to memory for storage.
+        // This means we can now update the metadata cache and forward the data
+        // to memory for storage.
+        auto parentNode = getParentNode(pkt);
+        metadataCache.modify(parentNode);
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Modifying cache line %lu in metadata cache\n",
+            __func__, parentNode);
         DPRINTF(AbstractIntegrityVerifier, "%s: Sending pkt %s to memory\n",
             __func__, pkt->print());
         // This packet can now be properly forwarded to memory to complete.
         Tick when = curTick() + Cycles(1);
         requestPort.schedTimingReq(pkt, when);
     }
+}
+
+
+void
+AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
+{
+    // Attempt to add the metadata to the cache.
+    bool inserted = metadataCache.insert(pkt->getMetadataNode());
+    if (!inserted) {
+        // We must evict something to make room for more.
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: %s could not be inserted into the cache. "
+            "Conducting eviction.\n",
+            __func__, pkt->print());
+
+        auto evictedData = metadataCache.evict(0);
+        if (evictedData.second.pending_eviction) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: %lld was selected to evict but is dirty.\n",
+                __func__, evictedData.first);
+            // If this line is marked as pending eviction, we must first
+            // make sure its parent is available in the metadata cache.
+            auto evictParent = integrityTree.parentBlockIndex(
+                                                evictedData.first);
+            if (!metadataCache.contains(evictParent)) {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: The parent of %lld, %lld, is not cached.\n",
+                    __func__, evictedData.first, evictParent);
+                // The parent of the cache line being evicted is not
+                // cached. We will request this first and come back to
+                // evicting once the parent is in the cache.
+
+                // If there is already an outstanding request for this
+                // parent node, we will batch this with the existing
+                // request.
+                if (outstandingMetadataRequests.find(evictParent) !=
+                    outstandingMetadataRequests.end()) {
+                    DPRINTF(AbstractIntegrityVerifier,
+                        "%s: %d is already being requested, batching\n",
+                        __func__, evictParent);
+                } else {
+                    DPRINTF(AbstractIntegrityVerifier,
+                        "%s: %d is not yet requested\n",
+                        __func__, evictParent);
+                    // Request does not already exist. Create and send out.
+                    PacketPtr metadataReq = generateMetadataRequest(
+                                        evictParent);
+                    DPRINTF(AbstractIntegrityVerifier,
+                        "%s: Sending metadata req %s\n",
+                        __func__, metadataReq->print());
+                    requestPort.schedTimingReq(metadataReq,
+                                                curTick() + Cycles(1));
+
+                    arrivalTime[metadataReq->req] = curTick();
+                    DPRINTF(AbstractIntegrityVerifier,
+                        "%s: arrivalTime size: %d\n",
+                        __func__, arrivalTime.size());
+                }
+
+                outstandingMetadataRequests.insert(
+                                    {evictParent, nullptr});
+                outstandingMetadataEvictions.insert(
+                    {evictParent, {evictedData.first, pkt->req}});
+
+                // Stop here, and we will call this function again later once
+                // the eviction is complete and we have a new free space.
+                return;
+            }
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: The parent of %lld is cached. Evicting %lld.\n",
+                __func__, evictParent, evictedData.first);
+            // The parent is in the cache, so we can safely evict (writeback).
+            metadataCache.finishEvict(evictedData.first);
+            // TODO Create writeback packet
+        }
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Evicted %lu from metadata cache.\n",
+            __func__, evictedData.first);
+        inserted = metadataCache.insert(pkt->getMetadataNode());
+    }
+    assert(inserted);
+
+    // Now that the data is cached, we can officially call this verified and
+    // done.
+    outstandingIntegrityVerification.erase(pkt);
+    packetLookup.erase(pkt->req);
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Verified pkt %s\n", __func__, pkt->print());
+
+    // Check to see if there were evictions that were waiting for this (parent)
+    // metadata.
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Triggering evictions that were waiting for %s to verify\n",
+        __func__, pkt->print());
+    auto evictions = outstandingMetadataEvictions.equal_range(
+                                                pkt->getMetadataNode());
+    std::vector<std::pair<uint64_t, PacketPtr>> toEvict;
+    for (auto it = evictions.first; it != evictions.second; ++it) {
+        uint64_t evicted_node_id = it->second.first;
+        PacketPtr original_req = packetLookup.find(it->second.second)->second;
+        toEvict.push_back({evicted_node_id, original_req});
+    }
+
+    for (auto e : toEvict) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: %s is verified. %llu can now be evicted for %s.\n",
+            __func__, pkt->print(), e.first, e.second->print());
+
+        metadataCache.finishEvict(e.first);
+        completeIntegrityVerification(e.second);
+
+        // Resend requests that were waiting for this eviction.
+        rescheduleReqFromEviction(e.first);
+    }
+    outstandingMetadataEvictions.erase(pkt->getMetadataNode());
+
+
+    // We must handle here that if a metadata request is verified, we can
+    // trigger to verify the node(s) below this one that are still waiting.
+    // Attempt to verify any applicable outstanding verifications.
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Triggering requests that were waiting for %s to verify\n",
+        __func__, pkt->print());
+    auto range = outstandingMetadataRequests.equal_range(
+                                                pkt->getMetadataNode());
+    std::vector<PacketPtr> toVerify;
+    for (auto it = range.first; it != range.second; ++it) {
+        // Find the packet that is associated with this request.
+        if (it->second == pkt->req || it->second == nullptr) {
+            // Skip the request we're already in the middle of doing,
+            // or placeholders (not to be handled here).
+            continue;
+        }
+        PacketPtr packet = packetLookup.find(it->second)->second;
+        toVerify.push_back(packet);
+    }
+
+    for (auto packet : toVerify) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: %s is verified. %s is now ready for verification.\n",
+            __func__, pkt->print(), packet->print());
+        completeIntegrityVerification(packet);
+    }
+
+    // Consider this metadata request now received.
+    outstandingMetadataRequests.erase(pkt->getMetadataNode());
+
+    delete pkt;
 }
 
 
@@ -461,12 +640,28 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
 }
 
 
+void
+AbstractIntegrityVerifier::rescheduleReqFromEviction(uint64_t data)
+{
+    // TODO stub
+}
+
+
 bool
 AbstractIntegrityVerifier::handleReq(PacketPtr pkt)
 {
     DPRINTF(AbstractIntegrityVerifier,
             "%s: Handling verification of packet %s\n",
             __func__, pkt->print());
+
+    // We aren't ready for this packet. Don't accept it until the parent node
+    // is fully evicted.
+    if (parentNodeIsPendingEviction(pkt)) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Rejecting %s due to parent pending eviction.\n",
+            __func__, pkt->print());
+        return false;
+    }
 
     // We are getting a writeback from LLC. Integrity metadata (at least in
     // the cache) should be updated for this data's parent node first before
