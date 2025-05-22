@@ -184,6 +184,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             write_resp="10ns",
             # req_size = 512,
             # resp_size = 512,
+            metadata_cache_size=30000,
         )
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port

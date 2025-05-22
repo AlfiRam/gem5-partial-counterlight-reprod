@@ -47,13 +47,14 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
 )
     : ClockedObject(p),
       system(p.system),
+      metadataCacheSize(p.metadata_cache_size),
       requestPort(name() + "-mem_side_port", *this),
       responsePort(name() + "-cpu_side_port", *this),
       reqQueue(*this, requestPort),
       respQueue(*this, responsePort),
       snoopRespQueue(*this, requestPort),
       integrityTree(TimingTree(4, system->memSize())),
-      metadataCache(SimpleMetadataCache(300000)),
+      metadataCache(SimpleMetadataCache(metadataCacheSize)),
       hasRequestorId(false),
       _requestorId(0)
 {

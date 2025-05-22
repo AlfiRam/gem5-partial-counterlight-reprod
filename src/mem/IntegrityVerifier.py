@@ -53,6 +53,8 @@ class AbstractIntegrityVerifier(ClockedObject):
 
     system = Param.System(Parent.any, "System that the object belongs to.")
 
+    metadata_cache_size = Param.Int(2000, "Metadata cache size")
+
 
 class IntegrityVerifier(AbstractIntegrityVerifier):
     type = "IntegrityVerifier"

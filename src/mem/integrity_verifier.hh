@@ -167,6 +167,8 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     System *system;
 
+    int metadataCacheSize;
+
     RequestPort requestPort;
     ResponsePort responsePort;
 
