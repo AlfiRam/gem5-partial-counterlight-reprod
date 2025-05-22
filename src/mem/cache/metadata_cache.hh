@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -13,14 +14,34 @@ namespace gem5
 
 class SimpleMetadataCache
 {
+  public:
+    typedef uint64_t EntryKey;
+    typedef struct
+    {
+      bool dirty;
+      bool pending_eviction;
+    } EntryValue;
+
   private:
     unsigned int capacity;
-    unsigned int size;
 
     /**
      * Internal data structure.
      */
-    std::unordered_set<uint64_t> data;
+    std::unordered_map<EntryKey, EntryValue> _data;
+
+    /**
+     * Internal count for the number of dirty cache lines in the metadata
+     * cache.
+     */
+    unsigned int dirty_lines;
+
+    /**
+     * Internal count for the number of cache lines in the metadata cache that
+     * are currently pending eviction. These lines can be considered
+     * inaccessible until they are properly evicted.
+     */
+    unsigned int lines_pending_eviction;
 
   public:
     SimpleMetadataCache(unsigned int capacity);
@@ -33,18 +54,55 @@ class SimpleMetadataCache
      *
      * @returns True if the insertion was successful, false otherwise.
      */
-    bool insert(uint64_t new_data);
+    bool insert(EntryKey new_data);
+
+    std::pair<EntryKey, EntryValue> find(EntryKey new_data);
 
     /**
      * Check for the existence of `data` in the metadata cache.
      */
-    bool contains(uint64_t data);
+    bool contains(EntryKey data);
+
+    /**
+     * Check for the existence of `data` in the metadata cache.
+     *
+     * Do not panic if the data being checked is pending eviction.
+     */
+    bool containsPendingOkay(EntryKey data);
+
+    /**
+     * Simulate modification of a cache line by specifying the entry to edit.
+     * This will cause the line to be marked as dirty.
+     *
+     * This assumes that `data` already exists in the cache.
+     */
+    void modify(EntryKey modified_data);
 
     size_t getSize();
 
     bool isFull();
 
-    uint64_t evict();
+    /**
+     * Evict a random cache line from the metadata cache. If the selected cache
+     * line is dirty, then it will be marked as 'pending eviction', and require
+     * the caller to perform additional checks as needed and call
+     * `finishEvict(evicted_data)`, where `evicted_data` is
+     * `evict(...).first`.
+     *
+     * It is guaranteed that a line already pending eviction will not be
+     * selected for eviction.
+     *
+     * @param ignored_data Data that should not be evicted.
+     * @return The data that was evicted. Note that if the entry returned has
+     *         the 'pending eviction' flag set to true, the eviction is not
+     *         complete.
+     */
+    std::pair<EntryKey, EntryValue> evict(EntryKey ignored_data);
+
+    /**
+     * Finish an eviction as followed from `evict()`.
+     */
+    void finishEvict(EntryKey evicted_data);
 };
 
 } // namespace gem5
