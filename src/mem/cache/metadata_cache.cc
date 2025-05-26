@@ -75,6 +75,14 @@ namespace gem5
     assert(contains(modified_data));
     assert(!find(modified_data).second.pending_eviction);
 
+    if (_data[modified_data].dirty) {
+      // This data is already marked dirty. Do nothing.
+      DPRINTF(SimpleMetadataCache,
+        "%s: Dirty cache entry %llu is modified again.\n",
+        __func__, modified_data);
+      return;
+    }
+
     // Mark the data item as dirty.
     EntryValue entry_value = {
       .dirty = true,
