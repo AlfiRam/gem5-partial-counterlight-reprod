@@ -691,6 +691,13 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
         __func__, pkt->print());
     requestPort.schedTimingReq(pkt, curTick() + Cycles(1));
+
+    if (!pkt->needsResponse()) {
+        // Packets that aren't getting a response should not be tracked for
+        // response timing.
+        return;
+    }
+
     assert(packetLookup.find(pkt->req) == packetLookup.end());
     packetLookup.emplace(pkt->req, pkt);
     DPRINTF(AbstractIntegrityVerifier,
@@ -707,11 +714,7 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
 void
 AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
 {
-    if (!pkt->needsResponse()) {
-        // Packets that aren't getting a response should not be tracked for
-        // response timing.
-        return;
-    }
+    assert(pkt->needsResponse());
 
     // This request should not already have been marked to start.
     assert(arrivalTime.find(pkt->req) == arrivalTime.end());
