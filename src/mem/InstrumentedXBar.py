@@ -9,8 +9,6 @@ class InstrumentedCoherentXBar(CoherentXBar):
     cxx_header = "mem/instrumented_xbar.hh"
     cxx_class = "gem5::InstrumentedCoherentXBar"
 
-    use_instrumentation = True
-
 
 # Parameters as brought from SystemXBar.
 class InstrumentedSystemXBar(InstrumentedCoherentXBar):

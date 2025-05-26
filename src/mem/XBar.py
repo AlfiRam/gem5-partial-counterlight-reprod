@@ -137,11 +137,6 @@ class CoherentXBar(BaseXBar):
         False, "Consider this crossbar the point of unification"
     )
 
-    # Add custom instrumentation for research.
-    use_instrumentation = Param.Bool(
-        False, "Add custom instrumentation to this crossbar"
-    )
-
     system = Param.System(Parent.any, "System that the crossbar belongs to.")
 
 
