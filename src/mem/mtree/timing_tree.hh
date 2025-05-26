@@ -241,6 +241,16 @@ class TimingTree : AbstractIntegrityTree
      */
     size_t addressToBlockIndex(size_t address);
 
+    /**
+     * Get the first address that would correspond to a given block index.
+     *
+     * NOTE: This assumes that a valid block index is used.
+     *
+     * It is assumed that there is a linear mapping between memory addresses
+     * to leaf nodes.
+     */
+    uint64_t blockIndexToAddress(size_t index);
+
   private:
     /**
      * Update a leaf block's hash by reading the data that corresponds to that

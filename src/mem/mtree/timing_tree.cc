@@ -215,6 +215,22 @@ size_t TimingTree::addressToBlockIndex(size_t address) {
 }
 
 
+uint64_t TimingTree::blockIndexToAddress(size_t index) {
+  // Descend the tree until we reach a leaf.
+  auto currentBlock = index;
+  while (!isLeaf(currentBlock)) {
+    currentBlock = firstChildBlockIndex(currentBlock);
+  }
+
+  // currentBlock is now guaranteed to be a leaf.
+
+  size_t firstLeafIndex = integerPower(arity, height - 1)/(arity - 1);
+  uint64_t address = (currentBlock - firstLeafIndex) * hashInputSize * arity;
+
+  return address;
+}
+
+
 unsigned int TimingTree::updateLeafHash(size_t address) {
   std::cout << "====================================" << std::endl;
   std::cout << "Processing write at address " << address << "." << std::endl;
