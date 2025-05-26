@@ -76,6 +76,9 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         membus.default = membus.badaddr_responder.pio
         return membus
 
+    def _get_default_metadata_cache_size(self) -> int:
+        return 2048
+
     def __init__(
         self,
         l1d_size: str,
@@ -85,6 +88,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         l1i_assoc: int = 8,
         l2_assoc: int = 16,
         membus: Optional[BaseXBar] = None,
+        metadata_cache_size: Optional[int] = 0,
     ) -> None:
         """
         :param l1d_size: The size of the L1 Data Cache (e.g., "32KiB").
@@ -110,6 +114,10 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         )
 
         self.membus = membus if membus else self._get_default_membus()
+        if metadata_cache_size:
+            self._metadata_cache_size = metadata_cache_size
+        else:
+            self._metadata_cache_size = self._get_default_metadata_cache_size()
 
     @overrides(AbstractClassicCacheHierarchy)
     def get_mem_side_port(self) -> Port:
@@ -184,7 +192,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             write_resp="10ns",
             # req_size = 512,
             # resp_size = 512,
-            metadata_cache_size=30000,
+            metadata_cache_size=self._metadata_cache_size,
         )
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port

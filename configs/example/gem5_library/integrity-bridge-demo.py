@@ -91,6 +91,14 @@ parser.add_argument(
     help="Instead of switching from KVM cores to timing cores when reaching the POI, use timing cores starting at boot.",
 )
 
+parser.add_argument(
+    "--metadata-cache-size",
+    type=int,
+    required=False,
+    help="Number of entries in the metadata cache, if applicable.",
+    default=2048,
+)
+
 args = parser.parse_args()
 
 
@@ -111,6 +119,7 @@ if args.use_integrity_verifier:
         l2_size="512KiB",
         l2_assoc=16,
         membus=membus,
+        metadata_cache_size=args.metadata_cache_size,
     )
 else:
     cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
