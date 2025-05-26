@@ -169,6 +169,12 @@ size_t TimingTree::relativeChildBlockIndex(size_t childIndex) {
 }
 
 
+bool TimingTree::isLeaf(size_t index) {
+  size_t firstLeafIndex = integerPower(arity, height - 1)/(arity - 1);
+  return (index >= firstLeafIndex);
+}
+
+
 size_t TimingTree::addressToBlockIndex(size_t address) {
   // Get the index of the first leaf node.
   size_t firstLeafIndex = integerPower(arity, height - 1)/(arity - 1);

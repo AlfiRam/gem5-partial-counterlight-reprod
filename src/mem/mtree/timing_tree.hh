@@ -224,6 +224,11 @@ class TimingTree : AbstractIntegrityTree
      */
     size_t relativeChildBlockIndex(size_t childIndex);
 
+    /**
+     * Determine if a given block index corresponds to a leaf.
+     */
+    bool isLeaf(size_t index);
+
   public:
     /**
      * Get the index of the block (this will be a leaf) that corresponds to
