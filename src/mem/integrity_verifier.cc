@@ -105,7 +105,7 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
     // Don't do anything special for memory requests that are not actually
     // for memory.
     if (pkt->isRead() && pkt->getAddr() < parent.system->memSize()) {
-        return parent.handleResp(pkt);
+        return parent.handlePacket(pkt);
     }
 
     // technically the packet only reaches us after the header delay,
@@ -169,7 +169,7 @@ AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
 }
 
 bool
-AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
+AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
 {
     DPRINTF(AbstractIntegrityVerifier,
             "%s: Handling verification of packet %s\n",
@@ -190,17 +190,23 @@ AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
         hasRequestorId = true;
     }
 
+    // We are either getting a read response from memory or a writeback request
+    // from the LLC. Integrity metadata (at least in the cache) should be
+    // updated for this data's parent node first before being allowed to be
+    // sent to the CPU (for read responses) or to be written to memory (for
+    // write requests).
+
     // TODO This will start with just basic integrity. No encryption. Just
     // integrity/cryptographic hashing. The data is thus already decrypted.
     // We just need to verify that this data is what we expect it to be.
 
     // Kick off hashing. Add to a pending hashing list. Schedule an event
     // when the hashing completes. Keep in mind we are essentially holding
-    // hostage the memory response until all verification is complete.
+    // hostage the memory packet until all verification is complete.
     // TODO For now, we will assume there will be unlimited space in the
-    // pending hashing list. A response packet should never bounce back
-    // and clog up for now. However, in the future, there should be a
-    // capacity check here and ask packets to try again later.
+    // pending hashing list. A packet should never bounce back and clog up for
+    // now. However, in the future, there should be a capacity check here and
+    // ask packets to try again later.
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling hash for pkt %s\n",
         __func__, pkt->print());
     schedule(
@@ -215,6 +221,13 @@ AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
     outstandingIntegrityHashes.insert(pkt->req);
     outstandingIntegrityVerification.insert(pkt);
     packetLookup.emplace(pkt->req, pkt);
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
+        __func__,
+        pkt->req->hasPaddr() ? pkt->req->getPaddr() : 9999999,
+        pkt->req,
+        pkt->print(),
+        pkt);
 
 
     // Check for the parent node in the metadata cache.
@@ -262,19 +275,19 @@ AbstractIntegrityVerifier::handleResp(PacketPtr pkt)
     PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
 
     // Add to outstanding metadata requests
+    assert(outstandingMetadataRequests.find(parentNode) ==
+           outstandingMetadataRequests.end());
     outstandingMetadataRequests.insert({parentNode, pkt->req});
 
     // TODO Set the packet delay
 
     // Submit the packet to the memory controller.
-    DPRINTF(AbstractIntegrityVerifier, "%s: Sending metadata req %s\n",
-        __func__, metadataRequestPkt->print());
-    requestPort.schedTimingReq(metadataRequestPkt, curTick() + Cycles(1));
+    sendReqToMem(metadataRequestPkt);
 
     // TODO Update stats
 
-    // We will hold on to the original response packet until the time comes to
-    // forward this to the CPU.
+    // We will hold on to the original packet until the time comes to forward
+    // this to the destination.
     return true;
 }
 
@@ -611,7 +624,7 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
     // Don't do anything special for memory requests that are not actually
     // for memory.
     if (pkt->isWrite() && pkt->getAddr() < parent.system->memSize()) {
-        return parent.handleReq(pkt);
+        return parent.handlePacket(pkt);
     }
 
     // technically the packet only reaches us after the header
@@ -632,104 +645,6 @@ void
 AbstractIntegrityVerifier::rescheduleReqFromEviction(uint64_t data)
 {
     // TODO stub
-}
-
-
-bool
-AbstractIntegrityVerifier::handleReq(PacketPtr pkt)
-{
-    DPRINTF(AbstractIntegrityVerifier,
-            "%s: Handling verification of packet %s\n",
-            __func__, pkt->print());
-
-    // We aren't ready for this packet. Don't accept it until the parent node
-    // is fully evicted.
-    if (parentNodeIsPendingEviction(pkt)) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Rejecting %s due to parent pending eviction.\n",
-            __func__, pkt->print());
-        return false;
-    }
-
-    // We are getting a writeback from LLC. Integrity metadata (at least in
-    // the cache) should be updated for this data's parent node first before
-    // being allowed to be written to memory.
-
-    // Hash the data from this line. Schedule a delay.
-    DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling hash for pkt %s\n",
-        __func__, pkt->print());
-    schedule(
-        new HashCompletionEvent(this, pkt),
-        curTick() + integrityHashingLatency
-    );
-    // This packet should not already be in the process of being verified.
-    assert(outstandingIntegrityHashes.find(pkt->req) ==
-            outstandingIntegrityHashes.end());
-    assert(outstandingIntegrityVerification.find(pkt) ==
-            outstandingIntegrityVerification.end());
-    outstandingIntegrityHashes.insert(pkt->req);
-    outstandingIntegrityVerification.insert(pkt);
-    packetLookup.emplace(pkt->req, pkt);
-
-    // Check for the parent node in the metadata cache.
-    size_t parentNode;
-    if (!parentNodeIsSecureRoot(pkt)) {
-        parentNode = getParentNode(pkt);
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Parent metadata node for pkt %s is %llu\n",
-            __func__, pkt->print(), parentNode);
-    } else {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Parent metadata node for pkt %s is secure root\n",
-            __func__, pkt->print());
-    }
-
-    if (parentNodeAvailable(pkt)) {
-        // If the parent is the secure root, or the parent node exists in
-        // the metadata cache, we are just waiting for the hashing to
-        // complete. We are done here.
-
-        // Account for the request being complete.
-        DPRINTF(AbstractIntegrityVerifier, "%s: pkt %s has parent available\n",
-            __func__, pkt->print());
-        completeIntegrityVerification(pkt);
-
-        return true;
-    }
-
-    // If there is already an outstanding request for this parent node, we will
-    // batch this with the existing request.
-    if (outstandingMetadataRequests.find(parentNode) !=
-        outstandingMetadataRequests.end()) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: %d is already being requested, batching\n",
-            __func__, parentNode);
-        outstandingMetadataRequests.insert({parentNode, pkt->req});
-
-        return true;
-    }
-
-    // A request has not yet been sent. We will craft a request packet for
-    // metadata to memory to get the parent node. Then we schedule the
-    // request.
-
-    PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
-
-    // Add to outstanding metadata requests
-    outstandingMetadataRequests.insert({parentNode, pkt->req});
-
-    // TODO Set the packet delay
-
-    // Submit the packet to the memory controller.
-    DPRINTF(AbstractIntegrityVerifier, "%s: Sending metadata req %s\n",
-        __func__, metadataRequestPkt->print());
-    requestPort.schedTimingReq(metadataRequestPkt, curTick() + Cycles(1));
-
-    // TODO Update stats
-
-    // We will hold on to the original request packet until the time comes to
-    // forward this to memory.
-    return true;
 }
 
 

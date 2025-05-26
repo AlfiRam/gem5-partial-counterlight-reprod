@@ -144,9 +144,18 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     PacketPtr generateMetadataRequest(size_t node);
 
-    bool handleResp(PacketPtr pkt);
-
-    bool handleReq(PacketPtr pkt);
+    /**
+     * Handle a packet for triggering integrity verification.
+     *
+     * For this case, this is for handling integrity verification of read
+     * responses or write requests, and verification must complete before
+     * they are forwarded to their destination.
+     *
+     * @return Whether the packet is accepted or not. If the packet is not
+     *         accepted, it is the responsibility of the component that sent
+     *         the packet to retry.
+     */
+    bool handlePacket(PacketPtr pkt);
 
     /**
      * Called when hash generation for a (read) response packet is received.
