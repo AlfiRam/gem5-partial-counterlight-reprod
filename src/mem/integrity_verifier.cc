@@ -184,6 +184,10 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         return false;
     }
 
+    if (pkt->isResponse()) {
+        markReqEnd(pkt);
+    }
+
     // Save a valid requestor ID internally just in case it is needed.
     if (!hasRequestorId) {
         _requestorId = pkt->requestorId();
@@ -662,6 +666,42 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
         pkt->req,
         pkt->print(),
         pkt);
+    markReqStart(pkt);
+}
+
+
+void
+AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
+{
+    if (!pkt->needsResponse()) {
+        // Packets that aren't getting a response should not be tracked for
+        // response timing.
+        return;
+    }
+
+    // This request should not already have been marked to start.
+    assert(arrivalTime.find(pkt->req) == arrivalTime.end());
+
+    arrivalTime[pkt->req] = curTick();
+
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: arrivalTime increased. size: %d\n",
+        __func__, arrivalTime.size());
+}
+
+
+void
+AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
+{
+    // This request should have been entered prior.
+    assert(arrivalTime.find(pkt->req) != arrivalTime.end());
+
+    requestsHandled++;
+    totalRequestingTime += curTick() - arrivalTime[pkt->req];
+    arrivalTime.erase(pkt->req);
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: arrivalTime decreased. size: %d\n",
+        __func__, arrivalTime.size());
 }
 
 
@@ -683,6 +723,31 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
     parent.requestPort.schedTimingSnoopResp(pkt, when);
 
     return true;
+}
+
+
+void
+AbstractIntegrityVerifier::regStats()
+{
+    ClockedObject::regStats();
+
+    requestsHandled
+        .name(name() + ".requestsHandled")
+        .desc("Total number of requests handled")
+        .unit(statistics::units::Count::get());
+
+    totalRequestingTime
+        .name(name() + ".totalRequestingTime")
+        .desc("Total amount of time where a request is out then in")
+        .unit(statistics::units::Tick::get());
+
+    avgReqLatency
+        .name(name() + ".avgReqLatency")
+        .desc("Average request latency from leaving to entering "
+              "IntegrityVerifier")
+        .unit(statistics::units::Tick::get());
+
+    avgReqLatency = totalRequestingTime / requestsHandled;
 }
 
 

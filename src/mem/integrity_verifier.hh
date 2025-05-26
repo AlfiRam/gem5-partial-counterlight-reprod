@@ -210,6 +210,20 @@ class AbstractIntegrityVerifier : public ClockedObject
     void sendReqToMem(PacketPtr pkt);
 
     /**
+     * Make note of when a (request) packet is about to be scheduled for
+     * sending to memory.
+     *
+     * This is used for finding timing information for how long packets take
+     * before they return to this component.
+     */
+    void markReqStart(PacketPtr pkt);
+
+    /**
+     * Make node of when a (response) packet is accepted from memory.
+     */
+    void markReqEnd(PacketPtr pkt);
+
+    /**
      * Keep a pointer to the system to allow querying memory properties.
      */
     System *system;
@@ -222,6 +236,8 @@ class AbstractIntegrityVerifier : public ClockedObject
     ReqPacketQueue reqQueue;
     RespPacketQueue respQueue;
     SnoopRespPacketQueue snoopRespQueue;
+
+    void regStats() override;
 
     typedef TimingTree IntegrityTree;
     /**
@@ -293,6 +309,11 @@ class AbstractIntegrityVerifier : public ClockedObject
     std::unordered_multimap<uint64_t, RequestPtr> reqWaitingForEviction;
 
     /**
+     * Track when each request arrives (when it is accepted).
+     */
+    std::unordered_map<RequestPtr, Tick> arrivalTime;
+
+    /**
      * Time (in ticks) to complete hashing.
      *
      * TODO Define a default value
@@ -348,6 +369,15 @@ class AbstractIntegrityVerifier : public ClockedObject
      * @return Ticks to delay packet.
      */
     virtual Tick delaySnoopResp(PacketPtr pkt) { return 0; }
+
+  private:
+    // Stats
+
+    statistics::Scalar requestsHandled;
+
+    statistics::Scalar totalRequestingTime;
+
+    statistics::Formula avgReqLatency;
 };
 
 /**
