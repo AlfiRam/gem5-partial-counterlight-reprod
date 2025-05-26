@@ -108,18 +108,24 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
         if (pkt->isRead()) {
             return parent.handlePacket(pkt);
         }
-        else {
+        else if (pkt->isWrite()) {
             // Mark write response packet as returned.
-            assert(pkt->isWrite());
+            assert(parent.packetLookup.find(pkt->req) !=
+                   parent.packetLookup.end());
             parent.packetLookup.erase(pkt->req);
             parent.markReqEnd(pkt);
         }
+        // If this is something else (e.g., UpgradeResp), drop to the default
+        // behavior below.
     }
 
     // technically the packet only reaches us after the header delay,
     // and typically we also need to deserialise any payload
     const Tick receive_delay = pkt->headerDelay + pkt->payloadDelay;
     pkt->headerDelay = pkt->payloadDelay = 0;
+
+    assert(parent.packetLookup.find(pkt->req) == parent.packetLookup.end());
+    assert(!pkt->isMetadataRequest());
 
     const Tick when = curTick() + parent.delayResp(pkt) + receive_delay;
 
@@ -232,14 +238,20 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
             outstandingIntegrityVerification.end());
     outstandingIntegrityHashes.insert(pkt->req);
     outstandingIntegrityVerification.insert(pkt);
-    packetLookup.emplace(pkt->req, pkt);
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
-        __func__,
-        pkt->req->hasPaddr() ? pkt->req->getPaddr() : 9999999,
-        pkt->req,
-        pkt->print(),
-        pkt);
+    if (pkt->isRead() && pkt->isResponse()) {
+        // A read response should already be put in after being requested.
+        assert(packetLookup.find(pkt->req) != packetLookup.end());
+    } else {
+        assert(packetLookup.find(pkt->req) == packetLookup.end());
+        packetLookup.emplace(pkt->req, pkt);
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
+            __func__,
+            pkt->req->hasPaddr() ? pkt->req->getPaddr() : 9999999,
+            pkt->req,
+            pkt->print(),
+            pkt);
+    }
 
 
     // Check for the parent node in the metadata cache.
@@ -410,6 +422,7 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
 
     // Officially consider this verified.
     outstandingIntegrityVerification.erase(pkt);
+    assert(packetLookup.find(pkt->req) != packetLookup.end());
     packetLookup.erase(pkt->req);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Verified pkt %s\n", __func__, pkt->print());
@@ -419,6 +432,8 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         // This means we can now forward the data to the CPU to be used.
         DPRINTF(AbstractIntegrityVerifier, "%s: Sending back pkt %s to CPU\n",
             __func__, pkt->print());
+        assert(!pkt->isMetadataRequest());
+        assert(packetLookup.find(pkt->req) == packetLookup.end());
         // This packet can now be properly returned up to the CPU to complete.
         Tick when = curTick() + Cycles(1);
         responsePort.schedTimingResp(pkt, when);
@@ -510,6 +525,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     // Now that the data is cached, we can officially call this verified and
     // done.
     outstandingIntegrityVerification.erase(pkt);
+    assert(packetLookup.find(pkt->req) != packetLookup.end());
     packetLookup.erase(pkt->req);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Verified pkt %s\n", __func__, pkt->print());
@@ -639,12 +655,13 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
         if (pkt->isWrite()) {
             return parent.handlePacket(pkt);
         }
-        else {
+        else if (pkt->isRead()) {
             // Forward read request.
-            assert(pkt->isRead());
             parent.sendReqToMem(pkt);
             return true;
         }
+        // If this is something else (e.g., CleanEvict), drop to the default
+        // behavior below.
     }
 
     // technically the packet only reaches us after the header
@@ -674,6 +691,7 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
         __func__, pkt->print());
     requestPort.schedTimingReq(pkt, curTick() + Cycles(1));
+    assert(packetLookup.find(pkt->req) == packetLookup.end());
     packetLookup.emplace(pkt->req, pkt);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
