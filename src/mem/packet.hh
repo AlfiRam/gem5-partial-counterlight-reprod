@@ -623,17 +623,15 @@ class Packet : public Printable, public Extensible<Packet>
     bool isPrint() const             { return cmd.isPrint(); }
     bool isFlush() const             { return cmd.isFlush(); }
 
-    bool _isMetadataRequest;
-    bool isMetadataRequest() const   { return _isMetadataRequest; }
-    void setMetadataRequest()        { _isMetadataRequest = true; }
+    bool isMetadataRequest() const   { return req->getMetadataRequest(); }
+    void setMetadataRequest()        { req->setMetadataRequest(true); }
 
     /**
      * The integrity structure node ID associated with this packet, if
      * applicable.
      */
-    size_t metadataNode;
-    size_t getMetadataNode() const     { return metadataNode; }
-    void setMetadataNode(size_t node)  { metadataNode = node; }
+    size_t getMetadataNode() const     { return req->getMetadataNode(); }
+    void setMetadataNode(size_t node)  { req->setMetadataNode(node); }
 
     bool isWholeLineWrite(unsigned blk_size)
     {
@@ -898,8 +896,7 @@ class Packet : public Printable, public Extensible<Packet>
            htmReturnReason(HtmCacheFailure::NO_FAIL),
            htmTransactionUid(0),
            headerDelay(0), snoopDelay(0),
-           payloadDelay(0), senderState(NULL),
-           _isMetadataRequest(false), metadataNode(0)
+           payloadDelay(0), senderState(NULL)
     {
         flags.clear();
         if (req->hasPaddr()) {
@@ -940,8 +937,7 @@ class Packet : public Printable, public Extensible<Packet>
            htmReturnReason(HtmCacheFailure::NO_FAIL),
            htmTransactionUid(0),
            headerDelay(0),
-           snoopDelay(0), payloadDelay(0), senderState(NULL),
-           _isMetadataRequest(false), metadataNode(0)
+           snoopDelay(0), payloadDelay(0), senderState(NULL)
     {
         flags.clear();
         if (req->hasPaddr()) {
@@ -972,9 +968,7 @@ class Packet : public Printable, public Extensible<Packet>
            headerDelay(pkt->headerDelay),
            snoopDelay(0),
            payloadDelay(pkt->payloadDelay),
-           senderState(pkt->senderState),
-           _isMetadataRequest(false),
-           metadataNode(0)
+           senderState(pkt->senderState)
     {
         if (!clear_flags)
             flags.set(pkt->flags & COPY_FLAGS);

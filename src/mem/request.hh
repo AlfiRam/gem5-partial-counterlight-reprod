@@ -475,6 +475,10 @@ class Request : public Extensible<Request>
 
     bool _isGPUFuncAccess;
 
+    bool _isMetadataRequest;
+
+    size_t _metadataNode;
+
   public:
 
     /**
@@ -482,7 +486,10 @@ class Request : public Extensible<Request>
      *  _flags and privateFlags are cleared by Flags default
      *  constructor.)
      */
-    Request() {}
+    Request() {
+        _isMetadataRequest = false;
+        _metadataNode = 0;
+    }
 
     /**
      * Constructor for physical (e.g. device) requests.  Initializes
@@ -496,6 +503,8 @@ class Request : public Extensible<Request>
         privateFlags.set(VALID_PADDR|VALID_SIZE);
         _byteEnable = std::vector<bool>(size, true);
         _isGPUFuncAccess = false;
+        _isMetadataRequest = false;
+        _metadataNode = 0;
     }
 
     Request(Addr vaddr, unsigned size, Flags flags,
@@ -506,6 +515,8 @@ class Request : public Extensible<Request>
         setContext(cid);
         _byteEnable = std::vector<bool>(size, true);
         _isGPUFuncAccess = false;
+        _isMetadataRequest = false;
+        _metadataNode = 0;
     }
 
     Request(const Request& other)
@@ -521,6 +532,8 @@ class Request : public Extensible<Request>
           _extraData(other._extraData), _contextId(other._contextId),
           _pc(other._pc), _reqInstSeqNum(other._reqInstSeqNum),
           _localAccessor(other._localAccessor),
+          _isMetadataRequest(other._isMetadataRequest),
+          _metadataNode(other._metadataNode),
           translateDelta(other.translateDelta),
           accessDelta(other.accessDelta), depth(other.depth)
     {
@@ -1138,6 +1151,28 @@ class Request : public Extensible<Request>
     getGPUFuncAccess()
     {
         return _isGPUFuncAccess;
+    }
+
+    void
+    setMetadataRequest(bool flag) {
+        _isMetadataRequest = flag;
+    }
+
+    bool
+    getMetadataRequest()
+    {
+        return _isMetadataRequest;
+    }
+
+    void
+    setMetadataNode(size_t node) {
+        _metadataNode = node;
+    }
+
+    size_t
+    getMetadataNode()
+    {
+        return _metadataNode;
     }
 };
 
