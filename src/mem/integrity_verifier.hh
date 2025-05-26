@@ -196,6 +196,11 @@ class AbstractIntegrityVerifier : public ClockedObject
     void rescheduleReqFromEviction(uint64_t data);
 
     /**
+     * Schedule to send a request to memory.
+     */
+    void sendReqToMem(PacketPtr pkt);
+
+    /**
      * Keep a pointer to the system to allow querying memory properties.
      */
     System *system;

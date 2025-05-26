@@ -406,11 +406,8 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Modifying cache line %lu in metadata cache\n",
             __func__, parentNode);
-        DPRINTF(AbstractIntegrityVerifier, "%s: Sending pkt %s to memory\n",
-            __func__, pkt->print());
         // This packet can now be properly forwarded to memory to complete.
-        Tick when = curTick() + Cycles(1);
-        requestPort.schedTimingReq(pkt, when);
+        sendReqToMem(pkt);
     }
 }
 
@@ -459,16 +456,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                     // Request does not already exist. Create and send out.
                     PacketPtr metadataReq = generateMetadataRequest(
                                         evictParent);
-                    DPRINTF(AbstractIntegrityVerifier,
-                        "%s: Sending metadata req %s\n",
-                        __func__, metadataReq->print());
-                    requestPort.schedTimingReq(metadataReq,
-                                                curTick() + Cycles(1));
-
-                    arrivalTime[metadataReq->req] = curTick();
-                    DPRINTF(AbstractIntegrityVerifier,
-                        "%s: arrivalTime size: %d\n",
-                        __func__, arrivalTime.size());
+                    sendReqToMem(metadataReq);
                 }
 
                 outstandingMetadataRequests.insert(
@@ -742,6 +730,23 @@ AbstractIntegrityVerifier::handleReq(PacketPtr pkt)
     // We will hold on to the original request packet until the time comes to
     // forward this to memory.
     return true;
+}
+
+
+void
+AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
+{
+    DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
+        __func__, pkt->print());
+    requestPort.schedTimingReq(pkt, curTick() + Cycles(1));
+    packetLookup.emplace(pkt->req, pkt);
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
+        __func__,
+        pkt->req->hasPaddr() ? pkt->req->getPaddr() : 9999999,
+        pkt->req,
+        pkt->print(),
+        pkt);
 }
 
 
