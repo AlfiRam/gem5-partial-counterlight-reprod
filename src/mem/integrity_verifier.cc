@@ -735,6 +735,14 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
 
     requestsHandled++;
     totalRequestingTime += curTick() - arrivalTime[pkt->req];
+    if (pkt->isMetadataRequest()) {
+        metadataReqHandled++;
+        totalMetadataReqTime += curTick() - arrivalTime[pkt->req];
+    } else {
+        dataReqHandled++;
+        totalDataReqTime += curTick() - arrivalTime[pkt->req];
+    }
+
     arrivalTime.erase(pkt->req);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: arrivalTime decreased. size: %d\n",
@@ -773,9 +781,29 @@ AbstractIntegrityVerifier::regStats()
         .desc("Total number of requests handled")
         .unit(statistics::units::Count::get());
 
+    metadataReqHandled
+        .name(name() + ".metadataReqHandled")
+        .desc("Total number of metadata requests handled")
+        .unit(statistics::units::Count::get());
+
+    dataReqHandled
+        .name(name() + ".dataReqHandled")
+        .desc("Total number of data requests handled")
+        .unit(statistics::units::Count::get());
+
     totalRequestingTime
         .name(name() + ".totalRequestingTime")
         .desc("Total amount of time where a request is out then in")
+        .unit(statistics::units::Tick::get());
+
+    totalMetadataReqTime
+        .name(name() + ".totalMetadataReqTime")
+        .desc("Total amount of time where a metadata request is out then in")
+        .unit(statistics::units::Tick::get());
+
+    totalDataReqTime
+        .name(name() + ".totalDataReqTime")
+        .desc("Total amount of time where a data request is out then in")
         .unit(statistics::units::Tick::get());
 
     avgReqLatency
@@ -784,7 +812,21 @@ AbstractIntegrityVerifier::regStats()
               "IntegrityVerifier")
         .unit(statistics::units::Tick::get());
 
+    avgMetadataReqLatency
+        .name(name() + ".avgMetadataReqLatency")
+        .desc("Average metadata request latency from leaving to entering "
+              "IntegrityVerifier")
+        .unit(statistics::units::Tick::get());
+
+    avgDataReqLatency
+        .name(name() + ".avgDataReqLatency")
+        .desc("Average data request latency from leaving to entering "
+              "IntegrityVerifier")
+        .unit(statistics::units::Tick::get());
+
     avgReqLatency = totalRequestingTime / requestsHandled;
+    avgMetadataReqLatency = totalMetadataReqTime / metadataReqHandled;
+    avgDataReqLatency = totalDataReqTime / dataReqHandled;
 }
 
 

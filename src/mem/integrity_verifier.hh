@@ -374,10 +374,16 @@ class AbstractIntegrityVerifier : public ClockedObject
     // Stats
 
     statistics::Scalar requestsHandled;
+    statistics::Scalar metadataReqHandled;
+    statistics::Scalar dataReqHandled;
 
     statistics::Scalar totalRequestingTime;
+    statistics::Scalar totalMetadataReqTime;
+    statistics::Scalar totalDataReqTime;
 
     statistics::Formula avgReqLatency;
+    statistics::Formula avgMetadataReqLatency;
+    statistics::Formula avgDataReqLatency;
 };
 
 /**
