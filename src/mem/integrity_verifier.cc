@@ -104,8 +104,16 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
     // Read data must be verified first before it can be used.
     // Don't do anything special for memory requests that are not actually
     // for memory.
-    if (pkt->isRead() && pkt->getAddr() < parent.system->memSize()) {
-        return parent.handlePacket(pkt);
+    if (pkt->getAddr() < parent.system->memSize()) {
+        if (pkt->isRead()) {
+            return parent.handlePacket(pkt);
+        }
+        else {
+            // Mark write response packet as returned.
+            assert(pkt->isWrite());
+            parent.packetLookup.erase(pkt->req);
+            parent.markReqEnd(pkt);
+        }
     }
 
     // technically the packet only reaches us after the header delay,
@@ -627,8 +635,16 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
     // Read data must be verified first before it can be used.
     // Don't do anything special for memory requests that are not actually
     // for memory.
-    if (pkt->isWrite() && pkt->getAddr() < parent.system->memSize()) {
-        return parent.handlePacket(pkt);
+    if (pkt->getAddr() < parent.system->memSize()) {
+        if (pkt->isWrite()) {
+            return parent.handlePacket(pkt);
+        }
+        else {
+            // Forward read request.
+            assert(pkt->isRead());
+            parent.sendReqToMem(pkt);
+            return true;
+        }
     }
 
     // technically the packet only reaches us after the header
