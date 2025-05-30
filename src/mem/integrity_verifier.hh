@@ -317,9 +317,28 @@ class AbstractIntegrityVerifier : public ClockedObject
     > outstandingMetadataEvictions;
 
     /**
+     * Requests that are blocking a metadata cache line from being unlocked.
+     * This associates a locked metadata cache entry with a node that must
+     * be verified first. There may be multiple that must be verified first
+     * before unlocking.
+     */
+    std::unordered_multimap<uint64_t, uint64_t> pendingToUnlock;
+
+    /**
+     * Attempt to unlock a metadata cache entry given a node was just verified.
+     * It may be the case that all verifications waiting on this cache entry
+     * are complete. In this case, the node can be unlocked. Otherwise, the
+     * node will remain locked. If the node verified does not affect the lock
+     * dependency list, nothing will be unlocked.
+     */
+    void unlockIfPossible(uint64_t node, uint64_t newly_verified);
+
+    /**
      * Track when each request arrives (when it is accepted).
      */
     std::unordered_map<RequestPtr, Tick> arrivalTime;
+
+    std::string printPendingToUnlock();
 
     /**
      * A sanity checking function that ensures the `packetLookup` list is

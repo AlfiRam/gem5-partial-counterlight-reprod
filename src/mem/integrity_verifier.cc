@@ -267,6 +267,19 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         // Account for the request being complete.
         DPRINTF(AbstractIntegrityVerifier, "%s: pkt %s has parent available\n",
             __func__, pkt->print());
+        if (!parentNodeIsSecureRoot(pkt) && pkt->isMetadataRequest()) {
+            // Handle locking just in case we have trouble inserting to the
+            // metadata cache right away, if this was a metadata request.
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: Adding relationship between %llu and the node depending "
+                "on it, %llu\n",
+                __func__, parentNode, pkt->getMetadataNode());
+            pendingToUnlock.insert({parentNode, pkt->getMetadataNode()});
+            metadataCache.lockDupeOkay(parentNode);
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s:%d: %s",
+                __func__, __LINE__, printPendingToUnlock());
+        }
         completeIntegrityVerification(pkt);
 
         return true;
@@ -514,6 +527,25 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     }
     assert(inserted);
 
+    if (outstandingMetadataRequests.find(pkt->getMetadataNode()) !=
+        outstandingMetadataRequests.end()) {
+        // If there are metadata requests that were waiting for this node,
+        // we will temporarily lock it from being evicted.
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Locking cache line %llu for outstanding "
+            "metadata request(s)\n",
+            __func__, pkt->getMetadataNode());
+        metadataCache.lock(pkt->getMetadataNode());
+    }
+
+    // Now that this node has been cached, see if the parent node is now safe
+    // to evict.
+    if (!parentNodeIsSecureRoot(pkt)) {
+        unlockIfPossible(
+            integrityTree.parentBlockIndex(pkt->getMetadataNode()),
+            pkt->getMetadataNode());
+    }
+
     // Now that the data is cached, we can officially call this verified and
     // done.
     outstandingIntegrityVerification.erase(pkt);
@@ -543,6 +575,21 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
         metadataCache.finishEvict(e.first);
         bool result = completeIntegrityVerification(e.second);
 
+        if (!result) {
+            // We couldn't complete all the verifications that relied upon
+            // the addition of this node right away. We will make a note of
+            // this and only unlock the line from the cache when all those
+            // verifications are completed.
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: Adding relationship between %llu and the node depending "
+                "on it, %llu\n",
+                __func__, pkt->getMetadataNode(), e.second->getMetadataNode());
+            pendingToUnlock.insert({pkt->getMetadataNode(),
+                                    e.second->getMetadataNode()});
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s:%d: %s",
+                __func__, __LINE__, printPendingToUnlock());
+        }
     }
     outstandingMetadataEvictions.erase(pkt->getMetadataNode());
 
@@ -577,9 +624,61 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     // Consider this metadata request now received.
     outstandingMetadataRequests.erase(pkt->getMetadataNode());
 
+    // If there are no nodes that are depending on this anymore, unlock
+    // the cache line now.
+    if (pendingToUnlock.find(pkt->getMetadataNode()) ==
+        pendingToUnlock.end()) {
+        metadataCache.unlock(pkt->getMetadataNode());
+    }
+
     delete pkt;
 
     return true;
+}
+
+void
+AbstractIntegrityVerifier::unlockIfPossible(
+    uint64_t node,
+    uint64_t newly_verified
+) {
+    // First, remove the newly-verified entry from the pending unlock list.
+    // auto pending = pendingToUnlock.equal_range(node);
+    // std::vector<std::pair<uint64_t, PacketPtr>> toEvict;
+    bool pendingListModified = false;
+    for (auto it = pendingToUnlock.begin(); it != pendingToUnlock.end();) {
+    // for (auto it = pending.first; it != pending.second;) {
+        if (it->first == node && it->second == newly_verified) {
+            // This node has been verified and is no longer holding up its
+            // parent.
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: Removing relationship between %llu and the node "
+                "depending on it, %llu\n",
+                __func__, it->first, it->second);
+            it = pendingToUnlock.erase(it);
+            pendingListModified = true;
+        } else {
+            it++;
+        }
+    }
+
+    if (!pendingListModified) {
+        // The pending to unlock list was not modified, so unlocking this cache
+        // line should be done elsewhere.
+        return;
+    }
+
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s:%d: %s",
+        __func__, __LINE__, printPendingToUnlock());
+
+    // Then check the list if it can be unlocked.
+    if (pendingToUnlock.find(node) == pendingToUnlock.end()) {
+        // This node can be unlocked. Three are no more dependencies.
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Unlocking cache line %llu\n",
+            __func__, node);
+        metadataCache.unlock(node);
+    }
 }
 
 
@@ -725,6 +824,27 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
         "%s: arrivalTime decreased. size: %d\n",
         __func__, arrivalTime.size());
+}
+
+
+std::string
+AbstractIntegrityVerifier::printPendingToUnlock()
+{
+    std::ostringstream str;
+
+    ccprintf(str, "pendingToUnlock size: %d\n", pendingToUnlock.size());
+    for (auto it = pendingToUnlock.begin();
+        it != pendingToUnlock.end();
+        it++) {
+        auto locked = it->first;
+        auto depending_on_locked = it->second;
+
+        ccprintf(str,
+            "- Node %llu is depending on locked node %llu\n",
+            depending_on_locked, locked);
+    }
+
+    return str.str();
 }
 
 void
