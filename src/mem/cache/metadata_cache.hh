@@ -20,6 +20,7 @@ class SimpleMetadataCache
     {
       bool dirty;
       bool pending_eviction;
+      bool locked;
     } EntryValue;
 
   private:
@@ -42,6 +43,13 @@ class SimpleMetadataCache
      * inaccessible until they are properly evicted.
      */
     unsigned int lines_pending_eviction;
+
+    /**
+     * Internal count for the number of cache lines that are locked and cannot
+     * be evicted. This is the case if a cache line is depended on by another
+     * cache line that is pending insertion.
+     */
+    unsigned int locked_lines;
 
   public:
     SimpleMetadataCache(unsigned int capacity);
@@ -77,6 +85,22 @@ class SimpleMetadataCache
      * This assumes that `data` already exists in the cache.
      */
     void modify(EntryKey modified_data);
+
+    /**
+     * Lock a node to prevent it from being evicted.
+     */
+    void lock(EntryKey data);
+
+    /**
+     * Lock a node, but do not panic if this is called on an already-locked
+     * node.
+     */
+    void lockDupeOkay(EntryKey data);
+
+    /**
+     * Unlock a node to allow it to be evicted.
+     */
+    void unlock(EntryKey data);
 
     size_t getSize();
 

@@ -9,7 +9,8 @@
 namespace gem5
 {
   SimpleMetadataCache::SimpleMetadataCache(unsigned int capacity) :
-    capacity(capacity), dirty_lines(0), lines_pending_eviction(0)
+    capacity(capacity), dirty_lines(0), lines_pending_eviction(0),
+    locked_lines(0)
   {
     srand(time(0));
   }
@@ -35,7 +36,8 @@ namespace gem5
 
     EntryValue entry_value = {
       .dirty = false,
-      .pending_eviction = false
+      .pending_eviction = false,
+      .locked = false
     };
     _data.emplace(new_data, entry_value);
     DPRINTF(SimpleMetadataCache,
@@ -84,15 +86,57 @@ namespace gem5
     }
 
     // Mark the data item as dirty.
-    EntryValue entry_value = {
-      .dirty = true,
-      .pending_eviction = false
-    };
-    _data[modified_data] = entry_value;
+    _data[modified_data].dirty = true;
     dirty_lines++;
 
     DPRINTF(SimpleMetadataCache, "%s: Dirty lines count increased to %u\n",
       __func__, dirty_lines);
+  }
+
+  void
+  SimpleMetadataCache::lock(EntryKey data)
+  {
+    assert(contains(data));
+    assert(!_data[data].locked);
+
+    DPRINTF(SimpleMetadataCache, "%s: Locking line %llu.\n",
+      __func__, data);
+    _data[data].locked = true;
+    locked_lines++;
+    DPRINTF(SimpleMetadataCache, "%s: locked_lines increased to %d\n",
+      __func__, locked_lines);
+  }
+
+  void
+  SimpleMetadataCache::lockDupeOkay(EntryKey data)
+  {
+    assert(contains(data));
+    DPRINTF(SimpleMetadataCache, "%s: Locking line %llu.\n",
+      __func__, data);
+
+    if (_data[data].locked) {
+      DPRINTF(SimpleMetadataCache, "%s: %llu already locked.\n",
+      __func__, data);
+    } else {
+      _data[data].locked = true;
+      locked_lines++;
+      DPRINTF(SimpleMetadataCache, "%s: locked_lines increased to %d\n",
+        __func__, locked_lines);
+    }
+  }
+
+  void
+  SimpleMetadataCache::unlock(EntryKey data)
+  {
+    assert(contains(data));
+    assert(_data[data].locked);
+
+    DPRINTF(SimpleMetadataCache, "%s: Unlocking line %llu.\n",
+      __func__, data);
+    _data[data].locked = false;
+    locked_lines--;
+    DPRINTF(SimpleMetadataCache, "%s: locked_lines decreased to %d\n",
+      __func__, locked_lines);
   }
 
   size_t
@@ -113,7 +157,9 @@ namespace gem5
     assert(getSize() > 0);
 
     // Calculate the number of cache lines that may be evicted.
-    unsigned int potential_evicts = getSize() - lines_pending_eviction;
+    unsigned int potential_evicts = getSize()
+                                      - lines_pending_eviction
+                                      - locked_lines;
 
     // Change this number based on if the ignored data is in the cache.
     if (contains(ignored_data)) {
@@ -127,10 +173,11 @@ namespace gem5
     size_t i = 0;
     for (size_t i = 0; i < getSize();) {
       if (iterator->first != ignored_data &&
-          !iterator->second.pending_eviction) {
-        // If this is not an ignored cache line, and the line isn't already
-        // pending eviction, count this as a potentially-selected item to
-        // evict.
+          !iterator->second.pending_eviction &&
+          !iterator->second.locked) {
+        // If this is not an ignored cache line, the line isn't already pending
+        // eviction, and the line isn't locked, count this as a
+        // potentially-selected item to evict.
         if (i == randomIndex) {
           // We have found the element we are looking for.
           break;
