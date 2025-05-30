@@ -543,8 +543,6 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
         metadataCache.finishEvict(e.first);
         bool result = completeIntegrityVerification(e.second);
 
-        // Resend requests that were waiting for this eviction.
-        rescheduleReqFromEviction(e.first);
     }
     outstandingMetadataEvictions.erase(pkt->getMetadataNode());
 
@@ -670,13 +668,6 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
     parent.requestPort.schedTimingReq(pkt, when);
 
     return true;
-}
-
-
-void
-AbstractIntegrityVerifier::rescheduleReqFromEviction(uint64_t data)
-{
-    // TODO stub
 }
 
 

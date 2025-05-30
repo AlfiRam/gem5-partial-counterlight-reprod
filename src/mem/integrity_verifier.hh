@@ -207,11 +207,6 @@ class AbstractIntegrityVerifier : public ClockedObject
     bool handleMetadataAddition(PacketPtr pkt);
 
     /**
-     * Schedule to try any requests again that were waiting on an eviction.
-     */
-    void rescheduleReqFromEviction(uint64_t data);
-
-    /**
      * Schedule to send a request to memory.
      */
     void sendReqToMem(PacketPtr pkt);
@@ -320,13 +315,6 @@ class AbstractIntegrityVerifier : public ClockedObject
       uint64_t,
       std::pair<uint64_t, RequestPtr>
     > outstandingMetadataEvictions;
-
-    /**
-     * Requests that are specifically waiting for the eviction of a particular
-     * metadata node value, because they were requesting the node while it was
-     * pending eviction.
-     */
-    std::unordered_multimap<uint64_t, RequestPtr> reqWaitingForEviction;
 
     /**
      * Track when each request arrives (when it is accepted).
