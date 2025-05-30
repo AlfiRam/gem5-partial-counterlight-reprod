@@ -101,6 +101,8 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier, "%s: Recv resp %s\n",
         __func__, pkt->print());
 
+    parent.sanityCheckPacketLookup();
+
     // Read data must be verified first before it can be used.
     // Don't do anything special for memory requests that are not actually
     // for memory.
@@ -651,6 +653,8 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier, "%s: Recv req %s\n",
         __func__, pkt->print());
 
+    parent.sanityCheckPacketLookup();
+
     // Read data must be verified first before it can be used.
     // Don't do anything special for memory requests that are not actually
     // for memory.
@@ -750,6 +754,38 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
         "%s: arrivalTime decreased. size: %d\n",
         __func__, arrivalTime.size());
+}
+
+void
+AbstractIntegrityVerifier::sanityCheckPacketLookup()
+{
+    bool warned = false;
+
+    // Packets shouldn't be sitting in here for an extremely long time.
+    for (auto it : packetLookup) {
+        RequestPtr req = it.first;
+        PacketPtr pkt = it.second;
+        if (curTick() - req->time() > Tick(500000000)) {
+            warn("Request for 0x%x (%p), declared at tick %llu and "
+                 "associated with pkt %s (%p), has been in packetLookup for "
+                 "too long. Investigate further.",
+                 req->getPaddr(), req, req->time(),
+                 pkt->print(), pkt);
+            warned = true;
+        }
+    }
+
+    // Show other stats
+    if (warned) {
+        warn("packetLookup size: %d", packetLookup.size());
+        warn("arrivalTime size: %d", arrivalTime.size());
+        warn("outstandingMetadataRequests: %d",
+            outstandingMetadataRequests.size());
+        warn("outstandingMetadataEvictions: %d",
+            outstandingMetadataEvictions.size());
+        warn("outstandingIntegrityVerification: %d",
+            outstandingIntegrityVerification.size());
+    }
 }
 
 

@@ -321,6 +321,14 @@ class AbstractIntegrityVerifier : public ClockedObject
     std::unordered_map<RequestPtr, Tick> arrivalTime;
 
     /**
+     * A sanity checking function that ensures the `packetLookup` list is
+     * maintained with recent packets. If there are packets that are in this
+     * list for too long, it may indicate that there is a logical error and
+     * packets are lost or otherwise not handled correctly.
+     */
+    void sanityCheckPacketLookup();
+
+    /**
      * Time (in ticks) to complete hashing.
      *
      * TODO Define a default value
