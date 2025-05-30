@@ -287,6 +287,19 @@ class AbstractIntegrityVerifier : public ClockedObject
     std::unordered_map<RequestPtr, PacketPtr> packetLookup;
 
     /**
+     * Add a pairing of a request pointer with a packet pointer. As the request
+     * pointer is stored within the packet, only the packet is needed here.
+     */
+    void addToPacketLookup(PacketPtr pkt);
+
+    /**
+     * Remove a pairing of a request pointer with a packet pointer. As the
+     * request pointer is stored within the packet, only the packet is needed
+     * here.
+     */
+    void removeFromPacketLookup(PacketPtr pkt);
+
+    /**
      * Store the outstanding requests for integrity metadata. This associates
      * a tree ID with a pointer to the (child) request(s) that caused this.
      *

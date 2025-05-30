@@ -112,9 +112,7 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
         }
         else if (pkt->isWrite()) {
             // Mark write response packet as returned.
-            assert(parent.packetLookup.find(pkt->req) !=
-                   parent.packetLookup.end());
-            parent.packetLookup.erase(pkt->req);
+            parent.removeFromPacketLookup(pkt);
             parent.markReqEnd(pkt);
         }
         // If this is something else (e.g., UpgradeResp), drop to the default
@@ -244,15 +242,7 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         // A read response should already be put in after being requested.
         assert(packetLookup.find(pkt->req) != packetLookup.end());
     } else {
-        assert(packetLookup.find(pkt->req) == packetLookup.end());
-        packetLookup.emplace(pkt->req, pkt);
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
-            __func__,
-            pkt->req->hasPaddr() ? pkt->req->getPaddr() : 9999999,
-            pkt->req,
-            pkt->print(),
-            pkt);
+        addToPacketLookup(pkt);
     }
 
 
@@ -423,8 +413,7 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
 
     // Officially consider this verified.
     outstandingIntegrityVerification.erase(pkt);
-    assert(packetLookup.find(pkt->req) != packetLookup.end());
-    packetLookup.erase(pkt->req);
+    removeFromPacketLookup(pkt);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Verified pkt %s\n", __func__, pkt->print());
 
@@ -528,8 +517,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     // Now that the data is cached, we can officially call this verified and
     // done.
     outstandingIntegrityVerification.erase(pkt);
-    assert(packetLookup.find(pkt->req) != packetLookup.end());
-    packetLookup.erase(pkt->req);
+    removeFromPacketLookup(pkt);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Verified pkt %s\n", __func__, pkt->print());
 
@@ -705,15 +693,7 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
         return;
     }
 
-    assert(packetLookup.find(pkt->req) == packetLookup.end());
-    packetLookup.emplace(pkt->req, pkt);
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
-        __func__,
-        pkt->req->hasPaddr() ? pkt->req->getPaddr() : 9999999,
-        pkt->req,
-        pkt->print(),
-        pkt);
+    addToPacketLookup(pkt);
     markReqStart(pkt);
 }
 
@@ -754,6 +734,33 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
         "%s: arrivalTime decreased. size: %d\n",
         __func__, arrivalTime.size());
+}
+
+void
+AbstractIntegrityVerifier::addToPacketLookup(PacketPtr pkt)
+{
+    assert(packetLookup.find(pkt->req) == packetLookup.end());
+    packetLookup.emplace(pkt->req, pkt);
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: packetLookup increased. size: %d\n",
+        __func__, packetLookup.size());
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Associating req 0x%x (%p) with pkt %s (%p)\n",
+        __func__,
+        pkt->req->hasPaddr() ? pkt->req->getPaddr() : 9999999,
+        pkt->req,
+        pkt->print(),
+        pkt);
+}
+
+void
+AbstractIntegrityVerifier::removeFromPacketLookup(PacketPtr pkt)
+{
+    assert(packetLookup.find(pkt->req) != packetLookup.end());
+    packetLookup.erase(pkt->req);
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: packetLookup decreased. size: %d\n",
+        __func__, packetLookup.size());
 }
 
 void
