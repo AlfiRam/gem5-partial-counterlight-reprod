@@ -184,8 +184,10 @@ class AbstractIntegrityVerifier : public ClockedObject
      * metadata request, the metadata is inserted into the cache.
      *
      * This will also trigger other metadata verifications if needed.
+     *
+     * @returns Whether integrity verification was completed successfully.
      */
-    void completeIntegrityVerification(PacketPtr pkt);
+    bool completeIntegrityVerification(PacketPtr pkt);
 
     /**
      * Called when a piece of metadata is being requested and has been
@@ -196,8 +198,13 @@ class AbstractIntegrityVerifier : public ClockedObject
      * In the case where data must be evicted, the eviction is completed first,
      * new metadata can be added to the cache, and then the depending metadata
      * requests can be fulfilled.
+     *
+     * @returns Whether the metadata was added to the cache (and completed)
+     *          successfully. There may be cases where we could not add this
+     *          metadata to the cache because an eviction is needed first. In
+     *          that case, this function should be called again after eviction.
      */
-    void handleMetadataAddition(PacketPtr pkt);
+    bool handleMetadataAddition(PacketPtr pkt);
 
     /**
      * Schedule to try any requests again that were waiting on an eviction.

@@ -386,7 +386,7 @@ AbstractIntegrityVerifier::parentNodeAvailable(PacketPtr pkt)
 }
 
 
-void
+bool
 AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
 {
     // Check if both the hash generation is finished and the corresponding
@@ -398,13 +398,13 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
             "hash incomplete\n",
             __func__, pkt->print());
-        return;
+        return false;
     } else if (!parentNodeAvailable(pkt)) {
         // The parent node is not yet available. We are not ready to verify.
         DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
             "parent unavailable\n",
             __func__, pkt->print());
-        return;
+        return false;
     }
 
     // We are now ready to verify.
@@ -413,8 +413,7 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
     // Metadata requests have more logic involved so this is handled
     // separately.
     if (pkt->isMetadataRequest()) {
-        handleMetadataAddition(pkt);
-        return;
+        return handleMetadataAddition(pkt);
     }
 
     // The rest of this is for handling data packets.
@@ -449,10 +448,12 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         // This packet can now be properly forwarded to memory to complete.
         sendReqToMem(pkt);
     }
+
+    return true;
 }
 
 
-void
+bool
 AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
 {
     // Attempt to add the metadata to the cache.
@@ -506,7 +507,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
 
                 // Stop here, and we will call this function again later once
                 // the eviction is complete and we have a new free space.
-                return;
+                return false;
             }
             DPRINTF(AbstractIntegrityVerifier,
                 "%s: The parent of %lld is cached. Evicting %lld.\n",
@@ -550,7 +551,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             __func__, pkt->print(), e.first, e.second->print());
 
         metadataCache.finishEvict(e.first);
-        completeIntegrityVerification(e.second);
+        bool result = completeIntegrityVerification(e.second);
 
         // Resend requests that were waiting for this eviction.
         rescheduleReqFromEviction(e.first);
@@ -589,6 +590,8 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     outstandingMetadataRequests.erase(pkt->getMetadataNode());
 
     delete pkt;
+
+    return true;
 }
 
 
