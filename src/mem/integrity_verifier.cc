@@ -287,33 +287,26 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
 
     // If there is already an outstanding request for this parent node, we will
     // batch this with the existing request.
-    if (outstandingMetadataRequests.find(parentNode) !=
-        outstandingMetadataRequests.end()) {
+    bool needsRequest = outstandingMetadataRequests.find(parentNode) ==
+                        outstandingMetadataRequests.end();
+
+    outstandingMetadataRequests.insert({parentNode, pkt->req});
+    if (needsRequest) {
+        // A request has not yet been sent. We will craft a request packet for
+        // metadata to memory to get the parent node. Then we schedule the
+        // request.
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: outstandingMetadataRequests increased. size: %d\n",
+            __func__, outstandingMetadataRequests.size());
+
+        // Submit the packet to the memory controller.
+        PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
+        sendReqToMem(metadataRequestPkt);
+    } else {
         DPRINTF(AbstractIntegrityVerifier,
             "%s: %d is already being requested, batching\n",
             __func__, parentNode);
-        outstandingMetadataRequests.insert({parentNode, pkt->req});
-
-        return true;
     }
-
-    // A request has not yet been sent. We will craft a request packet for
-    // metadata to memory to get the parent node. Then we schedule the
-    // request.
-
-    PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
-
-    // Add to outstanding metadata requests
-    assert(outstandingMetadataRequests.find(parentNode) ==
-           outstandingMetadataRequests.end());
-    outstandingMetadataRequests.insert({parentNode, pkt->req});
-
-    // TODO Set the packet delay
-
-    // Submit the packet to the memory controller.
-    sendReqToMem(metadataRequestPkt);
-
-    // TODO Update stats
 
     // We will hold on to the original packet until the time comes to forward
     // this to the destination.
