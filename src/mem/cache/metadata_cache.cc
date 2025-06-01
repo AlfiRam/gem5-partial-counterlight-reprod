@@ -170,7 +170,6 @@ namespace gem5
     // For now, we will use random eviction. No dirty lines will be evicted.
     size_t randomIndex = rand() % potential_evicts;
     auto iterator = _data.begin();
-    size_t i = 0;
     for (size_t i = 0; i < getSize();) {
       if (iterator->first != ignored_data &&
           !iterator->second.pending_eviction &&
