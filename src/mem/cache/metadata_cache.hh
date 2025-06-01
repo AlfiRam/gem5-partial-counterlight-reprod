@@ -104,6 +104,12 @@ class SimpleMetadataCache
 
     size_t getSize();
 
+    unsigned int getDirtyLineCount();
+
+    unsigned int getPendingEvictionCount();
+
+    unsigned int getLockedLineCount();
+
     bool isFull();
 
     /**

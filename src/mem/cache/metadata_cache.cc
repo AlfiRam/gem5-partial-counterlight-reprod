@@ -145,6 +145,21 @@ namespace gem5
     return _data.size();
   }
 
+  unsigned int SimpleMetadataCache::getDirtyLineCount()
+  {
+    return dirty_lines;
+  }
+
+  unsigned int SimpleMetadataCache::getPendingEvictionCount()
+  {
+    return lines_pending_eviction;
+  }
+
+  unsigned int SimpleMetadataCache::getLockedLineCount()
+  {
+    return locked_lines;
+  }
+
   bool
   SimpleMetadataCache::isFull()
   {
