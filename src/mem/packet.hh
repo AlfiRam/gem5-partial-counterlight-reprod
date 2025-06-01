@@ -630,8 +630,8 @@ class Packet : public Printable, public Extensible<Packet>
      * The integrity structure node ID associated with this packet, if
      * applicable.
      */
-    size_t getMetadataNode() const     { return req->getMetadataNode(); }
-    void setMetadataNode(size_t node)  { req->setMetadataNode(node); }
+    uint64_t getMetadataNode() const     { return req->getMetadataNode(); }
+    void setMetadataNode(uint64_t node)  { req->setMetadataNode(node); }
 
     bool isWholeLineWrite(unsigned blk_size)
     {
