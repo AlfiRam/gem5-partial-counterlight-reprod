@@ -306,6 +306,8 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     std::unordered_multimap<uint64_t, RequestPtr> outstandingMetadataRequests;
 
+    void addToOutstandingMetadataRequests(uint64_t node, PacketPtr pkt);
+
     /**
      * Store the outstanding evictions for integrity metadata. This associates
      * a (parent) tree ID with a tree ID to be evicted and the request that

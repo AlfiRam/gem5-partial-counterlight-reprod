@@ -290,22 +290,13 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     bool needsRequest = outstandingMetadataRequests.find(parentNode) ==
                         outstandingMetadataRequests.end();
 
-    outstandingMetadataRequests.insert({parentNode, pkt->req});
+    addToOutstandingMetadataRequests(parentNode, pkt);
     if (needsRequest) {
         // A request has not yet been sent. We will craft a request packet for
         // metadata to memory to get the parent node. Then we schedule the
-        // request.
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: outstandingMetadataRequests increased. size: %d\n",
-            __func__, outstandingMetadataRequests.size());
-
-        // Submit the packet to the memory controller.
+        // request to the memory controller.
         PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
         sendReqToMem(metadataRequestPkt);
-    } else {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: %d is already being requested, batching\n",
-            __func__, parentNode);
     }
 
     // We will hold on to the original packet until the time comes to forward
@@ -479,11 +470,14 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                 // cached. We will request this first and come back to
                 // evicting once the parent is in the cache.
 
+                bool requestNeeded =
+                    outstandingMetadataRequests.find(evictParent) ==
+                    outstandingMetadataRequests.end();
+
                 // If there is already an outstanding request for this
                 // parent node, we will batch this with the existing
                 // request.
-                if (outstandingMetadataRequests.find(evictParent) !=
-                    outstandingMetadataRequests.end()) {
+                if (!requestNeeded) {
                     DPRINTF(AbstractIntegrityVerifier,
                         "%s: %d is already being requested, batching\n",
                         __func__, evictParent);
@@ -497,8 +491,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                     sendReqToMem(metadataReq);
                 }
 
-                outstandingMetadataRequests.insert(
-                                    {evictParent, nullptr});
+                addToOutstandingMetadataRequests(evictParent, nullptr);
                 outstandingMetadataEvictions.insert(
                     {evictParent, {evictedData.first, pkt->req}});
 
@@ -865,6 +858,46 @@ AbstractIntegrityVerifier::removeFromPacketLookup(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
         "%s: packetLookup decreased. size: %d\n",
         __func__, packetLookup.size());
+}
+
+void
+AbstractIntegrityVerifier::addToOutstandingMetadataRequests(
+    uint64_t node,
+    PacketPtr pkt
+)
+{
+    // Is this node already being required by another request?
+    bool batching = outstandingMetadataRequests.find(node) !=
+                    outstandingMetadataRequests.end();
+
+    if (pkt == nullptr) {
+        // In the case of eviction, a null pointer is used. The
+        // outstandingMetadataEvictions list should be used to ensure
+        // everything is satisfied.
+        outstandingMetadataRequests.insert({node, nullptr});
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: outstandingMetadataRequests updated. "
+            "Noting %llu is needed to evict a child node.\n",
+            __func__, node);
+    } else {
+        // Associate (parent) node `node` with the causing request `req`.
+        outstandingMetadataRequests.insert({node, pkt->req});
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: outstandingMetadataRequests updated. "
+            "Noting %llu is needed by %s\n",
+            __func__, node, pkt->print());
+    }
+
+    if (batching) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: %d is already being requested, batching. "
+            "outstandingMetadataRequests size: %d\n",
+            __func__, node, outstandingMetadataRequests.size());
+    } else {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: outstandingMetadataRequests increased. size: %d\n",
+            __func__, outstandingMetadataRequests.size());
+    }
 }
 
 void
