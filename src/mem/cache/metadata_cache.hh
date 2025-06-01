@@ -9,6 +9,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "mem/mtree/timing_tree.hh"
+
 namespace gem5
 {
 
@@ -51,8 +53,16 @@ class SimpleMetadataCache
      */
     unsigned int locked_lines;
 
+    /**
+     * Reference to integrity tree. Can be helpful for finding certain
+     * relationships between nodes.
+     */
+    TimingTree *_tree;
+
   public:
     SimpleMetadataCache(unsigned int capacity);
+
+    SimpleMetadataCache(unsigned int capacity, TimingTree *tree);
 
     ~SimpleMetadataCache();
 
@@ -127,7 +137,12 @@ class SimpleMetadataCache
      *         the 'pending eviction' flag set to true, the eviction is not
      *         complete.
      */
+    std::pair<EntryKey, EntryValue> evict(
+      std::unordered_set<EntryKey> ignored_data);
+
     std::pair<EntryKey, EntryValue> evict(EntryKey ignored_data);
+
+    std::pair<EntryKey, EntryValue> evict();
 
     /**
      * Finish an eviction as followed from `evict()`.

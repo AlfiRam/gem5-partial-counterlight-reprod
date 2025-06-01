@@ -10,9 +10,16 @@ namespace gem5
 {
   SimpleMetadataCache::SimpleMetadataCache(unsigned int capacity) :
     capacity(capacity), dirty_lines(0), lines_pending_eviction(0),
-    locked_lines(0)
+    locked_lines(0), _tree(nullptr)
   {
     srand(time(0));
+  }
+
+  SimpleMetadataCache::SimpleMetadataCache(
+    unsigned int capacity, TimingTree *tree
+  ) : SimpleMetadataCache(capacity)
+  {
+    _tree = tree;
   }
 
   SimpleMetadataCache::~SimpleMetadataCache()
@@ -167,7 +174,7 @@ namespace gem5
   }
 
   std::pair<SimpleMetadataCache::EntryKey, SimpleMetadataCache::EntryValue>
-  SimpleMetadataCache::evict(EntryKey ignored_data)
+  SimpleMetadataCache::evict(std::unordered_set<EntryKey> ignored_data)
   {
     assert(getSize() > 0);
 
@@ -177,21 +184,48 @@ namespace gem5
                                       - locked_lines;
 
     // Change this number based on if the ignored data is in the cache.
-    if (contains(ignored_data)) {
-      potential_evicts--;
+    for (auto it : ignored_data) {
+      if (contains(it)) {
+        potential_evicts--;
+      }
     }
+
+    // Go through the cache and see if any nodes depend on something on the
+    // ignore list.
+    if (_tree != nullptr) {
+      for (auto it : _data) {
+        if (it.first != 0 &&
+            !it.second.pending_eviction &&
+            !it.second.locked &&
+            ignored_data.find(it.first) == ignored_data.end() &&
+            ignored_data.find(_tree->parentBlockIndex(it.first)) !=
+                              ignored_data.end()) {
+          // The parent of this node is in the ignore list.
+          potential_evicts--;
+        }
+      }
+    }
+
     assert(potential_evicts > 0);
 
-    // For now, we will use random eviction. No dirty lines will be evicted.
+    // For now, we will use random eviction.
     size_t randomIndex = rand() % potential_evicts;
     auto iterator = _data.begin();
     for (size_t i = 0; i < getSize();) {
-      if (iterator->first != ignored_data &&
+      if (// Not an ignored cache line,
+          ignored_data.find(iterator->first) == ignored_data.end() &&
+          // Parent of this entry is not an ignored cache line,
+          (_tree == nullptr ||
+            iterator->first == 0 ||
+            ignored_data.find(_tree->parentBlockIndex(iterator->first))
+              == ignored_data.end()) &&
+          // Not pending eviction, and
           !iterator->second.pending_eviction &&
-          !iterator->second.locked) {
-        // If this is not an ignored cache line, the line isn't already pending
-        // eviction, and the line isn't locked, count this as a
-        // potentially-selected item to evict.
+          // Not locked
+          !iterator->second.locked)
+      {
+        // Count this as a potentially-selected item to evict.
+
         if (i == randomIndex) {
           // We have found the element we are looking for.
           break;
@@ -230,6 +264,21 @@ namespace gem5
 
     // Returns a copy of this entry in the metadata cache.
     return *iterator;
+  }
+
+  std::pair<SimpleMetadataCache::EntryKey, SimpleMetadataCache::EntryValue>
+  SimpleMetadataCache::evict(EntryKey ignored_data)
+  {
+    std::unordered_set<EntryKey> _ignored_data;
+    _ignored_data.insert(ignored_data);
+
+    return evict(_ignored_data);
+  }
+
+  std::pair<SimpleMetadataCache::EntryKey, SimpleMetadataCache::EntryValue>
+  SimpleMetadataCache::evict()
+  {
+    return evict(std::unordered_set<EntryKey>());
   }
 
   void
