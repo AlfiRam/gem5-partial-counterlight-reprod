@@ -518,7 +518,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     // to evict.
     if (!parentNodeIsSecureRoot(pkt)) {
         unlockIfPossible(
-            integrityTree.parentBlockIndex(pkt->getMetadataNode()),
+            getParentNode(pkt),
             pkt->getMetadataNode());
     }
 
