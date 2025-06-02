@@ -231,7 +231,9 @@ namespace gem5
   }
 
   std::pair<SimpleMetadataCache::EntryKey, SimpleMetadataCache::EntryValue>
-  SimpleMetadataCache::evict(std::unordered_set<EntryKey> ignored_data)
+  SimpleMetadataCache::evict(
+    std::unordered_set<EntryKey> ignored_data,
+    EntryKey replacement)
   {
     assert(getSize() > 0);
 
@@ -247,6 +249,11 @@ namespace gem5
       }
     }
 
+    EntryKey replacementParent = 0;
+    if (replacement != 0 && _tree != nullptr) {
+      replacementParent = _tree->parentBlockIndex(replacement);
+    }
+
     // Go through the cache and see if any nodes depend on something on the
     // ignore list.
     if (_tree != nullptr) {
@@ -258,6 +265,16 @@ namespace gem5
             ignored_data.find(_tree->parentBlockIndex(it.first)) !=
                               ignored_data.end()) {
           // The parent of this node is in the ignore list.
+          potential_evicts--;
+        } else if (it.first != 0 &&
+            !it.second.pending_eviction &&
+            !it.second.locked &&
+            replacement != 0 &&
+            _tree->isAncestor(replacement, it.first) &&
+            getLowestCachedAncestor(it.first) == replacementParent
+            ) {
+          // Trying to evict this node would create a circular dependency for
+          // this particular replacement.
           potential_evicts--;
         }
       }
@@ -276,6 +293,13 @@ namespace gem5
             iterator->first == 0 ||
             ignored_data.find(_tree->parentBlockIndex(iterator->first))
               == ignored_data.end()) &&
+          // Trying to evict this entry would not create a circular dependency
+          // for this particular replacement,
+          (_tree == nullptr ||
+            iterator->first == 0 ||
+            replacement == 0 ||
+            !_tree->isAncestor(replacement, iterator->first) ||
+            getLowestCachedAncestor(iterator->first) != replacementParent) &&
           // Not pending eviction, and
           !iterator->second.pending_eviction &&
           // Not locked
@@ -321,6 +345,12 @@ namespace gem5
 
     // Returns a copy of this entry in the metadata cache.
     return *iterator;
+  }
+
+  std::pair<SimpleMetadataCache::EntryKey, SimpleMetadataCache::EntryValue>
+  SimpleMetadataCache::evict(std::unordered_set<EntryKey> ignored_data)
+  {
+    return evict(ignored_data, 0);
   }
 
   std::pair<SimpleMetadataCache::EntryKey, SimpleMetadataCache::EntryValue>

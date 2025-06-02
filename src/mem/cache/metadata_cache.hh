@@ -147,10 +147,16 @@ class SimpleMetadataCache
      * selected for eviction.
      *
      * @param ignored_data Data that should not be evicted.
+     * @param replacement The node that is intended to replace the evicted
+     *                    cache line. If no replacement is specified, `0` can
+     *                    be used to indicate the replacement.
      * @return The data that was evicted. Note that if the entry returned has
      *         the 'pending eviction' flag set to true, the eviction is not
      *         complete.
      */
+    std::pair<EntryKey, EntryValue> evict(
+      std::unordered_set<EntryKey> ignored_data, EntryKey replacement);
+
     std::pair<EntryKey, EntryValue> evict(
       std::unordered_set<EntryKey> ignored_data);
 
