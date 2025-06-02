@@ -549,23 +549,13 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             __func__, pkt->print(), e.first, e.second->print());
 
         metadataCache.finishEvict(e.first);
-        bool result = completeIntegrityVerification(e.second);
+        bool successful = completeIntegrityVerification(e.second);
 
-        if (!result) {
-            // We couldn't complete all the verifications that relied upon
-            // the addition of this node right away. We will make a note of
-            // this and only unlock the line from the cache when all those
-            // verifications are completed.
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s: Adding relationship between %llu and the node depending "
-                "on it, %llu\n",
-                __func__, pkt->getMetadataNode(), e.second->getMetadataNode());
-            pendingToUnlock.insert({pkt->getMetadataNode(),
-                                    e.second->getMetadataNode()});
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s:%d: %s",
-                __func__, __LINE__, printPendingToUnlock());
-        }
+        // If insertion wasn't successful immediately after eviction,
+        // something is very wrong. This would imply that the replacement to
+        // the eviction victim was never really ready to insert the first
+        // time it tried to be inserted into the metadata cache.
+        assert(successful);
     }
     outstandingMetadataEvictions.erase(pkt->getMetadataNode());
 
