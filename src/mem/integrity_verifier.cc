@@ -1085,6 +1085,31 @@ AbstractIntegrityVerifier::addToOutstandingMetadataRequests(
 }
 
 void
+AbstractIntegrityVerifier::removeFromOutstandingMetadataRequests(
+    uint64_t node,
+    PacketPtr pkt
+)
+{
+    bool removed = false;
+    RequestPtr req = pkt ? pkt->req : nullptr;
+
+    for (auto it = outstandingMetadataRequests.begin();
+         it != outstandingMetadataRequests.end();) {
+        if (it->first == node && it->second == req) {
+            it = outstandingMetadataRequests.erase(it);
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: outstandingMetadataRequests decreased. size: %d\n",
+                __func__, outstandingMetadataRequests.size());
+            removed = true;
+        } else {
+            it++;
+        }
+    }
+
+    assert(removed);
+}
+
+void
 AbstractIntegrityVerifier::addToPendingToUnlock(
     uint64_t locked,
     uint64_t depending_node

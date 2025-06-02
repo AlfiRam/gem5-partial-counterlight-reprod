@@ -314,6 +314,8 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     void addToOutstandingMetadataRequests(uint64_t node, PacketPtr pkt);
 
+    void removeFromOutstandingMetadataRequests(uint64_t node, PacketPtr pkt);
+
     /**
      * Store the outstanding evictions for integrity metadata. This associates
      * a (parent) tree ID with a tree ID to be evicted and the request that
