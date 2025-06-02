@@ -100,6 +100,9 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         :param membus: The memory bus. This parameter is optional parameter and
                        will default to a 64 bit width SystemXBar is not
                        specified.
+        :param metadata_cache_size: The size of the metadata cache by the
+                                    number of entries it can store. This
+                                    parameter is optional.
         """
 
         AbstractClassicCacheHierarchy.__init__(self=self)
@@ -114,6 +117,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         )
 
         self.membus = membus if membus else self._get_default_membus()
+        # TODO Panic if metadata cache size is invalid (< 1)
         if metadata_cache_size:
             self._metadata_cache_size = metadata_cache_size
         else:
