@@ -231,6 +231,12 @@ class TimingTree : AbstractIntegrityTree
 
   public:
     /**
+     * Determine if a given parent block index is an ancestor of a child block
+     * index.
+     */
+    bool isAncestor(size_t parent, size_t child);
+
+    /**
      * Get the index of the block (this will be a leaf) that corresponds to
      * a given address.
      *

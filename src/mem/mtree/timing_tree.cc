@@ -175,6 +175,25 @@ bool TimingTree::isLeaf(size_t index) {
 }
 
 
+bool TimingTree::isAncestor(size_t parent, size_t child) {
+  assert(parent != child);
+
+  while (parent < child) {
+    child = parentBlockIndex(child);
+    if (child < parent) {
+      // Child hopped to the same level as or above the parent.
+      // Not an ancestor.
+      return false;
+    } else if (child == parent) {
+      // This is an ancestor.
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
 size_t TimingTree::addressToBlockIndex(size_t address) {
   // Get the index of the first leaf node.
   size_t firstLeafIndex = integerPower(arity, height - 1)/(arity - 1);
