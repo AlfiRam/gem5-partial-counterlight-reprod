@@ -320,11 +320,19 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     /**
      * Requests that are blocking a metadata cache line from being unlocked.
-     * This associates a locked metadata cache entry with a node that must
+     * This associates a locked metadata cache entry with nodes that must
      * be verified first. There may be multiple that must be verified first
      * before unlocking.
+     *
+     * - First in pair: node being locked
+     * - Second in pair: list of nodes causing the lock
+     *
+     * Note that the node causing the lock may be "0", indicating that the lock
+     * was created by a data request.
      */
-    std::unordered_multimap<uint64_t, uint64_t> pendingToUnlock;
+    std::unordered_map<uint64_t, std::list<uint64_t>> pendingToUnlock;
+
+    void addToPendingToUnlock(uint64_t locked, uint64_t depending_node);
 
     /**
      * Attempt to unlock a metadata cache entry given a node was just verified.

@@ -267,18 +267,15 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         // Account for the request being complete.
         DPRINTF(AbstractIntegrityVerifier, "%s: pkt %s has parent available\n",
             __func__, pkt->print());
-        if (!parentNodeIsSecureRoot(pkt) && pkt->isMetadataRequest()) {
+        if (!parentNodeIsSecureRoot(pkt)) {
             // Handle locking just in case we have trouble inserting to the
-            // metadata cache right away, if this was a metadata request.
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s: Adding relationship between %llu and the node depending "
-                "on it, %llu\n",
-                __func__, parentNode, pkt->getMetadataNode());
-            pendingToUnlock.insert({parentNode, pkt->getMetadataNode()});
+            // metadata cache right away.
+            if (pkt->isMetadataRequest()) {
+                addToPendingToUnlock(parentNode, pkt->getMetadataNode());
+            } else {
+                addToPendingToUnlock(parentNode, 0);
+            }
             metadataCache.lockDupeOkay(parentNode);
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s:%d: %s",
-                __func__, __LINE__, printPendingToUnlock());
         }
         completeIntegrityVerification(pkt);
 
@@ -628,20 +625,28 @@ AbstractIntegrityVerifier::unlockIfPossible(
     uint64_t newly_verified
 ) {
     // First, remove the newly-verified entry from the pending unlock list.
-    // auto pending = pendingToUnlock.equal_range(node);
-    // std::vector<std::pair<uint64_t, PacketPtr>> toEvict;
     bool pendingListModified = false;
+    bool vectorEmptied = false;
     for (auto it = pendingToUnlock.begin(); it != pendingToUnlock.end();) {
-    // for (auto it = pending.first; it != pending.second;) {
-        if (it->first == node && it->second == newly_verified) {
-            // This node has been verified and is no longer holding up its
-            // parent.
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s: Removing relationship between %llu and the node "
-                "depending on it, %llu\n",
-                __func__, it->first, it->second);
-            it = pendingToUnlock.erase(it);
-            pendingListModified = true;
+        if (it->first == node) {
+            auto depending_on_locked = &(it->second);
+            auto itt = depending_on_locked->begin();
+            while (itt != depending_on_locked->end()) {
+                if (*itt == newly_verified) {
+                    // This node has been verified and is no longer holding up
+                    // its parent.
+                    itt = depending_on_locked->erase(itt);
+                    pendingListModified = true;
+                    if (depending_on_locked->size() == 0) {
+                        vectorEmptied = true;
+                    }
+                    break;
+                } else {
+                    itt++;
+                }
+            }
+
+            if (pendingListModified) break;
         } else {
             it++;
         }
@@ -651,6 +656,23 @@ AbstractIntegrityVerifier::unlockIfPossible(
         // The pending to unlock list was not modified, so unlocking this cache
         // line should be done elsewhere.
         return;
+    }
+
+    if (newly_verified != 0) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Removed relationship between %llu and the node "
+            "depending on it, %llu\n",
+            __func__, node, newly_verified);
+    } else {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Removed relationship between %llu and a data request that "
+            "depended on it\n",
+            __func__, node);
+    }
+
+    // If the vector now has 0 elements, remove this key entirely from the map.
+    if (vectorEmptied) {
+        pendingToUnlock.erase(node);
     }
 
     DPRINTF(AbstractIntegrityVerifier,
@@ -825,9 +847,18 @@ AbstractIntegrityVerifier::printPendingToUnlock()
         auto locked = it->first;
         auto depending_on_locked = it->second;
 
-        ccprintf(str,
-            "- Node %llu is depending on locked node %llu\n",
-            depending_on_locked, locked);
+        for (auto item : depending_on_locked) {
+            if (item != 0) {
+                ccprintf(str,
+                    "- Node %llu is depending on locked node %llu\n",
+                    item, locked);
+            } else {
+                // 0 indicates a data request.
+                ccprintf(str,
+                    "- A data request is depending on locked node %llu\n",
+                    locked);
+            }
+        }
     }
 
     return str.str();
@@ -899,6 +930,40 @@ AbstractIntegrityVerifier::addToOutstandingMetadataRequests(
             __func__, outstandingMetadataRequests.size());
     }
 }
+
+void
+AbstractIntegrityVerifier::addToPendingToUnlock(
+    uint64_t locked,
+    uint64_t depending_node
+)
+{
+    if (depending_node != 0) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Adding relationship between %llu and the node depending "
+            "on it, %llu\n",
+            __func__, locked, depending_node);
+    } else {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Adding relationship between %llu and a data request "
+            "that depends on it\n",
+            __func__, locked);
+    }
+
+    auto search = pendingToUnlock.find(locked);
+    bool exists = search != pendingToUnlock.end();
+
+    if (exists) {
+        search->second.push_back(depending_node);
+    } else {
+        pendingToUnlock.insert({locked, std::list<uint64_t>()});
+        pendingToUnlock[locked].push_back(depending_node);
+    }
+
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s:%d: %s",
+        __func__, __LINE__, printPendingToUnlock());
+}
+
 
 void
 AbstractIntegrityVerifier::sanityCheckPacketLookup()
