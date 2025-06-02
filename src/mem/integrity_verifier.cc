@@ -474,14 +474,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                 // If there is already an outstanding request for this
                 // parent node, we will batch this with the existing
                 // request.
-                if (!requestNeeded) {
-                    DPRINTF(AbstractIntegrityVerifier,
-                        "%s: %d is already being requested, batching\n",
-                        __func__, evictParent);
-                } else {
-                    DPRINTF(AbstractIntegrityVerifier,
-                        "%s: %d is not yet requested\n",
-                        __func__, evictParent);
+                if (requestNeeded) {
                     // Request does not already exist. Create and send out.
                     PacketPtr metadataReq = generateMetadataRequest(
                                         evictParent);
