@@ -112,6 +112,12 @@ class SimpleMetadataCache
      */
     void unlock(EntryKey data);
 
+    /**
+     * Unlock a node, but do not panic if this is called on an already-unlocked
+     * node.
+     */
+    void unlockDupeOkay(EntryKey data);
+
     size_t getSize();
 
     unsigned int getDirtyLineCount();

@@ -146,6 +146,24 @@ namespace gem5
       __func__, locked_lines);
   }
 
+  void
+  SimpleMetadataCache::unlockDupeOkay(EntryKey data)
+  {
+    assert(contains(data));
+    DPRINTF(SimpleMetadataCache, "%s: Unlocking line %llu.\n",
+      __func__, data);
+
+    if (!_data[data].locked) {
+      DPRINTF(SimpleMetadataCache, "%s: %llu already unlocked.\n",
+      __func__, data);
+    } else {
+      _data[data].locked = false;
+      locked_lines--;
+      DPRINTF(SimpleMetadataCache, "%s: locked_lines decreased to %d\n",
+        __func__, locked_lines);
+    }
+  }
+
   size_t
   SimpleMetadataCache::getSize()
   {
