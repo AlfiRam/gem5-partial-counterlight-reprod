@@ -37,7 +37,6 @@ from create_board import *
 
 import m5
 
-from gem5.isas import ISA
 from gem5.resources.resource import (
     DiskImageResource,
     KernelResource,
