@@ -293,6 +293,9 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         return true;
     }
 
+    DPRINTF(AbstractIntegrityVerifier, "%s: pkt %s is missing parent %llu\n",
+            __func__, pkt->print(), parentNode);
+
     // If there is already an outstanding request for this parent node, we will
     // batch this with the existing request.
     bool needsRequest = outstandingMetadataRequests.find(parentNode) ==
@@ -505,6 +508,9 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                 addToOutstandingMetadataRequests(evictParent, nullptr);
                 outstandingMetadataEvictions.insert(
                     {evictParent, {evictedData.first, pkt->req}});
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: outstandingMetadataEvictions increased. size: %d\n",
+                    __func__, outstandingMetadataEvictions.size());
 
                 // Stop here, and we will call this function again later once
                 // the eviction is complete and we have a new free space.
@@ -580,6 +586,9 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
         assert(successful);
     }
     outstandingMetadataEvictions.erase(pkt->getMetadataNode());
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: outstandingMetadataEvictions decreased. size: %d\n",
+        __func__, outstandingMetadataEvictions.size());
 
 
     // We must handle here that if a metadata request is verified, we can
@@ -623,6 +632,9 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     // Consider this metadata request now received.
     // Any requests that aren't yet fulfilled will keep this line locked.
     outstandingMetadataRequests.erase(pkt->getMetadataNode());
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: outstandingMetadataRequests decreased. size: %d\n",
+        __func__, outstandingMetadataRequests.size());
 
     // If there are no nodes that are depending on this anymore, unlock
     // the cache line now.
