@@ -277,6 +277,12 @@ class AbstractIntegrityVerifier : public ClockedObject
     std::unordered_set<PacketPtr> outstandingIntegrityVerification;
 
     /**
+     * Check if an address corresponds to any packets currently pending
+     * verification.
+     */
+    bool addrInOIV(Addr addr);
+
+    /**
      * Reverse search for a packet from its request pointer.
      */
     std::unordered_map<RequestPtr, PacketPtr> packetLookup;

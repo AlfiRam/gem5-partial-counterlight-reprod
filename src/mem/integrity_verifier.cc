@@ -198,6 +198,17 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         return false;
     }
 
+    if (!pkt->isMetadataRequest() &&
+        pkt->isRequest() &&
+        addrInOIV(pkt->getAddr()))
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Rejecting %s due to prior request with the same address "
+            "being served.\n",
+            __func__, pkt->print());
+        return false;
+    }
+
     if (pkt->isResponse()) {
         markReqEnd(pkt);
     }
@@ -759,6 +770,17 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
             return parent.handlePacket(pkt);
         }
         else if (pkt->isRead()) {
+            if (!pkt->isMetadataRequest() &&
+                pkt->isRequest() &&
+                parent.addrInOIV(pkt->getAddr()))
+            {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: Rejecting %s due to prior request with the same "
+                    "address being served.\n",
+                    __func__, pkt->print());
+                return false;
+            }
+
             // Forward read request.
             parent.sendReqToMem(pkt);
             return true;
@@ -1101,6 +1123,17 @@ AbstractIntegrityVerifier::copyOMRtoPTU(uint64_t node)
     }
 }
 
+bool
+AbstractIntegrityVerifier::addrInOIV(Addr addr)
+{
+    for (auto it : outstandingIntegrityVerification) {
+        if (it->getAddr() == addr) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 void
 AbstractIntegrityVerifier::sanityCheckPacketLookup()
