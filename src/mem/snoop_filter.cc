@@ -276,7 +276,8 @@ SnoopFilter::updateSnoopResponse(const Packet* cpkt,
 
     // The destination should have had a request in
     panic_if((sf_item.requested & req_mask).none(), "SF value %x.%x missing "\
-             "the original request\n",  sf_item.requested, sf_item.holder);
+             "the original request (pkt %s)\n",
+             sf_item.requested, sf_item.holder, cpkt->print());
 
     // If the snoop response has no sharers the line is passed in
     // Modified state, and we know that there are no other copies, or
