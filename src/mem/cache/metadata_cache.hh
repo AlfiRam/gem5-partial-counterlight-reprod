@@ -118,6 +118,12 @@ class SimpleMetadataCache
      */
     void unlockDupeOkay(EntryKey data);
 
+    /**
+     * Return the lowest cached entry that is an ancestor of `data`. If no
+     * entry exists, `data` is returned back.
+     */
+    EntryKey getLowestCachedAncestor(EntryKey data);
+
     size_t getSize();
 
     unsigned int getDirtyLineCount();

@@ -164,6 +164,27 @@ namespace gem5
     }
   }
 
+  SimpleMetadataCache::EntryKey
+  SimpleMetadataCache::getLowestCachedAncestor(EntryKey data) {
+    assert(_tree != nullptr);
+
+    size_t index = data;
+    while (index > 0) {
+      index = _tree->parentBlockIndex(index);
+
+      if (containsPendingOkay(index) && !_data[index].pending_eviction) {
+        return index;
+      }
+
+      if (index == 0) {
+        break;
+      }
+    }
+
+    // If no such ancestor, return back `data`
+    return data;
+  }
+
   size_t
   SimpleMetadataCache::getSize()
   {
