@@ -451,7 +451,13 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             "Conducting eviction.\n",
             __func__, pkt->print());
 
-        auto evictedData = metadataCache.evict(0);
+        std::unordered_set<SimpleMetadataCache::EntryKey> ignoredData;
+        for (auto it : outstandingMetadataRequests) {
+            ignoredData.insert(it.first);
+        }
+        ignoredData.insert(0);
+        auto evictedData = metadataCache.evict(ignoredData,
+                                                pkt->getMetadataNode());
         if (evictedData.second.pending_eviction) {
             DPRINTF(AbstractIntegrityVerifier,
                 "%s: %lld was selected to evict but is dirty.\n",
