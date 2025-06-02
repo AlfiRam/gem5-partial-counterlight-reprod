@@ -33,21 +33,10 @@ scons build/X86/gem5.opt
 import argparse
 import time
 
-import m5
-from m5.objects import (
-    BadAddr,
-    SystemXBar,
-)
+from create_board import *
 
-from gem5.components.boards.x86_board import X86Board
-from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy import (
-    PrivateL1SharedL2CacheHierarchy,
-)
-from gem5.components.memory.single_channel import DIMM_DDR5_4400
-from gem5.components.processors.cpu_types import CPUTypes
-from gem5.components.processors.simple_switchable_processor import (
-    SimpleSwitchableProcessor,
-)
+import m5
+
 from gem5.isas import ISA
 from gem5.resources.resource import (
     DiskImageResource,
@@ -56,15 +45,6 @@ from gem5.resources.resource import (
 )
 from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
-from gem5.utils.requires import requires
-
-# This simulation requires using KVM with gem5 compiled for X86 simulation.
-# While this statement is not technically required, it helps catch some
-# errors that could come from missing portions of the build.
-requires(
-    isa_required=ISA.X86,
-    kvm_required=True,
-)
 
 # Following are the list of benchmark programs for PARSEC.
 benchmark_choices = [
@@ -98,6 +78,8 @@ size_choices = [
 parser = argparse.ArgumentParser(
     description="PARSEC benchmark runner for gem5."
 )
+add_arguments(parser)
+
 
 parser.add_argument(
     "--benchmark",
@@ -113,14 +95,6 @@ parser.add_argument(
     required=True,
     help="Simulation size the benchmark program.",
     choices=size_choices,
-)
-
-parser.add_argument(
-    "--cores",
-    type=int,
-    required=False,
-    help="Number of CPU cores to simulate.",
-    default=2,
 )
 
 parser.add_argument(
@@ -160,50 +134,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-
-# This is a switchable CPU. We first boot Ubuntu using KVM, then the guest
-# will exit the simulation by calling "m5 exit" (see the `command` variable
-# below, which contains the command to be run in the guest after booting).
-# Upon exiting from the simulation, the Exit Event handler will switch the
-# CPU type (see the ExitEvent.EXIT line below, which contains a map to
-# a function to be called when an exit event happens).
-processor = SimpleSwitchableProcessor(
-    starting_core_type=CPUTypes.KVM,
-    switch_core_type=CPUTypes.TIMING,
-    isa=ISA.X86,
-    num_cores=args.cores,
-)
-
-# Here we tell the KVM CPU (the starting CPU) not to use perf. If you'd like
-# to enable this later, just remove/comment these lines.
-for proc in processor.start:
-    proc.core.usePerf = False
-
-# Main memory
-memory = DIMM_DDR5_4400(size="3GiB")
-
-membus = SystemXBar(width=64)
-membus.badaddr_responder = BadAddr()
-membus.default = membus.badaddr_responder.pio
-
-# Cache
-cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
-    l1d_size="32KiB",
-    l1d_assoc=8,
-    l1i_size="32KiB",
-    l1i_assoc=8,
-    l2_size="512KiB",
-    l2_assoc=16,
-    membus=membus,
-)
-
-# Here we setup the board. The X86Board allows for Full-System X86 simulations.
-board = X86Board(
-    clk_freq="3GHz",
-    processor=processor,
-    memory=memory,
-    cache_hierarchy=cache_hierarchy,
-)
+board, processor = create_board(args)
 
 # This is the command to run after the system has booted. The first `m5 exit`
 # written here (which is really the third exit in total from the start of
@@ -321,10 +252,6 @@ start_time = time.time()
 simulator.run()
 
 end_time = time.time()
-
-print(
-    f"Performance statistics (latency_switch_mode {membus.latency_switch_mode}):"
-)
 
 print("Simulated time in ROI: " + (str(simulator.get_roi_ticks()[0])))
 print(

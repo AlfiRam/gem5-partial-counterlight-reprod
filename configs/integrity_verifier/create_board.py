@@ -25,6 +25,14 @@ from gem5.utils.requires import requires
 
 def add_arguments(parser):
     parser.add_argument(
+        "--cores",
+        type=int,
+        required=False,
+        help="Number of CPU cores to simulate.",
+        default=2,
+    )
+
+    parser.add_argument(
         "--use-integrity-verifier",
         action="store_true",
         help="Add an 'integrity verifier' component to add integrity management behavior.",
@@ -97,7 +105,7 @@ def create_board(args):
             starting_core_type=CPUTypes.KVM,
             switch_core_type=CPUTypes.TIMING,
             isa=ISA.X86,
-            num_cores=2,
+            num_cores=args.cores,
         )
 
         # Here we tell the KVM CPU (the starting CPU) not to use perf.
@@ -106,7 +114,7 @@ def create_board(args):
     else:
         # Example of a processor that starts in timing mode, rather than switching to timing after boot.
         processor = SimpleProcessor(
-            cpu_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=2
+            cpu_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=args.cores
         )
 
     # Here we setup the board. The X86Board allows for Full-System X86 simulations.
