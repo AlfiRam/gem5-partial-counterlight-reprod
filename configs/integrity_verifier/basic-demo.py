@@ -9,7 +9,7 @@ Usage
 
 ```
 scons build/X86/gem5.opt -j`nproc`
-./build/X86/gem5.opt configs/example/gem5_library/integrity-bridge-demo.py
+./build/X86/gem5.opt configs/integrity_verifier/basic-demo.py
 ```
 """
 
