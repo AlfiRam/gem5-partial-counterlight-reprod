@@ -132,6 +132,8 @@ class SimpleMetadataCache
 
     unsigned int getLockedLineCount();
 
+    std::string printLockedLines();
+
     bool isFull();
 
     /**

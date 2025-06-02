@@ -206,6 +206,24 @@ namespace gem5
     return locked_lines;
   }
 
+  std::string
+  SimpleMetadataCache::printLockedLines()
+  {
+      std::ostringstream str;
+
+      ccprintf(str, "locked line count: %d\n", locked_lines);
+
+      ccprintf(str, "locked: [");
+      for (auto line : _data) {
+        if (line.second.locked) {
+          ccprintf(str, "%llu ", line.first);
+        }
+      }
+      ccprintf(str, "]\n");
+
+      return str.str();
+  }
+
   bool
   SimpleMetadataCache::isFull()
   {
