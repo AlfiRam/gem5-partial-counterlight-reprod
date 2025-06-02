@@ -335,6 +335,12 @@ class AbstractIntegrityVerifier : public ClockedObject
     void addToPendingToUnlock(uint64_t locked, uint64_t depending_node);
 
     /**
+     * Copy all entries in the 'outstanding metadata request' list to the
+     * 'pending to unlock' list, for a particular node `node`.
+     */
+    void copyOMRtoPTU(uint64_t node);
+
+    /**
      * Attempt to unlock a metadata cache entry given a node was just verified.
      * It may be the case that all verifications waiting on this cache entry
      * are complete. In this case, the node can be unlocked. Otherwise, the

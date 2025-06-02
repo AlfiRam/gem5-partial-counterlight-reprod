@@ -408,6 +408,7 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
     // Officially consider this verified.
     outstandingIntegrityVerification.erase(pkt);
     removeFromPacketLookup(pkt);
+    unlockIfPossible(getParentNode(pkt), 0);
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Verified pkt %s\n", __func__, pkt->print());
 
@@ -512,6 +513,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             "metadata request(s)\n",
             __func__, pkt->getMetadataNode());
         metadataCache.lock(pkt->getMetadataNode());
+        copyOMRtoPTU(pkt->getMetadataNode());
     }
 
     // Now that this node has been cached, see if the parent node is now safe
@@ -585,16 +587,28 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             "%s: %s is verified. %s is now ready for verification.\n",
             __func__, pkt->print(), packet->print());
         completeIntegrityVerification(packet);
+
+        // If this doesn't succeed, we couldn't complete all the verifications
+        // that relied upon the addition of this node right away.
+        // - If this was a metadata request, this is usually if the cache is
+        // full and the eviction victim isn't ready to evict yet. This is
+        // already accounted for in the outstandingMetadataEviction list.
+        // - If this was a data request, this is usually if the parent node
+        // was made available before the hash finished. This is already
+        // accounted for by continuing to keep the parent locked in the
+        // pendingToUnlock list, and the function will be called again once
+        // the hash is finished.
     }
 
     // Consider this metadata request now received.
+    // Any requests that aren't yet fulfilled will keep this line locked.
     outstandingMetadataRequests.erase(pkt->getMetadataNode());
 
     // If there are no nodes that are depending on this anymore, unlock
     // the cache line now.
     if (pendingToUnlock.find(pkt->getMetadataNode()) ==
         pendingToUnlock.end()) {
-        metadataCache.unlock(pkt->getMetadataNode());
+        metadataCache.unlockDupeOkay(pkt->getMetadataNode());
     }
 
     delete pkt;
@@ -945,6 +959,27 @@ AbstractIntegrityVerifier::addToPendingToUnlock(
     DPRINTF(AbstractIntegrityVerifier,
         "%s:%d: %s",
         __func__, __LINE__, printPendingToUnlock());
+}
+
+void
+AbstractIntegrityVerifier::copyOMRtoPTU(uint64_t node)
+{
+    assert(outstandingMetadataRequests.find(node) !=
+           outstandingMetadataRequests.end());
+
+    auto range = outstandingMetadataRequests.equal_range(node);
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second == nullptr) {
+            // If this metadata request was created due to an eviction, this is
+            // handled separately.
+            continue;
+        }
+        // Find the packet that is associated with this request.
+        PacketPtr packet = packetLookup.find(it->second)->second;
+        uint64_t depending_node = packet->isMetadataRequest() ?
+                                    packet->getMetadataNode() : 0;
+        addToPendingToUnlock(node, depending_node);
+    }
 }
 
 
