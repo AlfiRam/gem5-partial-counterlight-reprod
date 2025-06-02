@@ -377,6 +377,8 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     void sanityCheckPacketLookup();
 
+    void sanityCheckEvictionVictim(uint64_t victim, uint64_t replacement);
+
     /**
      * Time (in ticks) to complete hashing.
      *

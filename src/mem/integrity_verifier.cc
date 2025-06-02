@@ -485,6 +485,9 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                 // cached. We will request this first and come back to
                 // evicting once the parent is in the cache.
 
+                sanityCheckEvictionVictim(evictedData.first,
+                                          pkt->getMetadataNode());
+
                 bool requestNeeded =
                     outstandingMetadataRequests.find(evictParent) ==
                     outstandingMetadataRequests.end();
@@ -1167,6 +1170,38 @@ AbstractIntegrityVerifier::sanityCheckPacketLookup()
     }
 }
 
+void
+AbstractIntegrityVerifier::sanityCheckEvictionVictim(
+    uint64_t victim,
+    uint64_t replacement
+)
+{
+    // Victim should be in the cache.
+    assert(metadataCache.containsPendingOkay(victim));
+
+    // Parent of victim would not be in the cache.
+    assert(!metadataCache.contains(integrityTree.parentBlockIndex(victim)));
+
+    // Metadata cache does not already have the replacement.
+    assert(!metadataCache.contains(replacement));
+
+    uint64_t victimParent = integrityTree.parentBlockIndex(victim);
+    uint64_t replacementParent = integrityTree.parentBlockIndex(replacement);
+
+    assert(victimParent != replacementParent);
+    assert(victimParent != replacement);
+    assert(victim != replacementParent);
+
+    assert(outstandingMetadataRequests.find(victim) ==
+           outstandingMetadataRequests.end());
+    assert(outstandingMetadataRequests.find(victimParent) ==
+           outstandingMetadataRequests.end());
+
+    // Assert that the lowest ancestor of victim is lower than replacement,
+    // or that there is no ancestor of the victim at all cached.
+    assert(!integrityTree.isAncestor(replacement, victim) ||
+           metadataCache.getLowestCachedAncestor(victim) != replacementParent);
+}
 
 void
 AbstractIntegrityVerifier::ResponsePort::recvFunctional(PacketPtr pkt)
