@@ -357,6 +357,13 @@ class AbstractIntegrityVerifier : public ClockedObject
     std::string printPendingToUnlock();
 
     /**
+     * Show the contents of `arrivalTime`.
+     */
+    std::string printArrivalTime();
+
+    void fullDebugOutput();
+
+    /**
      * A sanity checking function that ensures the `packetLookup` list is
      * maintained with recent packets. If there are packets that are in this
      * list for too long, it may indicate that there is a logical error and

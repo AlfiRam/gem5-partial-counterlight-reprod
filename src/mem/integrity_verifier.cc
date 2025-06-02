@@ -867,6 +867,119 @@ AbstractIntegrityVerifier::printPendingToUnlock()
     return str.str();
 }
 
+std::string
+AbstractIntegrityVerifier::printArrivalTime()
+{
+    std::ostringstream str;
+
+    ccprintf(str, "arrivalTime size: %d\n", arrivalTime.size());
+    for (auto it : arrivalTime) {
+        RequestPtr req = it.first;
+        Tick arrival = it.second;
+
+        auto search = packetLookup.find(req);
+        if (search != packetLookup.end()) {
+            // We have the original packet for this.
+            PacketPtr pkt = search->second;
+            ccprintf(str, "pkt %s (%p)\t%llu\n", pkt->print(), pkt, arrival);
+        } else {
+            // No original packet.
+            ccprintf(str, "req 0x%x (%p)\t%llu\n",
+                req->hasPaddr() ? req->getPaddr() : 999999,
+                req,
+                arrival);
+        }
+    }
+
+    return str.str();
+}
+
+
+void
+AbstractIntegrityVerifier::fullDebugOutput()
+{
+    cprintf("==============================\n");
+    cprintf("INTEGRITY VERIFIER:\n");
+    cprintf("outstandingIntegrityVerification (size %d):\n",
+        outstandingIntegrityVerification.size());
+    for (auto it : outstandingIntegrityVerification) {
+        cprintf("- %s (%p)\n", it->print(), it);
+    }
+
+    cprintf("outstandingIntegrityHashes (size %d):\n",
+        outstandingIntegrityHashes.size());
+    for (auto it : outstandingIntegrityHashes) {
+        if (packetLookup.find(it) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it];
+            cprintf("- %s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, it->getPaddr(), it);
+        } else {
+            cprintf("- (unknown packet) <-- req for 0x%x (%p)\n",
+                it->getPaddr(), it);
+        }
+
+    }
+
+    cprintf("outstandingMetadataRequests (size %d):\n",
+        outstandingMetadataRequests.size());
+    for (auto it : outstandingMetadataRequests) {
+        if (packetLookup.find(it.second) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it.second];
+            cprintf("- Node %llu requested by pkt %s (%p)   "
+                "(req for 0x%x, allocated @ %p)\n",
+                it.first, pkt->print(), pkt,
+                it.second->getPaddr(), it.second);
+        } else if (it.second == nullptr) {
+            cprintf("- Node %llu requested by an eviction\n",
+                it.first);
+        } else {
+            cprintf("- Node %llu requested by (unknown packet)   "
+                "(req for 0x%x allocated @ %p)\n",
+                it.first,
+                it.second->getPaddr(), it.second);
+        }
+
+    }
+
+    cprintf("outstandingMetadataEvictions (size %d):\n",
+        outstandingMetadataEvictions.size());
+    for (auto it : outstandingMetadataEvictions) {
+        if (packetLookup.find(it.second.second) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it.second.second];
+            cprintf("- Node %llu, parent of to-evict child %llu to be "
+                "replaced by %s\n",
+                it.first, it.second.first,
+                pkt->print());
+        } else {
+            cprintf("- Node %llu, parent of to-evict child %llu to be "
+                "replaced by (unknown - req for 0x%x, allocated @ %p)\n",
+                it.first, it.second.first,
+                it.second.second->getPaddr(), it.second.second);
+        }
+    }
+
+    cprintf("pendingToUnlock (size %d):\n", pendingToUnlock.size());
+    cprintf("%s", printPendingToUnlock());
+
+    cprintf("arrivalTime (size %d):\n", arrivalTime.size());
+    cprintf("%s", printArrivalTime());
+
+    cprintf("packetLookup (size %d):\n", packetLookup.size());
+    for (auto it : packetLookup) {
+        cprintf("- req for 0x%x (%p) --> %s (%p)\n",
+            it.first->getPaddr(), it.first,
+            it.second->print(), it.second);
+    }
+
+    cprintf("-------\n");
+    cprintf("METADATA CACHE:\n");
+    cprintf("size: %d\n", metadataCache.getSize());
+    cprintf("locked: %d\n", metadataCache.getLockedLineCount());
+    cprintf("dirty: %d\n", metadataCache.getDirtyLineCount());
+    cprintf("pending eviction: %d\n", metadataCache.getPendingEvictionCount());
+    cprintf("==============================\n");
+}
+
 void
 AbstractIntegrityVerifier::addToPacketLookup(PacketPtr pkt)
 {
