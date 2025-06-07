@@ -230,6 +230,62 @@ namespace gem5
     return getSize() >= capacity;
   }
 
+  bool
+  SimpleMetadataCache::evictionCausesCircularDependencyWithIgnoredData(
+    std::unordered_set<EntryKey> ignored_data,
+    EntryKey potential_victim
+  )
+  {
+    if (_tree == nullptr) {
+      panic("This function cannot be called without initializing _tree.\n");
+    }
+
+    for (auto it : ignored_data) {
+      if (it == 0) {
+        continue;
+      }
+
+      if (it == potential_victim) {
+        return true;
+      }
+
+      bool result = evictionCausesCircularDependencyWithIgnoredData(
+        it, potential_victim);
+      if (result) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool
+  SimpleMetadataCache::evictionCausesCircularDependencyWithIgnoredData(
+    EntryKey ignored_data,
+    EntryKey potential_victim
+  )
+  {
+    if (_tree == nullptr) {
+      panic("This function cannot be called without initializing _tree.\n");
+    }
+
+    EntryKey ignored_data_parent = 0;
+    if (ignored_data_parent != 0) {
+      ignored_data_parent = _tree->parentBlockIndex(ignored_data);
+    }
+
+    EntryKey lowestCachedAncestor = getLowestCachedAncestor(potential_victim);
+
+    return (
+      _tree->isAncestor(ignored_data, potential_victim) &&
+      (
+        //lowestCachedAncestor == potential_victim ||
+        lowestCachedAncestor == ignored_data ||
+        lowestCachedAncestor == ignored_data_parent ||
+        _tree->isAncestor(lowestCachedAncestor, ignored_data))
+    );
+  }
+
   std::pair<SimpleMetadataCache::EntryKey, SimpleMetadataCache::EntryValue>
   SimpleMetadataCache::evict(
     std::unordered_set<EntryKey> ignored_data,
@@ -266,6 +322,7 @@ namespace gem5
                               ignored_data.end()) {
           // The parent of this node is in the ignore list.
           potential_evicts--;
+          continue;
         } else if (it.first != 0 &&
             !it.second.pending_eviction &&
             !it.second.locked &&
@@ -276,6 +333,20 @@ namespace gem5
           // Trying to evict this node would create a circular dependency for
           // this particular replacement.
           potential_evicts--;
+          continue;
+        }
+
+        for (auto ignored : ignored_data) {
+          if (it.first != 0 &&
+            !it.second.pending_eviction &&
+            !it.second.locked &&
+            ignored != 0 &&
+            ignored != it.first &&
+            evictionCausesCircularDependencyWithIgnoredData(ignored, it.first))
+          {
+            potential_evicts--;
+            break;
+          }
         }
       }
     }
@@ -300,6 +371,12 @@ namespace gem5
             replacement == 0 ||
             !_tree->isAncestor(replacement, iterator->first) ||
             getLowestCachedAncestor(iterator->first) != replacementParent) &&
+          // Trying to evict this entry would not create a circular dependency
+          // for any of the ignored data items,
+          (_tree == nullptr ||
+            iterator->first == 0 ||
+            !evictionCausesCircularDependencyWithIgnoredData(
+                ignored_data, iterator->first)) &&
           // Not pending eviction, and
           !iterator->second.pending_eviction &&
           // Not locked

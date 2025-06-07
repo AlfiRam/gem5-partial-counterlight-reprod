@@ -136,6 +136,16 @@ class SimpleMetadataCache
 
     bool isFull();
 
+    bool evictionCausesCircularDependencyWithIgnoredData(
+      std::unordered_set<EntryKey> ignored_data,
+      EntryKey potential_victim
+    );
+
+    bool evictionCausesCircularDependencyWithIgnoredData(
+      EntryKey ignored_data,
+      EntryKey potential_victim
+    );
+
     /**
      * Evict a random cache line from the metadata cache. If the selected cache
      * line is dirty, then it will be marked as 'pending eviction', and require
