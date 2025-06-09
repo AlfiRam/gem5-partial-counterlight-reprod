@@ -416,6 +416,9 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
 
     // We are now ready to verify.
     // Assume that the verification was successful, and effectively instant.
+    if (!parentNodeIsSecureRoot(pkt)) {
+        metadataCache.access(getParentNode(pkt));
+    }
 
     // Metadata requests have more logic involved so this is handled
     // separately.
