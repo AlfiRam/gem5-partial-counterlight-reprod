@@ -204,6 +204,12 @@ AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
     return metadataRequestPkt;
 }
 
+void
+AbstractIntegrityVerifier::saveRetry(PacketPtr pkt)
+{
+    schedule(new RetryVerifyEvent(this, pkt), curTick() + Cycles(40));
+}
+
 bool
 AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
 {
@@ -215,9 +221,11 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     // is fully evicted.
     if (parentNodeIsPendingEviction(pkt)) {
         DPRINTF(AbstractIntegrityVerifier,
-            "%s: Rejecting %s due to parent pending eviction.\n",
+            "%s: Rejecting %s due to parent pending eviction. Retrying "
+            "later.\n",
             __func__, pkt->print());
-        return false;
+        saveRetry(pkt);
+        return true;
     }
 
     if (!pkt->isMetadataRequest() &&
@@ -226,9 +234,10 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     {
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Rejecting %s due to prior request with the same address "
-            "being served.\n",
+            "being served. Retrying later.\n",
             __func__, pkt->print());
-        return false;
+        saveRetry(pkt);
+        return true;
     }
 
     if (pkt->isResponse()) {
@@ -813,9 +822,10 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
             {
                 DPRINTF(AbstractIntegrityVerifier,
                     "%s: Rejecting %s due to prior request with the same "
-                    "address being served.\n",
+                    "address being served. Retrying later.\n",
                     __func__, pkt->print());
-                return false;
+                parent.saveRetry(pkt);
+                return true;
             }
 
             // Forward read request.

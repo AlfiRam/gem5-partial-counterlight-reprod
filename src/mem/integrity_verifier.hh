@@ -421,6 +421,40 @@ class AbstractIntegrityVerifier : public ClockedObject
         }
     };
 
+    /**
+     * An event that represents when we should re-attempt to process a packet.
+     * This may happen if a packet is rejected from memory (i.e., due to the
+     * parent being in the middle of eviction). Memory doesn't always have the
+     * process to resend a packet.
+     */
+    class RetryVerifyEvent : public Event
+    {
+      private:
+        // Pointer to the related verifier object.
+        AbstractIntegrityVerifier *verifier;
+
+        // Pointer to the original request packet that we are verifying.
+        PacketPtr pkt;
+
+      public:
+        RetryVerifyEvent(
+          AbstractIntegrityVerifier *verifier,
+          PacketPtr pkt
+        ) : Event(Default_Pri, AutoDelete),
+          verifier(verifier),
+          pkt(pkt)
+        { }
+
+        void process() override {
+          verifier->handlePacket(pkt);
+        }
+    };
+
+    /**
+     * Save a packet to retry its processing later.
+     */
+    void saveRetry(PacketPtr pkt);
+
   protected:
     /**
      * Delay a request by some number of ticks.
