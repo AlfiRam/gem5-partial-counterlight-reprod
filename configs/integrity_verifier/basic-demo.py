@@ -30,7 +30,9 @@ args = parser.parse_args()
 
 board, processor = create_board(args)
 
-workload = obtain_resource("x86-ubuntu-24.04-boot-with-systemd")
+workload = obtain_resource(
+    resource_id="x86-ubuntu-24.04-boot-no-systemd", resource_version="3.0.0"
+)
 board.set_workload(workload)
 
 
