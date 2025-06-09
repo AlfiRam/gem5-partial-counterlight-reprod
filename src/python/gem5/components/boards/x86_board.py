@@ -272,6 +272,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         self.workload.acpi_description_table_pointer.oem_id = "gem5"
         self.workload.acpi_description_table_pointer.rsdt.oem_id = "gem5"
         self.workload.acpi_description_table_pointer.xsdt.oem_id = "gem5"
+        # Set up the OS-observable memory
+        memory = self.get_memory()
+        os_observable_data_range = AddrRange(memory.get_os_size())
+        os_observable_size = os_observable_data_range.size()
         entries = [
             # Mark the first megabyte of memory as reserved
             X86E820Entry(addr=0, size="639KiB", range_type=1),
@@ -279,7 +283,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             # Mark the rest of physical memory as available
             X86E820Entry(
                 addr=0x100000,
-                size=f"{self.mem_ranges[0].size() - 0x100000:d}B",
+                size=f"{os_observable_size - 0x100000:d}B",
                 range_type=1,
             ),
         ]

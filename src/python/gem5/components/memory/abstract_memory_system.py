@@ -38,6 +38,7 @@ from m5.objects import (
     AddrRange,
     MemCtrl,
     MemInterface,
+    MemorySize,
     Port,
     Root,
     SubSystem,
@@ -89,6 +90,11 @@ class AbstractMemorySystem(SubSystem):
     @abstractmethod
     def get_size(self) -> int:
         """Returns the total size of the memory system."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_os_size(self) -> MemorySize:
+        """Returns the size of the memory system that is exposed to the OS."""
         raise NotImplementedError
 
     @abstractmethod

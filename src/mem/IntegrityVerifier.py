@@ -55,6 +55,8 @@ class AbstractIntegrityVerifier(ClockedObject):
 
     metadata_cache_size = Param.Int(2000, "Metadata cache size")
 
+    os_size = Param.UInt64(0, "'OS-visible' memory size, in bytes")
+
 
 class IntegrityVerifier(AbstractIntegrityVerifier):
     type = "IntegrityVerifier"

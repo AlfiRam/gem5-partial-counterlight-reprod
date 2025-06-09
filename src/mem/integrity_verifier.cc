@@ -53,7 +53,8 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       reqQueue(*this, requestPort),
       respQueue(*this, responsePort),
       snoopRespQueue(*this, requestPort),
-      integrityTree(TimingTree(4, system->memSize())),
+      osSize(p.os_size),
+      integrityTree(TimingTree(4, osSize)),
       metadataCache(SimpleMetadataCache(metadataCacheSize, &integrityTree)),
       hasRequestorId(false),
       _requestorId(0)
@@ -65,6 +66,12 @@ AbstractIntegrityVerifier::init()
 {
     if (!responsePort.isConnected() || !requestPort.isConnected())
         fatal("Integrity verifier is not connected on both sides.\n");
+
+    if (osSize != 0 &&
+        integrityTree.statStructureSize() > system->memSize() - osSize) {
+        fatal("The integrity tree size is larger than the amount of memory "
+              "available for the tree.");
+    }
 }
 
 
@@ -139,9 +146,17 @@ AbstractIntegrityVerifier::generateMetadataRequest(PacketPtr pkt)
 {
     size_t parentNode = getParentNode(pkt);
 
+    // The simulated address for the request.
+    uint64_t reqAddr;
+    if (osSize != 0) {
+        reqAddr = osSize + integrityTree.simulatedBlockOffset(parentNode);
+    } else {
+        reqAddr = pkt->getAddr();
+    }
+
     // Create the metadata request and packet.
     RequestPtr req = std::make_shared<Request>(
-        pkt->getAddr(),
+        reqAddr,
         64, // Size
         0, // No flags
         pkt->requestorId()
@@ -162,9 +177,16 @@ AbstractIntegrityVerifier::generateMetadataRequest(PacketPtr pkt)
 PacketPtr
 AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
 {
+    uint64_t reqAddr;
+    if (osSize != 0) {
+        reqAddr = osSize + integrityTree.simulatedBlockOffset(node);
+    } else {
+        reqAddr = integrityTree.blockIndexToAddress(node);
+    }
+
     // Create the metadata request and packet.
     RequestPtr req = std::make_shared<Request>(
-        integrityTree.blockIndexToAddress(node),
+        reqAddr,
         64, // Size
         0, // No flags
         _requestorId

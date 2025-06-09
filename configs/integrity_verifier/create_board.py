@@ -62,7 +62,7 @@ def create_board(args):
     )
 
     # Main memory
-    memory = DIMM_DDR5_4400(size="3GiB")
+    memory = DIMM_DDR5_4400(size="3GiB", os_size="1800MiB")
 
     membus = SystemXBar(width=64)
     membus.badaddr_responder = BadAddr()
@@ -79,6 +79,7 @@ def create_board(args):
             l2_assoc=16,
             membus=membus,
             metadata_cache_size=args.metadata_cache_size,
+            os_size="1800MiB",
         )
     else:
         cache_hierarchy = PrivateL1SharedL2CacheHierarchy(

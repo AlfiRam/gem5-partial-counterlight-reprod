@@ -241,6 +241,11 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     void regStats() override;
 
+    /**
+     * Size of memory visible to OS, in bytes.
+     */
+    uint64_t osSize;
+
     typedef TimingTree IntegrityTree;
     /**
      * The simulated integrity tree. For now, this is a very basic tree.

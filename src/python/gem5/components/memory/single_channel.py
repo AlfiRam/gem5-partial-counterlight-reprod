@@ -85,11 +85,12 @@ def SingleChannelHBM(
 
 def DIMM_DDR5_4400(
     size: Optional[str] = None,
+    os_size: Optional[str] = None,
 ) -> AbstractMemorySystem:
     """
     A single DIMM of DDR5 has two channels.
     """
-    return ChanneledMemory(DDR5_4400_4x8, 2, 64, size=size)
+    return ChanneledMemory(DDR5_4400_4x8, 2, 64, size=size, os_size=os_size)
 
 
 def DIMM_DDR5_6400(

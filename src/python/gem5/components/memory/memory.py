@@ -41,6 +41,7 @@ from m5.objects import (
     AddrRange,
     DRAMInterface,
     MemCtrl,
+    MemorySize,
     Port,
 )
 from m5.util.convert import toMemorySize
@@ -79,6 +80,7 @@ class ChanneledMemory(AbstractMemorySystem):
         interleaving_size: Union[int, str],
         size: Optional[str] = None,
         addr_mapping: Optional[str] = None,
+        os_size: Optional[str] = None,
     ) -> None:
         """
         :param dram_interface_class: The DRAM interface type to create with
@@ -101,6 +103,11 @@ class ChanneledMemory(AbstractMemorySystem):
         if size:
             size = _try_convert(size, str)
 
+        if os_size:
+            os_size = _try_convert(os_size, str)
+        else:
+            os_size = size
+
         if addr_mapping:
             addr_mapping = _try_convert(addr_mapping, str)
 
@@ -121,6 +128,11 @@ class ChanneledMemory(AbstractMemorySystem):
             self._size = toMemorySize(size)
         else:
             self._size = self._get_dram_size(num_channels, self._dram_class)
+
+        if os_size:
+            self._os_size = toMemorySize(os_size)
+        else:
+            self._os_size = self._get_dram_size(num_channels, self._dram_class)
 
         self._create_mem_interfaces_controller()
 
@@ -192,6 +204,10 @@ class ChanneledMemory(AbstractMemorySystem):
     @overrides(AbstractMemorySystem)
     def get_size(self) -> int:
         return self._size
+
+    @overrides(AbstractMemorySystem)
+    def get_os_size(self) -> MemorySize:
+        return self._os_size
 
     @overrides(AbstractMemorySystem)
     def set_memory_range(self, ranges: List[AddrRange]) -> None:
