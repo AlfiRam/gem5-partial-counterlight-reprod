@@ -770,8 +770,7 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
 
     // We want to just bypass immediately if this is an express snoop.
     if (pkt->isExpressSnoop()) {
-        parent.requestPort.sendTimingReq(pkt);
-        return true;
+        return parent.requestPort.sendTimingReq(pkt);
     }
 
     parent.markReqReceived(pkt);
