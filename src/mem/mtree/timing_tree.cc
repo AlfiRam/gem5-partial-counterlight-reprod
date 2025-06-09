@@ -57,6 +57,12 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
   DPRINTF(TimingTree, "%s: Total number of nodes is %u.\n",
     __func__, dataSize);
 
+  DPRINTF(TimingTree, "%s: Total space protected by tree: %llu bytes.\n",
+    __func__, statDataProtected());
+
+  DPRINTF(TimingTree, "%s: Total space taken by tree: %llu bytes.\n",
+    __func__, statStructureSize());
+
   // TODO Verify this constructor works as expected.
 }
 
