@@ -77,16 +77,16 @@ class SimpleMetadataCache
     std::pair<EntryKey, EntryValue> find(EntryKey new_data);
 
     /**
-     * Check for the existence of `data` in the metadata cache.
+     * Check for the existence of `search_data` in the metadata cache.
      */
-    bool contains(EntryKey data);
+    bool contains(EntryKey search_data);
 
     /**
-     * Check for the existence of `data` in the metadata cache.
+     * Check for the existence of `search_data` in the metadata cache.
      *
      * Do not panic if the data being checked is pending eviction.
      */
-    bool containsPendingOkay(EntryKey data);
+    bool containsPendingOkay(EntryKey search_data);
 
     /**
      * Simulate modification of a cache line by specifying the entry to edit.
