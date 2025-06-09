@@ -257,6 +257,14 @@ class TimingTree : AbstractIntegrityTree
      */
     uint64_t blockIndexToAddress(size_t index);
 
+    /**
+     * Calculate the "location" of a tree node by its offset, in bytes.
+     *
+     * Consider the first node, 0, to be at offset 0, then the second node
+     * to be at offset BLOCK_SIZE_BYTES, and so on.
+     */
+    uint64_t simulatedBlockOffset(size_t index);
+
   private:
     /**
      * Update a leaf block's hash by reading the data that corresponds to that

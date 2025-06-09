@@ -250,6 +250,11 @@ uint64_t TimingTree::blockIndexToAddress(size_t index) {
 }
 
 
+uint64_t TimingTree::simulatedBlockOffset(size_t index) {
+  return (index * BLOCK_SIZE_BYTES);
+}
+
+
 unsigned int TimingTree::updateLeafHash(size_t address) {
   std::cout << "====================================" << std::endl;
   std::cout << "Processing write at address " << address << "." << std::endl;
