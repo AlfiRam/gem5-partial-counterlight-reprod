@@ -14,6 +14,128 @@
 namespace gem5
 {
 
+/**
+ * Basic class that represents a cache entry. This allows the entry to be
+ * flexible and implement other functionality or data (i.e., counters).
+ */
+class AbstractCacheEntry
+{
+  private:
+    /**
+     * Whether or not this entry contains valid data.
+     */
+    bool valid;
+
+    /**
+     * Whether or not this entry is dirty (modified).
+     */
+    bool dirty;
+
+  public:
+    AbstractCacheEntry() {};
+    virtual ~AbstractCacheEntry() {};
+
+    /**
+     * Return the size (in bytes) that one cache entry takes.
+     */
+    static size_t entrySize() { return 0; }
+};
+
+
+class BasicCacheEntry : public AbstractCacheEntry
+{
+  private:
+    /**
+     * Each cache entry is simply an ID to a Merkle tree block (for now).
+     *
+     * However, if this was a real cache, we would be storing the block itself.
+     */
+    size_t mtBlock;
+
+  public:
+    BasicCacheEntry() {};
+    ~BasicCacheEntry() {};
+
+    /**
+     * Return the size (in bytes) that one cache entry takes. Rounded up to the
+     * nearest byte when necessary.
+     *
+     * For this cache entry type, you store the following:
+     *   - Valid bit (1 bit)
+     *   - Dirty bit (1 bit)
+     *   - Merkle tree node (size of one cacheline = 64 bytes)
+     *   - Tree node ID (technically this is 8 bytes at most, but really
+     *     depends on the size of the tree)
+     */
+    static size_t entrySize() { return 1 + 64 + 8; }
+};
+
+
+// template <typename T>
+class CacheSet
+{
+  // static_assert(std::is_base_of<AbstractCacheEntry, T>::value,
+  //    "CacheSet type T must derive from AbstractCacheEntry.");
+
+  private:
+    unsigned int ways;
+
+    // std::vector<T> entries;
+    std::vector<BasicCacheEntry*> entries;
+
+  public:
+    CacheSet(unsigned int ways);
+
+    ~CacheSet();
+};
+
+
+/**
+ * A basic metadata cache. This can store an arbitrary class that derives
+ * AbstractCacheEntry.
+ */
+// template <typename T>
+class MetadataCache
+{
+  // static_assert(std::is_base_of<AbstractCacheEntry, T>::value,
+  //    "CacheSet type T must derive from AbstractCacheEntry.");
+
+  private:
+    unsigned int associativity;
+    unsigned int set_count;
+
+    /**
+     * Size of how much data can be stored in total (in bytes).
+     */
+    unsigned int capacity;
+
+    /**
+     * Individual sets being stored.
+     */
+    // std::vector<CacheSet<T>> sets;
+    std::vector<CacheSet*> sets;
+
+    unsigned int read_buffer_capacity;
+    std::vector<BasicCacheEntry*> read_buffer;
+
+
+
+  public:
+    // Constructor based on sets and associativity
+    MetadataCache(unsigned int set_count, unsigned int associativity);
+
+    // Constructor based on total size (and entry size)
+    MetadataCache(size_t total_bytes, unsigned int associativity);
+
+
+    ~MetadataCache();
+
+    void printInitDetails();
+
+    // Returns whether or not something was evicted.
+    // bool insert(size_t data);
+};
+
 class SimpleMetadataCache
 {
   public:
@@ -75,6 +197,13 @@ class SimpleMetadataCache
     bool insert(EntryKey new_data);
 
     std::pair<EntryKey, EntryValue> find(EntryKey new_data);
+
+    /**
+     * Mock the access of a metadata cache entry.
+     *
+     * @returns True if cache hit, false if cache miss.
+     */
+    bool access(EntryKey data);
 
     /**
      * Check for the existence of `search_data` in the metadata cache.

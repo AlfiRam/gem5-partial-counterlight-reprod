@@ -8,6 +8,121 @@
 
 namespace gem5
 {
+  // template <typename T>
+  // CacheSet<T>::CacheSet(unsigned int ways) :
+  CacheSet::CacheSet(unsigned int ways) :
+    ways(ways)
+  {
+    // entries(ways, T());
+    entries = std::vector<BasicCacheEntry*>();
+    for (size_t i = 0; i < ways; i++) {
+      entries.push_back(new BasicCacheEntry());
+    }
+  }
+
+
+  // template <typename T>
+  // CacheSet<T>::~CacheSet()
+  CacheSet::~CacheSet()
+  {
+    // delete entries;
+    for (auto e : entries) {
+      delete e;
+    }
+  }
+
+
+  // template <typename T>
+  // MetadataCache<T>::MetadataCache(
+  //    unsigned int set_count,
+  //    unsigned int associativity
+  // ) :
+  MetadataCache::MetadataCache(
+    unsigned int set_count,
+    unsigned int associativity
+  ) :
+    associativity(associativity),
+    set_count(set_count)
+  {
+    assert(set_count > 0);
+    assert(associativity > 0);
+
+    // sets(set_count, CacheSet<T>(associativity));
+    // sets = new CacheSet<T>(associativity)[set_count];
+    sets = std::vector<CacheSet*>();
+    for (size_t i = 0; i < set_count; i++) {
+      sets.push_back(new CacheSet(associativity));
+    }
+
+    // size_t setSize = T::entrySize() * associativity;
+    size_t setSize = BasicCacheEntry::entrySize() * associativity;
+    capacity = setSize * set_count;
+
+    printInitDetails();
+  }
+
+
+  // template <typename T>
+  // MetadataCache<T>::MetadataCache(
+  //    size_t total_bytes,
+  //    unsigned int associativity
+  // ) :
+  MetadataCache::MetadataCache(
+    size_t total_bytes,
+    unsigned int associativity
+  ) :
+    associativity(associativity)
+  {
+    assert(total_bytes > 0);
+    assert(associativity > 0);
+
+    // size_t setSize = associativity * T::entrySize();
+    size_t setSize = associativity * BasicCacheEntry::entrySize();
+    set_count = total_bytes / setSize;
+    assert(set_count > 0);
+
+    // sets = new CacheSet<T>(associativity)[set_count];
+    // sets(set_count, CacheSet<T>(associativity));
+    sets = std::vector<CacheSet*>();
+    for (size_t i = 0; i < set_count; i++) {
+      sets.push_back(new CacheSet(associativity));
+    }
+
+    // The capacity here may be different than the "requested" number in
+    // total_bytes due to the fact that this might not evenly align with a
+    // multiple of the entry size.
+    capacity = setSize * set_count;
+
+    printInitDetails();
+  }
+
+
+  // template <typename T>
+  // MetadataCache<T>::~MetadataCache()
+  MetadataCache::~MetadataCache()
+  {
+    // delete sets;
+    for (auto s : sets) {
+      delete s;
+    }
+  }
+
+  void
+  MetadataCache::printInitDetails()
+  {
+    DPRINTF(MetadataCache, "%s: Metadata cache initialized! Details:\n",
+      __func__);
+    DPRINTF(MetadataCache, "%s: Single entry size: %dB\n",
+      __func__, BasicCacheEntry::entrySize());
+    DPRINTF(MetadataCache, "%s: Total metadata cache size: %dB\n",
+      __func__, capacity);
+    DPRINTF(MetadataCache, "%s: Number of sets: %d\n",
+      __func__, set_count);
+    DPRINTF(MetadataCache, "%s: Associativity: %d\n",
+      __func__, associativity);
+  }
+
+
   SimpleMetadataCache::SimpleMetadataCache(unsigned int capacity) :
     capacity(capacity), dirty_lines(0), lines_pending_eviction(0),
     locked_lines(0), _tree(nullptr)
@@ -58,6 +173,12 @@ namespace gem5
   SimpleMetadataCache::find(EntryKey search_data)
   {
     return *(_data.find(search_data));
+  }
+
+  bool
+  SimpleMetadataCache::access(EntryKey data)
+  {
+    return contains(data);
   }
 
   bool
