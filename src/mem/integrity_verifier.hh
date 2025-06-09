@@ -38,6 +38,8 @@
 #ifndef __MEM_INTEGRITY_VERIFIER_HH__
 #define __MEM_INTEGRITY_VERIFIER_HH__
 
+#include <queue>
+
 #include "mem/cache/metadata_cache.hh"
 #include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
@@ -207,9 +209,61 @@ class AbstractIntegrityVerifier : public ClockedObject
     bool handleMetadataAddition(PacketPtr pkt);
 
     /**
-     * Schedule to send a request to memory.
+     * Mark a request as received by adding it to the proper tracking
+     * structures.
+     *
+     * This should be called as soon as a request arrives.
+     *
+     * Associates a request with its packet and notes the arrival of the
+     * request, so that the correct order may be maintained.
+     */
+    void markReqReceived(PacketPtr pkt);
+
+    /**
+     * Mark a response as received by ensuring it has arrived and update
+     * the proper tracking structures.
+     *
+     * This should be called as soon as a response arrives.
+     */
+    void markRespReceived(PacketPtr pkt);
+
+    /**
+     * Schedule a request to go to memory.
+     *
+     * Non-metadata requests will be mandated to be sent in the same order that
+     * they were received in.
+     *
+     * NOTE: For data requests, it is expected that they have already been
+     * added to `packetLookup`.
+     */
+    void schedReq(PacketPtr pkt);
+
+    /**
+     * Schedule a response to go to the CPU.
+     *
+     * Responses will be mandated to be sent in the same order they were
+     * received in.
+     */
+    void schedResp(PacketPtr pkt);
+
+    /**
+     * Send a request to memory.
+     *
+     * The packet will be sent at the next available time.
+     *
+     * For data requests, this expects the packet to already be added to
+     * `packetLookup`.
      */
     void sendReqToMem(PacketPtr pkt);
+
+    /**
+     * Send a response to the CPU.
+     *
+     * The packet will be sent at the next available time.
+     *
+     * This expects the packet to already be added to `packetLookup`.
+     */
+    void sendRespToCpu(PacketPtr pkt);
 
     /**
      * Make note of when a (request) packet is about to be scheduled for
@@ -238,6 +292,30 @@ class AbstractIntegrityVerifier : public ClockedObject
     ReqPacketQueue reqQueue;
     RespPacketQueue respQueue;
     SnoopRespPacketQueue snoopRespQueue;
+
+    /**
+     * We must enforce that packets leave in the same order that they were
+     * received.
+     */
+    std::queue<RequestPtr> requestQueue;
+
+    /**
+     * We must enforce that packets leave in the same order that they were
+     * received.
+     */
+    std::queue<RequestPtr> responseQueue;
+
+    /**
+     * Requests that are ready to send (integrity verification complete or
+     * otherwise ready).
+     */
+    std::unordered_set<RequestPtr> requestReady;
+
+    /**
+     * Responses that are ready to send (integrity verification complete or
+     * otherwise ready).
+     */
+    std::unordered_set<RequestPtr> responseReady;
 
     void regStats() override;
 
@@ -297,6 +375,11 @@ class AbstractIntegrityVerifier : public ClockedObject
      * pointer is stored within the packet, only the packet is needed here.
      */
     void addToPacketLookup(PacketPtr pkt);
+
+    /**
+     * Update a pairing of a request pointer with a packet pointer.
+     */
+    void updatePacketLookup(PacketPtr pkt);
 
     /**
      * Remove a pairing of a request pointer with a packet pointer. As the
