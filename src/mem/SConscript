@@ -175,3 +175,10 @@ DebugFlag('TokenPort')
 DebugFlag("MemChecker")
 DebugFlag("MemCheckerMonitor")
 DebugFlag("QOS")
+
+CompoundFlag('IntegrityVerifierAll',
+             ['IntegrityMetadata',
+              'AbstractIntegrityVerifier',
+              'MetadataCache',
+              'SimpleMetadataCache',
+             ])
