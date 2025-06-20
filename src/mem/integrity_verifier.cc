@@ -190,9 +190,15 @@ AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
 }
 
 void
-AbstractIntegrityVerifier::saveRetry(PacketPtr pkt)
+AbstractIntegrityVerifier::saveRetryVerify(PacketPtr pkt)
 {
     schedule(new RetryVerifyEvent(this, pkt), curTick() + Cycles(40));
+}
+
+void
+AbstractIntegrityVerifier::saveRetryReq(PacketPtr pkt)
+{
+    schedule(new RetryReqEvent(this, pkt), curTick() + Cycles(40));
 }
 
 bool
@@ -209,7 +215,7 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
             "%s: Rejecting %s due to parent pending eviction. Retrying "
             "later.\n",
             __func__, pkt->print());
-        saveRetry(pkt);
+        saveRetryVerify(pkt);
         return true;
     }
 
@@ -221,7 +227,7 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
             "%s: Rejecting %s due to prior request with the same address "
             "being served. Retrying later.\n",
             __func__, pkt->print());
-        saveRetry(pkt);
+        saveRetryVerify(pkt);
         return true;
     }
 
@@ -780,39 +786,57 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
 
     parent.sanityCheckPacketLookup();
 
+    return parent.processReq(pkt);
+}
+
+
+bool
+AbstractIntegrityVerifier::processReq(PacketPtr pkt)
+{
     // Don't do anything special for memory requests that are not actually
     // for memory.
-    if (pkt->getAddr() < parent.system->memSize()) {
+    if (pkt->getAddr() < system->memSize()) {
         // Writebacks must be verified first before they can be forwarded to
         // memory. This will be handled now.
         if (pkt->isWrite()) {
-            return parent.handlePacket(pkt);
+            return handlePacket(pkt);
         }
 
         else if (pkt->isRead()) {
             if (!pkt->isMetadataRequest() &&
                 pkt->isRequest() &&
-                parent.addrInOIV(pkt->getAddr()))
+                addrInOIV(pkt->getAddr()))
             {
+                // While this is a read request and doesn't need to be
+                // processed now, a packet with this same address is being
+                // processed, so we don't want to "leapfrog" a packet out of
+                // order when this is at the same address.
+                //
+                // For example, a WritebackDirty could be being processed, but
+                // to the eyes of the LLC, it is safe to simply request the
+                // data back right away, so a read request could "skip" past
+                // the WritebackDirty and the ReadReq will get stale memory
+                // data. This is prevented by stalling the ReadReq until the
+                // WritebackDirty is finished.
                 DPRINTF(AbstractIntegrityVerifier,
                     "%s: Rejecting %s due to prior request with the same "
                     "address being served. Retrying later.\n",
                     __func__, pkt->print());
-                parent.saveRetry(pkt);
+                saveRetryReq(pkt);
                 return true;
             }
 
             // This is a read request. We will handle verification for this
             // once it becomes a response. For now, it can simply be forwarded
             // to memory.
-            parent.schedReq(pkt);
+            schedReq(pkt);
             return true;
         }
         // If this is something else (e.g., CleanEvict), drop to the default
         // behavior below.
     }
 
-    parent.schedReq(pkt);
+    schedReq(pkt);
 
     return true;
 }

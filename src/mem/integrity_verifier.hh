@@ -536,7 +536,50 @@ class AbstractIntegrityVerifier : public ClockedObject
     /**
      * Save a packet to retry its processing later.
      */
-    void saveRetry(PacketPtr pkt);
+    void saveRetryVerify(PacketPtr pkt);
+
+    /**
+     * An event that represents when we should re-attempt to do the requesting
+     * of a packet. This may happen if a packet is rejected due to another
+     * packet of the same address being processed.
+     *
+     * This does not necessarily mean a packet is retrying to be verified. This
+     * could be a packet that doesn't necessarily need verification to proceed
+     * proceed, but to prevent ordering issues, a packet might need to delay.
+     */
+    class RetryReqEvent : public Event
+    {
+      private:
+        // Pointer to the related verifier object.
+        AbstractIntegrityVerifier *verifier;
+
+        // Pointer to the original request packet.
+        PacketPtr pkt;
+
+      public:
+        RetryReqEvent(
+          AbstractIntegrityVerifier *verifier,
+          PacketPtr pkt
+        ) : Event(Default_Pri, AutoDelete),
+          verifier(verifier),
+          pkt(pkt)
+        { }
+
+        void process() override {
+          verifier->processReq(pkt);
+        }
+    };
+
+    /**
+     * Save a packet to retry its request later.
+     */
+    void saveRetryReq(PacketPtr pkt);
+
+    /**
+     * Process a request. This will either involve moving to verification
+     * or forwarding the request to memory.
+     */
+    bool processReq(PacketPtr pkt);
 
   protected:
     /**
