@@ -48,6 +48,9 @@ from m5.objects import (
 )
 from gem5.utils.requires import requires
 from gem5.components.boards.x86_board import X86Board
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_shared_l3_cache_hierarchy import (
+    PrivateL1PrivateL2SharedL3CacheHierarchy,
+)
 from gem5.components.memory.single_channel import DIMM_DDR5_4400, SingleChannelDDR4_3200
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
@@ -63,9 +66,6 @@ from gem5.resources.resource import DiskImageResource, KernelResource
 # MESI Three Level coherence protocol.
 requires(
     isa_required=ISA.X86,
-)
-from gem5.components.cachehierarchies.classic.private_l1_private_l2_shared_l3_cache_hierarchy import (
-    PrivateL1PrivateL2SharedL3CacheHierarchy,
 )
 
 parser = argparse.ArgumentParser(description='CXL system parameters.')
@@ -101,55 +101,55 @@ cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
     l3_size="96MB",
     l3_assoc=48,
 )
-for l1i in cache_hierarchy.l1icaches:
-    # l1i.tag_latency = 4
-    # l1i.data_latency = 4
-    # l1i.response_latency = 4
-    l1i.mshrs = 20
-    # l1i.write_buffers = 20
-    l1i.prefetcher = IndirectMemoryPrefetcher()
-    apply_prefetcher_options(l1i)
-for l1d in cache_hierarchy.l1dcaches:
-    l1d.tag_latency = 3
-    l1d.data_latency = 3
-    l1d.response_latency = 1
-    l1d.mshrs = 20
-    l1d.write_buffers = 16
-    l1d.writeback_clean = True
-    l1d.prefetcher = IndirectMemoryPrefetcher()
-    apply_prefetcher_options(l1d)
-for l2 in cache_hierarchy.l2caches:
-    l2.tag_latency = 7
-    l2.data_latency = 7
-    l2.response_latency = 5
-    l2.mshrs = 20
-    l2.tgts_per_mshr = 12
-    l2.write_buffers = 20
-    l2.writeback_clean = True
-    l2.clusivity = "mostly_excl"
-    l2.prefetcher = L2MultiPrefetcher()
-    apply_prefetcher_options(l2)
-for l2bus in cache_hierarchy.l2buses:
-    l2bus.width = 64
-    l2bus.snoop_filter.max_capacity = "384MiB"
-    l2bus.max_outstanding_snoops = 2048
-    l2bus.max_routing_table_size = 2048
-cache_hierarchy.l3cache.clusivity = "mostly_excl"
-cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
-apply_prefetcher_options(cache_hierarchy.l3cache)
-cache_hierarchy.l3bus.width = 64
-cache_hierarchy.l3bus.snoop_filter.max_capacity = "384MiB"
-cache_hierarchy.l3bus.max_outstanding_snoops = 2048
-cache_hierarchy.l3bus.max_routing_table_size = 2048
-
-cache_hierarchy.iocache.mshrs = 32
-cache_hierarchy.iocache.size = "256KiB"
-cache_hierarchy.iocache.write_buffers = 32
-
-for iptw_cache in cache_hierarchy.iptw_caches:
-    iptw_cache.size = "256KiB"
-for dptw_cache in cache_hierarchy.dptw_caches:
-    dptw_cache.size = "256KiB"
+# for l1i in cache_hierarchy.l1icaches:
+#     # l1i.tag_latency = 4
+#     # l1i.data_latency = 4
+#     # l1i.response_latency = 4
+#     l1i.mshrs = 20
+#     # l1i.write_buffers = 20
+#     l1i.prefetcher = IndirectMemoryPrefetcher()
+#     apply_prefetcher_options(l1i)
+# for l1d in cache_hierarchy.l1dcaches:
+#     l1d.tag_latency = 3
+#     l1d.data_latency = 3
+#     l1d.response_latency = 1
+#     l1d.mshrs = 20
+#     l1d.write_buffers = 16
+#     l1d.writeback_clean = True
+#     l1d.prefetcher = IndirectMemoryPrefetcher()
+#     apply_prefetcher_options(l1d)
+# for l2 in cache_hierarchy.l2caches:
+#     l2.tag_latency = 7
+#     l2.data_latency = 7
+#     l2.response_latency = 5
+#     l2.mshrs = 20
+#     l2.tgts_per_mshr = 12
+#     l2.write_buffers = 20
+#     l2.writeback_clean = True
+#     l2.clusivity = "mostly_excl"
+#     l2.prefetcher = L2MultiPrefetcher()
+#     apply_prefetcher_options(l2)
+# for l2bus in cache_hierarchy.l2buses:
+#     l2bus.width = 64
+#     l2bus.snoop_filter.max_capacity = "384MiB"
+#     l2bus.max_outstanding_snoops = 2048
+#     l2bus.max_routing_table_size = 2048
+# cache_hierarchy.l3cache.clusivity = "mostly_excl"
+# cache_hierarchy.l3cache.prefetcher = L2MultiPrefetcher()
+# apply_prefetcher_options(cache_hierarchy.l3cache)
+# cache_hierarchy.l3bus.width = 64
+# cache_hierarchy.l3bus.snoop_filter.max_capacity = "384MiB"
+# cache_hierarchy.l3bus.max_outstanding_snoops = 2048
+# cache_hierarchy.l3bus.max_routing_table_size = 2048
+#
+# cache_hierarchy.iocache.mshrs = 32
+# cache_hierarchy.iocache.size = "256KiB"
+# cache_hierarchy.iocache.write_buffers = 32
+#
+# for iptw_cache in cache_hierarchy.iptw_caches:
+#     iptw_cache.size = "256KiB"
+# for dptw_cache in cache_hierarchy.dptw_caches:
+#     dptw_cache.size = "256KiB"
 
 
 # Setup the system memory.
@@ -206,8 +206,8 @@ board = X86Board(
 )
 # board.bridge.req_size = 26
 # board.bridge.resp_size = 26
-board.bridge.req_size = 48
-board.bridge.resp_size = 48
+# board.bridge.req_size = 48
+# board.bridge.resp_size = 48
 
 for ctrl in board.get_memory().get_memory_controllers():
     ctrl.write_high_thresh_perc = 60
