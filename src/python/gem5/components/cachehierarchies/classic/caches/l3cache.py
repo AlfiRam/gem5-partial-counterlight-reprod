@@ -29,30 +29,30 @@ from typing import Type
 from m5.objects import (
     BasePrefetcher,
     Cache,
+    Clusivity,
     StridePrefetcher,
 )
 
 from .....utils.override import *
 
 
-class L1DCache(Cache):
+class L3Cache(Cache):
     """
-    A simple L1 data cache with default values.
-
-    If the cache has a mostly exclusive downstream cache, ``writeback_clean``
-    should be set to ``True``.
+    A simple L3 Cache with default values.
     """
 
     def __init__(
         self,
         size: str,
-        assoc: int = 8,
-        tag_latency: int = 1,
-        data_latency: int = 1,
+        assoc: int = 16,
+        tag_latency: int = 96,
+        data_latency: int = 96,
         response_latency: int = 1,
-        mshrs: int = 16,
-        tgts_per_mshr: int = 20,
+        mshrs: int = 384,
+        tgts_per_mshr: int = 32,
+        write_buffers: int = 256,
         writeback_clean: bool = False,
+        clusivity: Clusivity = "mostly_incl",
         PrefetcherCls: Type[BasePrefetcher] = StridePrefetcher,
     ):
         super().__init__()
@@ -63,6 +63,7 @@ class L1DCache(Cache):
         self.response_latency = response_latency
         self.mshrs = mshrs
         self.tgts_per_mshr = tgts_per_mshr
+        self.write_buffers = write_buffers
         self.writeback_clean = writeback_clean
-        # self.prefetcher = PrefetcherCls(degree=2, queue_size=8,confidence_threshold=70)
+        self.clusivity = clusivity
         self.prefetcher = PrefetcherCls()

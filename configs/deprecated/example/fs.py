@@ -85,7 +85,7 @@ def cmd_line_template():
     return None
 
 
-def build_test_system(np, isa: ISA):
+def build_test_system(np, isa: ISA, enable_cxl: bool = False):
     cmdline = cmd_line_template()
     if isa == ISA.MIPS:
         test_sys = makeLinuxMipsSystem(test_mem_mode, bm[0], cmdline=cmdline)
@@ -97,7 +97,8 @@ def build_test_system(np, isa: ISA):
         )
     elif isa == ISA.X86:
         test_sys = makeLinuxX86System(
-            test_mem_mode, np, bm[0], args.ruby, cmdline=cmdline
+            test_mem_mode, args.cxl_mem_size, np, bm[0], args.ruby, cmdline=cmdline,
+            enable_cxl=enable_cxl
         )
     elif isa == ISA.ARM:
         test_sys = makeArmSystem(
@@ -186,7 +187,8 @@ def build_test_system(np, isa: ISA):
             test_sys.iocache.mem_side = test_sys.membus.cpu_side_ports
         elif not args.external_memory_system:
             test_sys.iobridge = Bridge(
-                delay="50ns", ranges=test_sys.mem_ranges
+                delay="50ns", ranges=test_sys.mem_ranges,
+                enable_cxl=enable_cxl
             )
             test_sys.iobridge.cpu_side_port = test_sys.iobus.mem_side_ports
             test_sys.iobridge.mem_side_port = test_sys.membus.cpu_side_ports
@@ -216,6 +218,28 @@ def build_test_system(np, isa: ISA):
                     test_sys.cpu[i].branchPred.indirectBranchPred = (
                         IndirectBPClass()
                     )
+                if args.cpu_cache_store_ports:
+                    test_sys.cpu[i].cacheStorePorts = args.cpu_cache_store_ports
+                if args.cpu_cache_load_ports:
+                    test_sys.cpu[i].cacheLoadPorts = args.cpu_cache_load_ports
+                if args.cpu_fetch_queue_size:
+                    test_sys.cpu[i].fetchQueueSize = args.cpu_fetch_queue_size
+                if args.cpu_load_queue_entries:
+                    test_sys.cpu[i].LQEntries = args.cpu_load_queue_entries
+                if args.cpu_store_queue_entries:
+                    test_sys.cpu[i].SQEntries = args.cpu_store_queue_entries
+                if args.cpu_lfst_size:
+                    test_sys.cpu[i].LFSTSize = args.cpu_lfst_size
+                if args.cpu_ssit_size:
+                    test_sys.cpu[i].SSITSize = args.cpu_ssit_size
+                if args.cpu_iq_entries:
+                    test_sys.cpu[i].numIQEntries = args.cpu_iq_entries
+                if args.cpu_rob_entries:
+                    test_sys.cpu[i].numROBEntries = args.cpu_rob_entries
+                if isa == ISA.X86:
+                    if args.x86tlb_size:
+                        test_sys.cpu[i].mmu.itb.size = args.x86tlb_size
+                        test_sys.cpu[i].mmu.dtb.size = args.x86tlb_size
             test_sys.cpu[i].createThreads()
 
         # If elastic tracing is enabled when not restoring from checkpoint and
@@ -236,6 +260,9 @@ def build_test_system(np, isa: ISA):
 
         MemConfig.config_mem(args, test_sys)
 
+        if enable_cxl:
+            MemConfig.config_cxl(args, test_sys)
+
     if ObjectList.is_kvm_cpu(TestCPUClass) or ObjectList.is_kvm_cpu(
         FutureClass
     ):
@@ -254,7 +281,7 @@ def build_test_system(np, isa: ISA):
     return test_sys
 
 
-def build_drive_system(np):
+def build_drive_system(np, enable_cxl: bool = False):
     # driver system CPU is always simple, so is the memory
     # Note this is an assignment of a class, not an instance.
     DriveCPUClass = AtomicSimpleCPU
@@ -268,7 +295,7 @@ def build_drive_system(np):
         drive_sys = makeSparcSystem(drive_mem_mode, bm[1], cmdline=cmdline)
     elif buildEnv["USE_X86_ISA"]:
         drive_sys = makeLinuxX86System(
-            drive_mem_mode, np, bm[1], cmdline=cmdline
+            drive_mem_mode, np, bm[1], cmdline=cmdline, enable_cxl=enable_cxl
         )
     elif buildEnv["USE_ARM_ISA"]:
         drive_sys = makeArmSystem(
@@ -308,7 +335,8 @@ def build_drive_system(np):
     if ObjectList.is_kvm_cpu(DriveCPUClass):
         drive_sys.kvm_vm = KvmVM()
 
-    drive_sys.iobridge = Bridge(delay="50ns", ranges=drive_sys.mem_ranges)
+    drive_sys.iobridge = Bridge(delay="50ns", ranges=drive_sys.mem_ranges,
+                                enable_cxl=enable_cxl)
     drive_sys.iobridge.cpu_side_port = drive_sys.iobus.mem_side_ports
     drive_sys.iobridge.mem_side_port = drive_sys.membus.cpu_side_ports
 
@@ -381,12 +409,13 @@ else:
         ]
 
 np = args.num_cpus
+enable_cxl = args.enable_cxl
 
 isa = ObjectList.cpu_list.get_isa(args.cpu_type)
-test_sys = build_test_system(np, isa)
+test_sys = build_test_system(np, isa, enable_cxl=enable_cxl)
 
 if len(bm) == 2:
-    drive_sys = build_drive_system(np)
+    drive_sys = build_drive_system(np, enable_cxl=enable_cxl)
     root = makeDualRoot(True, test_sys, drive_sys, args.etherdump)
 elif len(bm) == 1 and args.dist:
     # This system is part of a dist-gem5 simulation

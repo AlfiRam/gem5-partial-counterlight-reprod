@@ -727,3 +727,7 @@ class PIFPrefetcher(QueuedPrefetcher):
         self.addEvent(
             HWPProbeEventRetiredInsts(self, simObj, "RetiredInstsPC")
         )
+
+class L2MultiPrefetcher(MultiPrefetcher):
+    prefetchers = VectorParam.BasePrefetcher([SignaturePathPrefetcher(),
+        AMPMPrefetcher(), DCPTPrefetcher()], "Array of prefetchers")

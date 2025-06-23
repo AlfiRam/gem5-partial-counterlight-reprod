@@ -179,6 +179,16 @@ class L2XBar(CoherentXBar):
     point_of_unification = True
 
 
+class L3XBar(CoherentXBar):
+    width = 32
+    frontend_latency = 1
+    forward_latency = 0
+    response_latency = 1
+    snoop_response_latency = 1
+    snoop_filter = SnoopFilter(lookup_latency = 0)
+    point_of_unification = True
+
+
 # One of the key coherent crossbar instances is the system
 # interconnect, tying together the CPU clusters, GPUs, and any I/O
 # coherent requestors, and DRAM controllers.
@@ -213,6 +223,18 @@ class SystemXBar(CoherentXBar):
 # or more on-chip I/O crossbars. Note that at some point we might want
 # to also define an off-chip I/O crossbar such as PCIe.
 class IOXBar(NoncoherentXBar):
+    # 128-bit crossbar by default
+    width = 16
+
+    # Assume a simpler datapath than a coherent crossbar, incuring
+    # less pipeline stages for decision making and forwarding of
+    # requests.
+    frontend_latency = 2
+    forward_latency = 1
+    response_latency = 2
+
+
+class CXLMemBar(NoncoherentXBar):
     # 128-bit crossbar by default
     width = 16
 

@@ -169,6 +169,8 @@ class BaseCache(ClockedObject):
     # data cache.
     write_allocator = Param.WriteAllocator(NULL, "Write allocator")
 
+    enable_cxl = Param.Bool(False, "Enable CXL functionality")
+
 
 class Cache(BaseCache):
     type = "Cache"

@@ -102,6 +102,7 @@ class ChanneledMemory(AbstractMemorySystem):
 
         if size:
             size = _try_convert(size, str)
+            self._size_str = size
 
         if os_size:
             os_size = _try_convert(os_size, str)
@@ -204,6 +205,9 @@ class ChanneledMemory(AbstractMemorySystem):
     @overrides(AbstractMemorySystem)
     def get_size(self) -> int:
         return self._size
+    
+    def get_size_str(self) -> str:
+        return self._size_str
 
     @overrides(AbstractMemorySystem)
     def get_os_size(self) -> MemorySize:

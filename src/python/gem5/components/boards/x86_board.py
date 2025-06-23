@@ -27,6 +27,7 @@
 
 from typing import (
     List,
+    Optional,
     Sequence,
 )
 
@@ -35,6 +36,8 @@ from m5.objects import (
     AddrRange,
     BaseXBar,
     Bridge,
+    CXLBridge,
+    CXLMemBar,
     CowDiskImage,
     IdeDisk,
     IOXBar,
@@ -54,6 +57,7 @@ from m5.objects import (
     X86IntelMPProcessor,
     X86SMBiosBiosInformation,
 )
+from m5.params import Latency
 from m5.util.convert import toMemorySize
 
 from ...components.boards.se_binary_workload import SEBinaryWorkload
@@ -82,12 +86,18 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         processor: AbstractProcessor,
         memory: AbstractMemorySystem,
         cache_hierarchy: AbstractCacheHierarchy,
+        cxl_memory: AbstractMemorySystem,
+        is_asic: bool,
+        enable_cxl: Optional[bool] = False,
     ) -> None:
         super().__init__(
             clk_freq=clk_freq,
             processor=processor,
             memory=memory,
             cache_hierarchy=cache_hierarchy,
+            cxl_memory=cxl_memory,
+            is_asic=is_asic,
+            enable_cxl=enable_cxl,
         )
 
         if self.get_processor().get_isa() != ISA.X86:
@@ -99,7 +109,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
     @overrides(AbstractSystemBoard)
     def _setup_board(self) -> None:
         if self.is_fullsystem():
-            self.pc = Pc()
+            self.pc = Pc(enable_cxl=self._enable_cxl)
 
             self.workload = X86FsLinux()
 
@@ -128,27 +138,66 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
         # Setup memory system specific settings.
         if self.get_cache_hierarchy().is_ruby():
-            self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma])
+            if self._enable_cxl:
+                self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma, self.pc.south_bridge.cxlmemory.dma])
+            else:
+                self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma])
         else:
-            self.bridge = Bridge(delay="50ns")
+            if self._enable_cxl:
+                # # Constants similar to x86_traits.hh
+                IO_address_space_base = 0x8000000000000000
+                pci_config_address_space_base = 0xC000000000000000
+                interrupts_address_space_base = 0xA000000000000000
+                APIC_range_size = 1 << 12
+
+                # Configure CXLBridge
+                self.bridge = CXLBridge(bridge_lat="50ns", proto_proc_lat="12ns", req_fifo_depth=128, resp_fifo_depth=128)
+            else:
+                self.bridge = Bridge(delay="50ns", cxl_delay="30ns")
             self.bridge.mem_side_port = self.get_io_bus().cpu_side_ports
             self.bridge.cpu_side_port = (
                 self.get_cache_hierarchy().get_mem_side_port()
             )
 
-            # # Constants similar to x86_traits.hh
-            IO_address_space_base = 0x8000000000000000
-            pci_config_address_space_base = 0xC000000000000000
-            interrupts_address_space_base = 0xA000000000000000
-            APIC_range_size = 1 << 12
-
             self.bridge.ranges = [
                 AddrRange(0xC0000000, 0xFFFF0000),
+            ]
+
+            self.bridge.ranges.append(
                 AddrRange(
                     IO_address_space_base, interrupts_address_space_base - 1
                 ),
+            )
+            self.bridge.ranges.append(
                 AddrRange(pci_config_address_space_base, Addr.max),
-            ]
+            )
+
+            # Configure CXL Device
+            if self._enable_cxl:
+                cxl_mem_start = 0x100000000
+                cxl_dram = self.get_cxl_memory()
+                cxl_mem_range = AddrRange(Addr(cxl_mem_start), size=cxl_dram.get_size())
+                self.bridge.ranges.append(cxl_mem_range)
+                self.pc.south_bridge.cxlmemory.cxl_mem_range = cxl_mem_range
+                cxl_dram.set_memory_range([cxl_mem_range])
+                cxl_abstract_mems = []
+                for mc in cxl_dram.get_memory_controllers():
+                    cxl_abstract_mems.append(mc.dram)
+                self.memories.extend(cxl_abstract_mems)
+                self.cxl_mem_bus = CXLMemBar()
+                self.cxl_mem_bus.cpu_side_ports = self.pc.south_bridge.cxlmemory.mem_req_port
+                for _, port in cxl_dram.get_mem_ports():
+                    self.cxl_mem_bus.mem_side_ports = port
+
+                self.pc.south_bridge.cxlmemory.BAR0.size = cxl_dram.get_size_str()
+                if self._is_asic:
+                    self.pc.south_bridge.cxlmemory.proto_proc_lat = Latency("15ns")
+                    self.pc.south_bridge.cxlmemory.rsp_size = 48
+                    self.pc.south_bridge.cxlmemory.req_size = 48
+                else:
+                    self.pc.south_bridge.cxlmemory.proto_proc_lat = Latency("60ns")
+                    self.pc.south_bridge.cxlmemory.rsp_size = 36
+                    self.pc.south_bridge.cxlmemory.req_size = 36
 
             self.apicbridge = Bridge(delay="50ns")
             self.apicbridge.cpu_side_port = self.get_io_bus().mem_side_ports
@@ -172,7 +221,8 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         base_entries = []
         ext_entries = []
         # Updated the X86 board with MADT entries.
-        madt_entries = []
+        if not self._enable_cxl:
+            madt_entries = []
         for i in range(self.get_processor().get_num_cores()):
             bp = X86IntelMPProcessor(
                 local_apic_id=i,
@@ -181,8 +231,9 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 bootstrap=(i == 0),
             )
             base_entries.append(bp)
-            lapic = X86ACPIMadtLAPIC(acpi_processor_id=i, apic_id=i, flags=1)
-            madt_entries.append(lapic)
+            if not self._enable_cxl:
+                lapic = X86ACPIMadtLAPIC(acpi_processor_id=i, apic_id=i, flags=1)
+                madt_entries.append(lapic)
 
         io_apic = X86IntelMPIOAPIC(
             id=self.get_processor().get_num_cores(),
@@ -193,11 +244,12 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
         self.pc.south_bridge.io_apic.apic_id = io_apic.id
         base_entries.append(io_apic)
-        madt_entries.append(
-            X86ACPIMadtIOAPIC(
-                id=io_apic.id, address=io_apic.address, int_base=0
+        if not self._enable_cxl:
+            madt_entries.append(
+                X86ACPIMadtIOAPIC(
+                    id=io_apic.id, address=io_apic.address, int_base=0
+                )
             )
-        )
 
         pci_bus = X86IntelMPBus(bus_id=0, bus_type="PCI   ")
         base_entries.append(pci_bus)
@@ -219,13 +271,14 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         )
 
         base_entries.append(pci_dev4_inta)
-        pci_dev4_inta_madt = X86ACPIMadtIntSourceOverride(
-            bus_source=pci_dev4_inta.source_bus_id,
-            irq_source=pci_dev4_inta.source_bus_irq,
-            sys_int=pci_dev4_inta.dest_io_apic_intin,
-            flags=0,
-        )
-        madt_entries.append(pci_dev4_inta_madt)
+        if not self._enable_cxl:
+            pci_dev4_inta_madt = X86ACPIMadtIntSourceOverride(
+                bus_source=pci_dev4_inta.source_bus_id,
+                irq_source=pci_dev4_inta.source_bus_irq,
+                sys_int=pci_dev4_inta.dest_io_apic_intin,
+                flags=0,
+            )
+            madt_entries.append(pci_dev4_inta_madt)
 
         def assignISAInt(irq, apicPin):
             assign_8259_to_apic = X86IntelMPIOIntAssignment(
@@ -249,11 +302,12 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 dest_io_apic_intin=apicPin,
             )
             base_entries.append(assign_to_apic)
-            # acpi
-            assign_to_apic_acpi = X86ACPIMadtIntSourceOverride(
-                bus_source=1, irq_source=irq, sys_int=apicPin, flags=0
-            )
-            madt_entries.append(assign_to_apic_acpi)
+            if not self._enable_cxl:
+                # acpi
+                assign_to_apic_acpi = X86ACPIMadtIntSourceOverride(
+                    bus_source=1, irq_source=irq, sys_int=apicPin, flags=0
+                )
+                madt_entries.append(assign_to_apic_acpi)
 
         assignISAInt(0, 2)
         assignISAInt(1, 1)
@@ -264,18 +318,21 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         self.workload.intel_mp_table.base_entries = base_entries
         self.workload.intel_mp_table.ext_entries = ext_entries
 
-        madt = X86ACPIMadt(
-            local_apic_address=0, records=madt_entries, oem_id="madt"
-        )
-        self.workload.acpi_description_table_pointer.rsdt.entries.append(madt)
-        self.workload.acpi_description_table_pointer.xsdt.entries.append(madt)
-        self.workload.acpi_description_table_pointer.oem_id = "gem5"
-        self.workload.acpi_description_table_pointer.rsdt.oem_id = "gem5"
-        self.workload.acpi_description_table_pointer.xsdt.oem_id = "gem5"
+        if not self._enable_cxl:
+            madt = X86ACPIMadt(
+                local_apic_address=0, records=madt_entries, oem_id="madt"
+            )
+            self.workload.acpi_description_table_pointer.rsdt.entries.append(madt)
+            self.workload.acpi_description_table_pointer.xsdt.entries.append(madt)
+            self.workload.acpi_description_table_pointer.oem_id = "gem5"
+            self.workload.acpi_description_table_pointer.rsdt.oem_id = "gem5"
+            self.workload.acpi_description_table_pointer.xsdt.oem_id = "gem5"
+
         # Set up the OS-observable memory
         memory = self.get_memory()
         os_observable_data_range = AddrRange(memory.get_os_size())
         os_observable_size = os_observable_data_range.size()
+
         entries = [
             # Mark the first megabyte of memory as reserved
             X86E820Entry(addr=0, size="639KiB", range_type=1),
@@ -292,6 +349,9 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         entries.append(
             X86E820Entry(addr=0xFFFF0000, size="64KiB", range_type=2)
         )
+
+        if self._enable_cxl:
+            entries.append(X86E820Entry(addr=0x100000000, size=f"{cxl_mem_range.size()}B", range_type=1))
 
         self.workload.e820_table.entries = entries
 
@@ -316,7 +376,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
     @overrides(AbstractSystemBoard)
     def get_dma_ports(self) -> Sequence[Port]:
         if self.has_dma_ports():
-            return [self.pc.south_bridge.ide.dma, self.iobus.mem_side_ports]
+            if self._enable_cxl:
+                return [self.pc.south_bridge.ide.dma, self.iobus.mem_side_ports, self.pc.south_bridge.cxlmemory.dma]
+            else:
+                return [self.pc.south_bridge.ide.dma, self.iobus.mem_side_ports]
         else:
             raise Exception(
                 "Cannot execute `get_dma_ports()`: Board does not have DMA "
@@ -349,6 +412,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             )
         data_range = AddrRange(memory.get_size())
         memory.set_memory_range([data_range])
+        cpu_abstract_mems = []
+        for mc in memory.get_memory_controllers():
+            cpu_abstract_mems.append(mc.dram)
+        self.memories = cpu_abstract_mems
 
         # Add the address range for the IO
         self.mem_ranges = [
@@ -358,7 +425,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
     @overrides(KernelDiskWorkload)
     def get_disk_device(self):
-        return "/dev/hda"
+        if self._enable_cxl:
+            return "/dev/hda1"
+        else:
+            return "/dev/hda"
 
     @overrides(KernelDiskWorkload)
     def _add_disk_to_board(self, disk_image: AbstractResource):

@@ -149,6 +149,14 @@ class MemCmd
         HTMAbort,
         // Tlb shootdown
         TlbiExtSync,
+        // cxl.mem extended
+        /** enum type:it is necessary to align the command item here 
+         *  with the attribute item in the .cc file.
+         */
+        M2SReq, // Requset              (read)
+        S2MDRS, // Data Response        (read resp)
+        M2SRwD, // Requset with Data    (write)
+        S2MNDR, // No Data Response     (write resp)
         NUM_MEM_CMDS
     };
 
@@ -370,6 +378,8 @@ class Packet : public Printable, public Extensible<Packet>
 
     /// The command field of the packet.
     MemCmd cmd;
+
+    MemCmd cxl_cmd;
 
     const PacketId id;
 
@@ -1083,6 +1093,13 @@ class Packet : public Printable, public Extensible<Packet>
         // responses are never express, even if the snoop that
         // triggered them was
         flags.clear(EXPRESS_SNOOP);
+    }
+
+    void
+    makeCXLResponse()
+    {
+        cxl_cmd = cxl_cmd.responseCommand();
+        this->makeResponse();
     }
 
     void

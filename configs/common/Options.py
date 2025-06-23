@@ -169,6 +169,8 @@ def addNoISAOptions(parser):
         default=0,
         help="Memory channels interleave",
     )
+    parser.add_argument("--memctrl_write_thresh_high", type=int)
+    parser.add_argument("--memctrl_write_thresh_low", type=int)
 
     parser.add_argument("--memchecker", action="store_true")
 
@@ -196,6 +198,7 @@ def addNoISAOptions(parser):
     parser.add_argument("--l1i_assoc", type=int, default=2)
     parser.add_argument("--l2_assoc", type=int, default=8)
     parser.add_argument("--l3_assoc", type=int, default=16)
+    parser.add_argument("--ptwc_assoc", type=int)
     parser.add_argument("--cacheline_size", type=int, default=64)
 
     # Enable Ruby
@@ -335,6 +338,25 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
                         (if not set, use the default prefetcher of
                         the selected cache)""",
     )
+    parser.add_argument("--hwp_queue_size", type=int)
+    parser.add_argument("--hwp_table_entries", type=int)
+    parser.add_argument("--hwp_prefetch_confidence_thresh", type=float)
+    parser.add_argument("--hwp_lookahead_confidence_thresh", type=float)
+    parser.add_argument("--l1d_tag_latency", type=int)
+    parser.add_argument("--l1i_tag_latency", type=int)
+    parser.add_argument("--l2_tag_latency", type=int)
+    parser.add_argument("--l1d_data_latency", type=int)
+    parser.add_argument("--l1i_data_latency", type=int)
+    parser.add_argument("--l2_data_latency", type=int)
+    parser.add_argument("--l1d_response_latency", type=int)
+    parser.add_argument("--l1i_response_latency", type=int)
+    parser.add_argument("--l2_response_latency", type=int)
+    parser.add_argument("--l1d_mshrs", type=int)
+    parser.add_argument("--l1i_mshrs", type=int)
+    parser.add_argument("--l2_mshrs", type=int)
+    parser.add_argument("--l1d_write_buffers", type=int)
+    parser.add_argument("--l1i_write_buffers", type=int)
+    parser.add_argument("--l2_write_buffers", type=int)
     parser.add_argument("--checker", action="store_true")
     parser.add_argument(
         "--cpu-clock",
@@ -343,6 +365,16 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
         default="2GHz",
         help="Clock for blocks running at CPU speed",
     )
+    parser.add_argument("--cpu_cache_store_ports", type=int)
+    parser.add_argument("--cpu_cache_load_ports", type=int)
+    parser.add_argument("--cpu_fetch_queue_size", type=int)
+    parser.add_argument("--cpu_load_queue_entries", type=int)
+    parser.add_argument("--cpu_store_queue_entries", type=int)
+    parser.add_argument("--cpu_lfst_size", type=int)
+    parser.add_argument("--cpu_ssit_size", type=int)
+    parser.add_argument("--cpu_iq_entries", type=int)
+    parser.add_argument("--cpu_rob_entries", type=int)
+    parser.add_argument("--x86tlb_size", type=int)
     parser.add_argument(
         "--smt",
         action="store_true",
@@ -351,6 +383,13 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
                       Only used if multiple programs are specified. If true,
                       then the number of threads per cpu is same as the
                       number of programs.""",
+    )
+    parser.add_argument(
+        "--enable-cxl",
+        action="store_true",
+        default=False,
+        help="""
+                      Enable CXL functionality.""",
     )
     parser.add_argument(
         "--elastic-trace-en",
@@ -607,6 +646,8 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
         default=None,
         help="switch back and forth between CPUs with period <N>",
     )
+    parser.add_argument("--one-switch-cpu", action="store_true")
+
     parser.add_argument(
         "-s",
         "--standard-switch",
@@ -688,6 +729,50 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
         default=None,
         help="Override vendor string returned by CPUID instruction in X86.",
     )
+
+    # CXL options
+    parser.add_argument(
+        "--cxl-mem-size",
+        action="store",
+        type=str,
+        default="2GB",
+        help="Specify the CXL Device memory size",
+    )
+    # parser.add_argument(
+    #     "--cxl-mem-lat",
+    #     action="store",
+    #     type=str,
+    #     default="60ns",
+    #     help="Delay in accessing CXL device backend storage media",
+    # )
+    # parser.add_argument(
+    #     "--cxl-proto-parsing",
+    #     action="store",
+    #     type=str,
+    #     default="90ns",
+    #     help="The delay of CXL device controller parsing CXL protocol",
+    # )
+    # parser.add_argument(
+    #     "--cxl-proto-processing",
+    #     action="store",
+    #     type=str,
+    #     default="40ns",
+    #     help="The delay of processing the CXL protocol package in Bridge",
+    # )
+    # parser.add_argument(
+    #     "--cxl-req-fifo",
+    #     action="store",
+    #     type=int,
+    #     default=48,
+    #     help="The depth of the CXL packet request queue in Bridge",
+    # )
+    # parser.add_argument(
+    #     "--cxl-resp-fifo",
+    #     action="store",
+    #     type=int,
+    #     default=48,
+    #     help="The depth of the CXL packet response queue in Bridge",
+    # )
 
 
 def addSEOptions(parser):

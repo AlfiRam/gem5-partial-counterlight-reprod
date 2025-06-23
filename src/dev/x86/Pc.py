@@ -56,7 +56,11 @@ class Pc(Platform):
     cxx_class = "gem5::Pc"
     system = Param.System(Parent.any, "system")
 
-    south_bridge = Param.SouthBridge(SouthBridge(), "Southbridge")
+    enable_cxl = Param.Bool(False, "Enable CXL functionality.")
+
+    south_bridge = Param.SouthBridge(
+        SouthBridge(enable_cxl=enable_cxl), "Southbridge"
+    )
     pci_host = PcPciHost()
 
     # Serial port and terminal

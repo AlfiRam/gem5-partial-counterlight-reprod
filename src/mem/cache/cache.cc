@@ -79,7 +79,6 @@ Cache::satisfyRequest(PacketPtr pkt, CacheBlk *blk,
                       bool deferred_response, bool pending_downgrade)
 {
     BaseCache::satisfyRequest(pkt, blk);
-
     if (pkt->isRead()) {
         // determine if this read is from a (coherent) cache or not
         if (pkt->fromCache()) {
@@ -316,7 +315,6 @@ Cache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time)
     // flush and invalidate any existing block as part of the
     // lookup
     assert(!pkt->req->isUncacheable());
-
     BaseCache::handleTimingReqHit(pkt, blk, request_time);
 }
 

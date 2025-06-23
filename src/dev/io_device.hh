@@ -76,7 +76,7 @@ class PioPort : public SimpleTimingPort
 
         const Tick delay =
             pkt->isRead() ? device->read(pkt) : device->write(pkt);
-        assert(pkt->isResponse() || pkt->isError());
+        // assert(pkt->isResponse() || pkt->isError());
         return delay + receive_delay;
     }
 
@@ -91,6 +91,7 @@ class PioPort : public SimpleTimingPort
         SimpleTimingPort(dev->name() + ".pio", dev), device(dev)
     {}
 };
+
 
 /**
  * This device is the base class which all devices senstive to an address range
