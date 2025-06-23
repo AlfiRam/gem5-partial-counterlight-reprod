@@ -25,6 +25,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from m5.objects.Cmos import Cmos
+from m5.objects.CXLMemory import CXLMemory
 from m5.objects.I8042 import I8042
 from m5.objects.I8237 import I8237
 from m5.objects.I8254 import I8254
@@ -39,7 +40,6 @@ from m5.objects.X86Ide import X86IdeController
 from m5.params import *
 from m5.proxy import *
 from m5.SimObject import SimObject
-from m5.objects.CXLMemory import CXLMemory
 
 
 def x86IOAddress(port):
@@ -106,7 +106,6 @@ class SouthBridge(SimObject):
         self.dma1.pio = bus.mem_side_ports
         self.ide.pio = bus.mem_side_ports
         if self.enable_cxl:
-            self.cxlmemory.pio = bus.mem_side_ports
             self.cxlmemory.cxl_rsp_port = bus.mem_side_ports
         if dma_ports.count(self.ide.dma) == 0:
             self.ide.dma = bus.cpu_side_ports
