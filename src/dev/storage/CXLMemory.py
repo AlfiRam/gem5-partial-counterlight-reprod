@@ -18,7 +18,7 @@ class CXLMemory(PciDevice):
     req_size = Param.Unsigned(48, "The number of requests to buffer")
     
     proto_proc_lat = Param.Latency("15ns", "Latency of the CXL controller processing CXL.mem sub-protocol packets")
-    cxl_mem_range = Param.AddrRange("2GB", "CXL expander memory range that can be identified as system memory")
+    cxl_mem_range = Param.AddrRange("2GiB", "CXL expander memory range that can be identified as system memory")
 
     VendorID = 0x8086
     DeviceID = 0X7890
@@ -32,5 +32,5 @@ class CXLMemory(PciDevice):
     InterruptPin = 0x01
 
     # Primary
-    BAR0 = PciMemBar(size='2GB')
+    BAR0 = PciMemBar(size='2GiB')
     BAR1 = PciMemUpperBar()

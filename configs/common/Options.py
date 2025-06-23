@@ -735,7 +735,7 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
         "--cxl-mem-size",
         action="store",
         type=str,
-        default="2GB",
+        default="2GiB",
         help="Specify the CXL Device memory size",
     )
     # parser.add_argument(

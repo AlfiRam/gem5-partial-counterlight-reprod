@@ -128,13 +128,13 @@ def apply_prefetcher_options(cache):
 
 # Here we setup a MESI Three Level Cache Hierarchy.
 cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
-    l1d_size="48kB",
+    l1d_size="48KiB",
     l1d_assoc=6,
-    l1i_size="32kB",
+    l1i_size="32KiB",
     l1i_assoc=8,
-    l2_size="2MB",
+    l2_size="2MiB",
     l2_assoc=16,
-    l3_size="96MB",
+    l3_size="96MiB",
     l3_assoc=48,
 )
 # for l1i in cache_hierarchy.l1icaches:
@@ -189,11 +189,11 @@ cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
 
 
 # Setup the system memory.
-memory = DIMM_DDR5_4400(size="3GB")
+memory = DIMM_DDR5_4400(size="3GiB")
 if args.is_asic:
-    cxl_memory = DIMM_DDR5_4400(size="8GB")
+    cxl_memory = DIMM_DDR5_4400(size="8GiB")
 else:
-    cxl_memory = SingleChannelDDR4_3200(size="8GB")
+    cxl_memory = SingleChannelDDR4_3200(size="8GiB")
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
 # configuration is instantiated a user may call `processor.switch()` to switch
