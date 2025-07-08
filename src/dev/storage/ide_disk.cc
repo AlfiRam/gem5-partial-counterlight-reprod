@@ -483,6 +483,8 @@ IdeDisk::doDmaDataWrite()
             diskDelay, totalDiskDelay);
     DPRINTF(IdeDisk, "curPrd.getByteCount(): %ld\n",
             curPrd.getByteCount());
+    DPRINTF(IdeDisk, "cmdBytesLeft: %d\n",
+            cmdBytesLeft);
 
     memset(dataBuffer, 0, MAX_DMA_SIZE);
     assert(cmdBytesLeft <= MAX_DMA_SIZE);
@@ -490,6 +492,12 @@ IdeDisk::doDmaDataWrite()
         readDisk(curSector++, (uint8_t *)(dataBuffer + bytesRead));
         bytesRead += SectorSize;
         cmdBytesLeft -= SectorSize;
+        if (cmdBytesLeft > MAX_DMA_SIZE) {
+            // Underflow detected.
+            panic("%s: IDE disk is acting upon more data than expected. "
+                    "(Just subtracted %d, cmdBytesLeft is now %u).\n",
+                    __func__, SectorSize, cmdBytesLeft);
+        }
     }
     DPRINTF(IdeDisk, "doDmaWrite, bytesRead: %d cmdBytesLeft: %d\n",
             bytesRead, cmdBytesLeft);
