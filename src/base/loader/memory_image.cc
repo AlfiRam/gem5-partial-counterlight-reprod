@@ -27,6 +27,8 @@
  */
 
 #include "base/loader/memory_image.hh"
+#include "base/trace.hh"
+#include "debug/MemoryImage.hh"
 #include "mem/port_proxy.hh"
 
 namespace gem5
@@ -52,9 +54,12 @@ MemoryImage::writeSegment(const Segment &seg, const PortProxy &proxy) const
 bool
 MemoryImage::write(const PortProxy &proxy) const
 {
-    for (auto &seg: _segments)
+    for (auto &seg: _segments) {
+        DPRINTF(MemoryImage, "Writing segment '%s', base 0x%llx, size %llu\n",
+            seg.name, seg.base, seg.size);
         if (!writeSegment(seg, proxy))
             return false;
+    }
     return true;
 }
 
