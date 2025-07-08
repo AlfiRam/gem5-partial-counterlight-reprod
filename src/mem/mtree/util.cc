@@ -16,7 +16,7 @@ long long integerPower(int base, int exponent) {
   return result;
 }
 
-long long integerLog(unsigned int base, long long num) {
+long long integerLog(long long num, unsigned int base) {
   // C++ library only provides the natural logarithm (base e), so this will
   // involve an additional change of base calculation.
   long double log_calculation = std::log((long double) num) /

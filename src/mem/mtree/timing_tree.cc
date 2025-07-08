@@ -46,7 +46,7 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
     __func__, lastLevelNodes);
 
   // Calculate how many levels you need to get that many leaves in the tree.
-  unsigned int levels = integerLog(arity, lastLevelNodes) + 1;
+  unsigned int levels = integerLog(lastLevelNodes, arity) + 1;
   height = levels;
   DPRINTF(TimingTree, "%s: The height is %u.\n", __func__, levels);
 
