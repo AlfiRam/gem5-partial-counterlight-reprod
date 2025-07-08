@@ -18,7 +18,7 @@
 namespace gem5
 {
 
-class CXLMemory : public PciDevice 
+class CXLMemory : public PciDevice
 {
     protected:
 
@@ -33,7 +33,7 @@ class CXLMemory : public PciDevice
             const PacketPtr pkt;
             /** When did pkt enter the transmitList */
             const Tick entryTime;
-            DeferredPacket(PacketPtr _pkt, Tick _tick) : 
+            DeferredPacket(PacketPtr _pkt, Tick _tick) :
                 tick(_tick), pkt(_pkt),
                 entryTime(curTick())
             { }
@@ -154,7 +154,7 @@ class CXLMemory : public PciDevice
                 void recvMemBackdoorReq(
                     const MemBackdoorReq &req, MemBackdoorPtr &backdoor) override {};
 
-                void recvFunctional(PacketPtr pkt) override {};
+                void recvFunctional(PacketPtr pkt) override;
 
                 /** When receiving a address range request the Host,
                     pass it to the back-end memory media. */
@@ -165,8 +165,8 @@ class CXLMemory : public PciDevice
 
 
         /**
-        * Port on the side that forwards requests to and receives 
-        * responses from back-end memory media. The request port 
+        * Port on the side that forwards requests to and receives
+        * responses from back-end memory media. The request port
         * has a buffer for the requests not yet sent.
         */
         class CXLRequestPort : public RequestPort
@@ -254,7 +254,7 @@ class CXLMemory : public PciDevice
         struct CXLCtrlStats : public statistics::Group
         {
             CXLCtrlStats(CXLMemory &cxlMemory);
-    
+
             statistics::Scalar reqQueFullEvents;
             statistics::Scalar reqRetryCounts;
             statistics::Scalar rspQueFullEvents;
@@ -269,7 +269,7 @@ class CXLMemory : public PciDevice
             statistics::Distribution rspQueueLatDist;
             statistics::Distribution memToCXLCtrlRsp;
         };
-    
+
         CXLCtrlStats stats;
 
     public:

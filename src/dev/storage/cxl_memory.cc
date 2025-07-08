@@ -12,7 +12,7 @@ CXLMemory::CXLResponsePort::CXLResponsePort(const std::string& _name,
                                         AddrRange _cxlMemRange)
     : ResponsePort(_name), cxlMemory(_cxlMemory),
     memReqPort(_memReqPort), protoProcLat(_protoProcLat),
-    cxlMemRange(_cxlMemRange), outstandingResponses(0), 
+    cxlMemRange(_cxlMemRange), outstandingResponses(0),
     retryReq(false), respQueueLimit(_resp_limit),
     sendEvent([this]{ trySendTiming(); }, _name)
 {
@@ -35,7 +35,7 @@ CXLMemory::CXLMemory(const Params &p)
             ticksToCycles(p.proto_proc_lat), p.rsp_size, p.cxl_mem_range),
     memReqPort(p.name + ".mem_req_port", *this, cxlRspPort,
             ticksToCycles(p.proto_proc_lat), p.req_size),
-    preRspTick(0),        
+    preRspTick(0),
     stats(*this)
     {
         DPRINTF(CXLMemory, "BAR0_addr:0x%lx, BAR0_size:0x%lx\n",
@@ -87,7 +87,7 @@ CXLMemory::CXLCtrlStats::CXLCtrlStats(CXLMemory &_cxlMemory)
         .flags(statistics::nozero);
 }
 
-Port & 
+Port &
 CXLMemory::getPort(const std::string &if_name, PortID idx)
 {
     if (if_name == "cxl_rsp_port")
@@ -379,7 +379,7 @@ CXLMemory::CXLResponsePort::recvAtomic(PacketPtr pkt)
             pkt->cmdString(), pkt->getAddrRange().to_string());
     panic_if(pkt->cacheResponding(), "Should not see packets where cache "
              "is responding");
-    
+
     Cycles delay = processCXLMem(pkt);
 
     Tick access_delay = memReqPort.sendAtomic(pkt);
@@ -397,6 +397,15 @@ CXLMemory::CXLResponsePort::recvAtomicBackdoor(
 
     return delay * cxlMemory.clockPeriod() + memReqPort.sendAtomicBackdoor(
         pkt, backdoor);
+}
+
+void
+CXLMemory::CXLResponsePort::recvFunctional(PacketPtr pkt)
+{
+    // Directly forward the request to backend memory.
+    DPRINTF(CXLMemory, "CXLMemory recvFunctional: %s AddrRange: %s\n",
+            pkt->cmdString(), pkt->getAddrRange().to_string());
+    memReqPort.sendFunctional(pkt);
 }
 
 Cycles
