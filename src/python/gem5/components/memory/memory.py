@@ -130,7 +130,7 @@ class ChanneledMemory(AbstractMemorySystem):
         else:
             self._size = self._get_dram_size(num_channels, self._dram_class)
 
-        if os_size:
+        if os_size is not None:
             self._os_size = toMemorySize(os_size)
         else:
             self._os_size = self._get_dram_size(num_channels, self._dram_class)
@@ -205,7 +205,7 @@ class ChanneledMemory(AbstractMemorySystem):
     @overrides(AbstractMemorySystem)
     def get_size(self) -> int:
         return self._size
-    
+
     def get_size_str(self) -> str:
         return self._size_str
 
