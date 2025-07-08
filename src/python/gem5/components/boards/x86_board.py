@@ -144,12 +144,6 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma])
         else:
             if self._enable_cxl:
-                # # Constants similar to x86_traits.hh
-                IO_address_space_base = 0x8000000000000000
-                pci_config_address_space_base = 0xC000000000000000
-                interrupts_address_space_base = 0xA000000000000000
-                APIC_range_size = 1 << 12
-
                 # Configure CXLBridge
                 self.bridge = CXLBridge(bridge_lat="50ns", proto_proc_lat="12ns", req_fifo_depth=128, resp_fifo_depth=128)
             else:
