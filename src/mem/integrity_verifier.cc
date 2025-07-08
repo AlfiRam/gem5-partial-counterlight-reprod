@@ -38,6 +38,8 @@
 #include "mem/integrity_verifier.hh"
 
 #include "debug/AbstractIntegrityVerifier.hh"
+#include "debug/AbstractIntegrityVerifierReqs.hh"
+#include "debug/AbstractIntegrityVerifierResps.hh"
 
 namespace gem5
 {
@@ -108,6 +110,10 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
     parent.markRespReceived(pkt);
 
     parent.sanityCheckPacketLookup();
+
+    DPRINTF(AbstractIntegrityVerifierResps,
+        "%s: Recv resp %s (pkt addr %p, req addr %p)\n",
+        __func__, pkt->print(), pkt, pkt->req);
 
     // Don't do anything special for memory requests that are not actually
     // for memory.
@@ -776,6 +782,10 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
     // Under no means should we be getting a metadata request.
     // They are only sent from here.
     assert(!pkt->isMetadataRequest());
+
+    DPRINTF(AbstractIntegrityVerifierReqs,
+        "%s: Recv req %s (pkt addr %p, req addr %p)\n",
+        __func__, pkt->print(), pkt, pkt->req);
 
     // We want to just bypass immediately if this is an express snoop.
     if (pkt->isExpressSnoop()) {

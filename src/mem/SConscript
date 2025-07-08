@@ -158,6 +158,10 @@ DebugFlag('ExternalPort')
 DebugFlag('HtmMem', 'Hardware Transactional Memory (Mem side)')
 DebugFlag('IntegrityMetadata')
 DebugFlag('AbstractIntegrityVerifier')
+DebugFlag('AbstractIntegrityVerifierReqs', 'All requests received by an '
+          'integrity verifier')
+DebugFlag('AbstractIntegrityVerifierResps', 'All responses received by an '
+          'integrity verifier')
 DebugFlag('LLSC')
 DebugFlag('MemCtrl')
 DebugFlag('MemDelay')
@@ -180,6 +184,8 @@ DebugFlag("QOS")
 CompoundFlag('IntegrityVerifierAll',
              ['IntegrityMetadata',
               'AbstractIntegrityVerifier',
+              'AbstractIntegrityVerifierReqs',
+              'AbstractIntegrityVerifierResps',
               'MetadataCache',
               'SimpleMetadataCache',
              ])
