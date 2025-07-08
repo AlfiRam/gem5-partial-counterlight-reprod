@@ -15,10 +15,11 @@ img_path="${resource_build_path}/microbenchmarks-22-04"
 # redirect="--redirect-stdout --stdout-file stdout.txt --redirect-stderr --stderr-file stderr.txt"
 redirect=""
 
+# benchmark="widepass"
+# benchmark_params="--use-integrity-verifier --metadata-cache-size 30000 --benchmark ${benchmark} --page-size=4096 --page-count=3000 --passes=10"
 
 benchmark="widerandom"
-# size=
-benchmark_params="--use-integrity-verifier --metadata-cache-size 30000 --benchmark ${benchmark}"
+benchmark_params="--use-integrity-verifier --metadata-cache-size 30000 --benchmark ${benchmark} --page-size=4096 --page-count=3000 --passes=2"
 outdir="m5out-microbenchmark-${benchmark}"
 env GEM5_RESOURCE_JSON_APPEND=${resource_location} ${gem5_binary} ${gem5_params} --outdir ${outdir} ${redirect} ${config_file} ${benchmark_params} --kernel-path ${kernel_path} --img-path ${img_path}
 

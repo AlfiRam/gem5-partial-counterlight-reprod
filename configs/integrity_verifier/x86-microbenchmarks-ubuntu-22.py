@@ -43,22 +43,9 @@ from gem5.simulate.simulator import Simulator
 
 # Following are the list of microbenchmark programs.
 benchmark_choices = [
-    "shortpass",
     "widepass",
     "widerandom",
 ]
-
-# Following are the input sizes.
-# Input size is currently fixed.
-# size_choices = [
-#     "test",
-#     "simdev",
-#     "simsmall",
-#     "simmedium",
-#     "simlarge",
-#     "native",
-# ]
-
 
 # Argument parsing.
 parser = argparse.ArgumentParser(description="Microbenchmark runner for gem5.")
@@ -73,13 +60,17 @@ parser.add_argument(
     choices=benchmark_choices,
 )
 
-# parser.add_argument(
-#     "--size",
-#     type=str,
-#     required=True,
-#     help="Simulation size the benchmark program.",
-#     choices=size_choices,
-# )
+parser.add_argument(
+    "--page-size", type=int, required=True, help="Page size in bytes."
+)
+
+parser.add_argument(
+    "--page-count", type=int, required=True, help="Number of pages."
+)
+
+parser.add_argument(
+    "--passes", type=int, required=True, help="Number of passes."
+)
 
 parser.add_argument(
     "--no-stop-after-roi",
@@ -128,7 +119,7 @@ board, processor = create_board(args)
 command = (
     "m5 exit;"  # Third exit event
     + "cd microbenchmarks;"
-    + f'echo "12345" | ./{args.benchmark};'
+    + f'echo "12345" | ./{args.benchmark} {args.page_size} {args.page_count} {args.passes};'
     # The end of ROI hook will stop the simulation from here.
     + "sleep 5;"  # This delay is to allow any print statements to finish before the simulation abruptly stops.
     + "m5 exit;"
