@@ -13,6 +13,7 @@ from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarc
 from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy_integrity_verifier import (
     PrivateL1SharedL2CacheHierarchyIntegrityVerifier,
 )
+from gem5.components.memory.mtree.TimingTree import TimingTree
 from gem5.components.memory.single_channel import DIMM_DDR5_4400
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
@@ -21,6 +22,7 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.isas import ISA
 from gem5.utils.requires import requires
+from m5.util.convert import toMemorySize
 
 
 def add_arguments(parser):
@@ -33,9 +35,38 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
+        "--dram-size",
+        type=str,
+        required=False,
+        help="Total size of DRAM.",
+        default="3GiB",
+    )
+
+    parser.add_argument(
+        "--cxl-size",
+        type=str,
+        required=False,
+        help="Total size of CXL memory, if enabled. This option does nothing if CXL is not enabled.",
+        default="0B",
+    )
+
+    parser.add_argument(
         "--use-integrity-verifier",
         action="store_true",
         help="Add an 'integrity verifier' component to add integrity management behavior.",
+    )
+
+    parser.add_argument(
+        "--integrity-allocation-mode",
+        type=str,
+        required=False,
+        help="Allocation scheme for integrity data.",
+        default="DramOnly",
+        choices=[
+            "DramOnly",
+            "CxlOnly",
+            "BasicMix",
+        ],
     )
 
     parser.add_argument(
@@ -66,9 +97,28 @@ def create_board(args):
     requires(
         isa_required=ISA.X86,
     )
+    # Assume wherever the OS is, there is some space available for it
+    baseline_os_size = "256MiB"
 
+    if args.integrity_allocation_mode == "DramOnly":
+        # All integrity data is stored in DRAM.
+        # In this case, we consider DRAM "local" and CXL "remote", resizing the
+        # "local" size until we can protect both the local and remote space.
+        dram_os_size, cxl_os_size = TimingTree.determine_max_protected_size(
+            min_local_size=toMemorySize(baseline_os_size),
+            total_local_size=toMemorySize(args.dram_size),
+            total_remote_size=toMemorySize(args.cxl_size),
+        )
+    else:
+        print(
+            f"Unimplmented integrity allocation mode '{args.integrity_allocation_mode}'"
+        )
+        exit(1)
+
+    print(f"Computed DRAM OS Size: {dram_os_size}")
+    print(f"Computed CXL OS Size: {cxl_os_size}")
     # Main memory
-    memory = DIMM_DDR5_4400(size="3GiB", os_size="1800MiB")
+    memory = DIMM_DDR5_4400(size=args.dram_size, os_size=f"{dram_os_size}B")
 
     membus = SystemXBar(width=64)
     membus.badaddr_responder = BadAddr()
@@ -85,7 +135,7 @@ def create_board(args):
             l2_assoc=16,
             membus=membus,
             metadata_cache_size=args.metadata_cache_size,
-            os_size="1800MiB",
+            integrity_allocation_mode=args.integrity_allocation_mode,
         )
     else:
         cache_hierarchy = PrivateL1SharedL2CacheHierarchy(

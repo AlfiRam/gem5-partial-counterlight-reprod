@@ -38,6 +38,10 @@ from m5.params import *
 from m5.proxy import *  # Used for Parent.any
 
 
+class IntegrityAllocationMode(Enum):
+    vals = ["DramOnly", "CxlOnly", "BasicMix"]
+
+
 class AbstractIntegrityVerifier(ClockedObject):
     type = "AbstractIntegrityVerifier"
     cxx_header = "mem/integrity_verifier.hh"
@@ -55,7 +59,24 @@ class AbstractIntegrityVerifier(ClockedObject):
 
     metadata_cache_size = Param.Int(2000, "Metadata cache size")
 
-    os_size = Param.UInt64(0, "'OS-visible' memory size, in bytes")
+    dram_full_range = Param.AddrRange(
+        AddrRange(0, size=0), "Full available range of DRAM"
+    )
+    dram_os_range = Param.AddrRange(
+        AddrRange(0, size=0), "OS-visible range of DRAM"
+    )
+    cxl_full_range = Param.AddrRange(
+        AddrRange(0, size=0), "Full available range of CXL"
+    )
+    cxl_os_range = Param.AddrRange(
+        AddrRange(0, size=0), "OS-visible range of DRAM"
+    )
+
+    integrity_allocation_mode = Param.IntegrityAllocationMode(
+        "DramOnly",
+        "The allocation strategy for integrity metadata across DRAM and CXL "
+        "memory (if applicable).",
+    )
 
 
 class IntegrityVerifier(AbstractIntegrityVerifier):

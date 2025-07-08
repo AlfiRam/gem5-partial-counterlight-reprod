@@ -68,7 +68,8 @@ SimObject('HMCController.py', sim_objects=['HMCController'])
 SimObject('SerialLink.py', sim_objects=['SerialLink'])
 SimObject('MemDelay.py', sim_objects=['MemDelay', 'SimpleMemDelay'])
 SimObject('IntegrityVerifier.py', sim_objects=[
-    'AbstractIntegrityVerifier', 'IntegrityVerifier'])
+    'AbstractIntegrityVerifier', 'IntegrityVerifier'],
+    enums=['IntegrityAllocationMode'])
 SimObject('PortTerminator.py', sim_objects=['PortTerminator'])
 SimObject('ThreadBridge.py', sim_objects=['ThreadBridge'])
 
@@ -162,6 +163,8 @@ DebugFlag('AbstractIntegrityVerifierReqs', 'All requests received by an '
           'integrity verifier')
 DebugFlag('AbstractIntegrityVerifierResps', 'All responses received by an '
           'integrity verifier')
+DebugFlag('IntegrityNodeLocationMap', 'Information about how integrity nodes '
+          'are mapped to physical address locations')
 DebugFlag('LLSC')
 DebugFlag('MemCtrl')
 DebugFlag('MemDelay')
@@ -183,6 +186,7 @@ DebugFlag("QOS")
 
 CompoundFlag('IntegrityVerifierAll',
              ['IntegrityMetadata',
+              'IntegrityNodeLocationMap',
               'AbstractIntegrityVerifier',
               'AbstractIntegrityVerifierReqs',
               'AbstractIntegrityVerifierResps',

@@ -40,6 +40,7 @@
 
 #include <queue>
 
+#include "enums/IntegrityAllocationMode.hh"
 #include "mem/cache/metadata_cache.hh"
 #include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
@@ -131,6 +132,16 @@ class AbstractIntegrityVerifier : public ClockedObject
     };
 
     bool trySatisfyFunctional(PacketPtr pkt);
+
+    /**
+     * Get the address of a node within the integrity structure.
+     *
+     * This determines the mapping between tree nodes and memory arrangement.
+     *
+     * NOTE: This assumes that the size of one node in the tree is equivalent
+     * in size to a cache line.
+     */
+    Addr getIntegrityNodeLocation(size_t node);
 
     /**
      * Create a metadata request for the parent node of a given packet `pkt`.
@@ -319,10 +330,32 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     void regStats() override;
 
+    AddrRange dramFullRange;
+    AddrRange dramOsRange;
+    AddrRange dramIntegrityRange;
+    AddrRange cxlFullRange;
+    AddrRange cxlOsRange;
+    AddrRange cxlIntegrityRange;
+
+    enums::IntegrityAllocationMode integrityAllocationMode;
+
     /**
-     * Size of memory visible to OS, in bytes.
+     * Return if this integrity verifier has valid DRAM and CXL ranges stored,
+     * based on the integrity allocation mode.
      */
-    uint64_t osSize;
+    bool hasValidRanges();
+
+    /**
+     * Return if the size of the integrity tree is at least the size of the
+     * expected memory to use for integrity data.
+     */
+    bool treeSizeValid();
+
+    /**
+     * Returns true if this address should be handled by integrity
+     * verification.
+     */
+    bool needsVerification(Addr addr);
 
     typedef TimingTree IntegrityTree;
     /**

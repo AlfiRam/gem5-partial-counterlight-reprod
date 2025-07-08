@@ -27,6 +27,7 @@
 from typing import Optional
 
 from m5.objects import (
+    AddrRange,
     BadAddr,
     BaseXBar,
     Bridge,
@@ -90,7 +91,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         l2_assoc: int = 16,
         membus: Optional[BaseXBar] = None,
         metadata_cache_size: Optional[int] = 0,
-        os_size: Optional[str] = None,
+        integrity_allocation_mode: Optional[str] = None,
     ) -> None:
         """
         :param l1d_size: The size of the L1 Data Cache (e.g., "32KiB").
@@ -125,10 +126,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         else:
             self._metadata_cache_size = self._get_default_metadata_cache_size()
 
-        if os_size:
-            self._os_size = toMemorySize(os_size)
-        else:
-            self._os_size = toMemorySize("0")
+        self._integrity_allocation_mode = integrity_allocation_mode
 
     @overrides(AbstractClassicCacheHierarchy)
     def get_mem_side_port(self) -> Port:
@@ -204,10 +202,17 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             # req_size = 512,
             # resp_size = 512,
             metadata_cache_size=self._metadata_cache_size,
-            os_size=self._os_size,
         )
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port
+
+        # Configure verifier
+        dram_mem_start = 0
+
+        if self._integrity_allocation_mode:
+            self.verifier.integrity_allocation_mode = (
+                self._integrity_allocation_mode
+            )
 
     def _setup_io_cache(self, board: AbstractBoard) -> None:
         """Create a cache for coherent I/O connections"""
