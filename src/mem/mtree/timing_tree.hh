@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 
+#include "base/types.hh"
 #include "mem/mtree/abstract_tree.hh"
 
 namespace gem5 {
@@ -189,6 +190,11 @@ class TimingTree : AbstractIntegrityTree
 
     /// @brief How many children for each node in the tree.
     unsigned int arity;
+
+    /**
+     * Number of leaf nodes in the tree.
+     */
+    size_t leaves;
 
     /**
      * The size (in bytes) of how much data is input into the hashing function.

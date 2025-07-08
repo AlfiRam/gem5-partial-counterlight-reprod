@@ -36,14 +36,15 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
   long long leafHashes = total_data / hashInputSize;
   // Handle possible extra remainder.
   if (total_data % hashInputSize != 0) leafHashes++;
-  // DPRINTF(TimingTree, "%s: %lld total leaf hashes needed.\n", __func__,
-  //     leafHashes);
+  DPRINTF(TimingTree, "%s: %lld total leaf hashes needed.\n", __func__,
+      leafHashes);
 
   long long lastLevelNodes = leafHashes / arity;
   // Handle possible extra remainder.
   if (leafHashes % arity != 0) lastLevelNodes++;
   DPRINTF(TimingTree, "%s: %lld last level nodes.\n",
     __func__, lastLevelNodes);
+  leaves = lastLevelNodes;
 
   // Calculate how many levels you need to get that many leaves in the tree.
   unsigned int levels = integerLog(lastLevelNodes, arity) + 1;
@@ -57,8 +58,9 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
   DPRINTF(TimingTree, "%s: Total number of nodes is %u.\n",
     __func__, dataSize);
 
-  DPRINTF(TimingTree, "%s: Total space protected by tree: %llu bytes.\n",
-    __func__, statDataProtected());
+  DPRINTF(TimingTree, "%s: Total space protected by tree: %llu bytes. "
+    "(Requested: %llu bytes.)\n",
+    __func__, statDataProtected(), total_data);
 
   DPRINTF(TimingTree, "%s: Total space taken by tree: %llu bytes.\n",
     __func__, statStructureSize());
@@ -322,11 +324,8 @@ long long TimingTree::statDataProtected() {
   // Assuming that in the basic version, each leaf contains `arity` number of
   // hashes for real data.
 
-  // Number of leaves.
-  long long lastLevelNodes = integerPower(arity, height - 1);
-
   // Consider the total number of hashes created by the set of leaves.
-  long long leafHashes = lastLevelNodes * arity;
+  long long leafHashes = leaves * arity;
 
   // Consider the amount of data represented by a single hash.
   return leafHashes * hashInputSize;
