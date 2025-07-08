@@ -30,6 +30,8 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
   hashInputSize(BLOCK_SIZE_BYTES),
   hashOutputSize(hashInputSize / arity)
 {
+  // Note this should be in sync with the Python version
+
   // Calculate the number of leaves needed to get this much data
 
   // Consider the total number of hashes necessary to cover this area.
@@ -321,6 +323,8 @@ unsigned int TimingTree::updateBlockHashPartial(
 
 
 long long TimingTree::statDataProtected() {
+  // NOTE Sync with Python
+
   // Assuming that in the basic version, each leaf contains `arity` number of
   // hashes for real data.
 
@@ -332,6 +336,8 @@ long long TimingTree::statDataProtected() {
 }
 
 long long TimingTree::statStructureSize() {
+  // NOTE Sync with Python
+
   return dataSize * BLOCK_SIZE_BYTES;
 }
 
