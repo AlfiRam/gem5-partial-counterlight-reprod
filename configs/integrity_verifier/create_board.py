@@ -45,6 +45,12 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
+        "--atomic-from-start",
+        action="store_true",
+        help="Switch from Atomic cores to timing cores when reaching the POI.",
+    )
+
+    parser.add_argument(
         "--metadata-cache-size",
         type=int,
         required=False,
@@ -92,7 +98,20 @@ def create_board(args):
             membus=membus,
         )
 
-    if not args.timing_from_start:
+    if args.timing_from_start:
+        # Example of a processor that starts in timing mode, rather than switching to timing after boot.
+        processor = SimpleProcessor(
+            cpu_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=args.cores
+        )
+    elif args.atomic_from_start:
+        # Processor that starts in atomic, then goes to timing.
+        processor = SimpleSwitchableProcessor(
+            starting_core_type=CPUTypes.ATOMIC,
+            switch_core_type=CPUTypes.TIMING,
+            isa=ISA.X86,
+            num_cores=args.cores,
+        )
+    else:
         # This is a switchable CPU. We first boot Ubuntu using KVM, then the guest
         # will exit the simulation by calling "m5 exit" (see the `command` variable
         # below, which contains the command to be run in the guest after booting).
@@ -112,11 +131,6 @@ def create_board(args):
         # Here we tell the KVM CPU (the starting CPU) not to use perf.
         for proc in processor.start:
             proc.core.usePerf = False
-    else:
-        # Example of a processor that starts in timing mode, rather than switching to timing after boot.
-        processor = SimpleProcessor(
-            cpu_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=args.cores
-        )
 
     # Here we setup the board. The X86Board allows for Full-System X86 simulations.
     board = X86Board(
