@@ -120,8 +120,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         )
 
         self.membus = membus if membus else self._get_default_membus()
-        # TODO Panic if metadata cache size is invalid (< 1)
         if metadata_cache_size:
+            assert metadata_cache_size >= 1
             self._metadata_cache_size = metadata_cache_size
         else:
             self._metadata_cache_size = self._get_default_metadata_cache_size()
