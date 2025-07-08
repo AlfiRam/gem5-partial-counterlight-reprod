@@ -147,7 +147,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 # Configure CXLBridge
                 self.bridge = CXLBridge(bridge_lat="50ns", proto_proc_lat="12ns", req_fifo_depth=128, resp_fifo_depth=128)
             else:
-                self.bridge = Bridge(delay="50ns", cxl_delay="30ns")
+                self.bridge = Bridge(delay="50ns")
             self.bridge.mem_side_port = self.get_io_bus().cpu_side_ports
             self.bridge.cpu_side_port = (
                 self.get_cache_hierarchy().get_mem_side_port()
