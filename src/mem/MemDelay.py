@@ -35,7 +35,6 @@
 
 from m5.objects.ClockedObject import ClockedObject
 from m5.params import *
-from m5.proxy import *  # Used for Parent.any
 
 
 class MemDelay(ClockedObject):
@@ -56,8 +55,6 @@ class MemDelay(ClockedObject):
     slave = DeprecatedParam(
         cpu_side_port, "`slave` is now called `cpu_side_port`"
     )
-
-    system = Param.System(Parent.any, "System that the object belongs to.")
 
 
 class SimpleMemDelay(MemDelay):
