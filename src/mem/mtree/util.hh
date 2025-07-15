@@ -14,6 +14,13 @@ long long integerPower(int base, int exponent);
 long long integerLog(long long num, unsigned int base);
 
 /**
+ * Divide two integers, and return the resulting integer value.
+ *
+ * If the division results in a remainder, the ceil of the result is returned.
+ */
+long long ceilDiv(long long numerator, long long denominator);
+
+/**
  * Print an array of character values as a hexadecimal string.
  */
 void printHex(unsigned char* value, size_t length);

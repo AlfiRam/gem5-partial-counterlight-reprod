@@ -28,6 +28,17 @@ long long integerLog(long long num, unsigned int base) {
   return (long long) log_calculation;
 }
 
+long long ceilDiv(long long numerator, long long denominator) {
+  long long result;
+
+  result = numerator / denominator;
+  if (numerator % denominator != 0) {
+    result++;
+  }
+
+  return result;
+}
+
 void printHex(unsigned char* value, size_t length) {
   std::ios originalState(nullptr);
 
