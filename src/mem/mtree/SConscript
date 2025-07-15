@@ -6,6 +6,7 @@ Source('util.cc')
 
 DebugFlag('IntegrityTree')
 DebugFlag('TimingTree')
+DebugFlag('TimingTreeInit')
 
 PySource('gem5.components.memory.mtree',
     '__init__.py')

@@ -38,6 +38,7 @@
 #include "mem/integrity_verifier.hh"
 
 #include "debug/AbstractIntegrityVerifier.hh"
+#include "debug/AbstractIntegrityVerifierInit.hh"
 #include "debug/AbstractIntegrityVerifierReqs.hh"
 #include "debug/AbstractIntegrityVerifierResps.hh"
 #include "debug/IntegrityNodeLocationMap.hh"
@@ -68,29 +69,29 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       hasRequestorId(false),
       _requestorId(0)
 {
-    DPRINTF(AbstractIntegrityVerifier,
+    DPRINTF(AbstractIntegrityVerifierInit,
         "%s: dramFullRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramFullRange.to_string(),
         dramFullRange.start(), dramFullRange.end(), dramFullRange.size());
-    DPRINTF(AbstractIntegrityVerifier,
+    DPRINTF(AbstractIntegrityVerifierInit,
         "%s: dramOsRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramOsRange.to_string(),
         dramOsRange.start(), dramOsRange.end(), dramOsRange.size());
-    DPRINTF(AbstractIntegrityVerifier,
+    DPRINTF(AbstractIntegrityVerifierInit,
         "%s: dramIntegrityRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramIntegrityRange.to_string(),
         dramIntegrityRange.start(), dramIntegrityRange.end(),
         dramIntegrityRange.size());
 
-    DPRINTF(AbstractIntegrityVerifier,
+    DPRINTF(AbstractIntegrityVerifierInit,
         "%s: cxlFullRange: %s (%llu:%llu, size %llu)\n",
         __func__, cxlFullRange.to_string(),
         cxlFullRange.start(), cxlFullRange.end(), cxlFullRange.size());
-    DPRINTF(AbstractIntegrityVerifier,
+    DPRINTF(AbstractIntegrityVerifierInit,
         "%s: cxlOsRange: %s (%llu:%llu, size %llu)\n",
         __func__, cxlOsRange.to_string(),
         cxlOsRange.start(), cxlOsRange.end(), cxlOsRange.size());
-    DPRINTF(AbstractIntegrityVerifier,
+    DPRINTF(AbstractIntegrityVerifierInit,
         "%s: cxlIntegrityRange: %s (%llu:%llu, size %llu)\n",
         __func__, cxlIntegrityRange.to_string(),
         cxlIntegrityRange.start(), cxlIntegrityRange.end(),

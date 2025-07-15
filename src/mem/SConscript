@@ -159,6 +159,8 @@ DebugFlag('ExternalPort')
 DebugFlag('HtmMem', 'Hardware Transactional Memory (Mem side)')
 DebugFlag('IntegrityMetadata')
 DebugFlag('AbstractIntegrityVerifier')
+DebugFlag('AbstractIntegrityVerifierInit', 'Details for initialization of '
+          'integrity verifier')
 DebugFlag('AbstractIntegrityVerifierReqs', 'All requests received by an '
           'integrity verifier')
 DebugFlag('AbstractIntegrityVerifierResps', 'All responses received by an '
@@ -188,6 +190,7 @@ CompoundFlag('IntegrityVerifierAll',
              ['IntegrityMetadata',
               'IntegrityNodeLocationMap',
               'AbstractIntegrityVerifier',
+              'AbstractIntegrityVerifierInit',
               'AbstractIntegrityVerifierReqs',
               'AbstractIntegrityVerifierResps',
               'MetadataCache',

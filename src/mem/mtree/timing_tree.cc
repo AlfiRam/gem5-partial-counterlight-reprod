@@ -4,6 +4,7 @@
 
 #include "base/trace.hh"
 #include "debug/TimingTree.hh"
+#include "debug/TimingTreeInit.hh"
 #include "mem/mtree/util.hh"
 
 namespace gem5 {
@@ -23,33 +24,33 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
   long long leafHashes = total_data / hashInputSize;
   // Handle possible extra remainder.
   if (total_data % hashInputSize != 0) leafHashes++;
-  DPRINTF(TimingTree, "%s: %lld total leaf hashes needed.\n", __func__,
+  DPRINTF(TimingTreeInit, "%s: %lld total leaf hashes needed.\n", __func__,
       leafHashes);
 
   long long lastLevelNodes = leafHashes / arity;
   // Handle possible extra remainder.
   if (leafHashes % arity != 0) lastLevelNodes++;
-  DPRINTF(TimingTree, "%s: %lld last level nodes.\n",
+  DPRINTF(TimingTreeInit, "%s: %lld last level nodes.\n",
     __func__, lastLevelNodes);
   leaves = lastLevelNodes;
 
   // Calculate how many levels you need to get that many leaves in the tree.
   unsigned int levels = integerLog(lastLevelNodes, arity) + 1;
   height = levels;
-  DPRINTF(TimingTree, "%s: The height is %u.\n", __func__, levels);
+  DPRINTF(TimingTreeInit, "%s: The height is %u.\n", __func__, levels);
 
   // Initialize the data size parameter. Take the number of nodes for all the
   // fully-filled levels, then add the number of leaf nodes.
   dataSize = integerPower(arity, levels - 1)/(arity - 1);
   dataSize += lastLevelNodes;
-  DPRINTF(TimingTree, "%s: Total number of nodes is %u.\n",
+  DPRINTF(TimingTreeInit, "%s: Total number of nodes is %u.\n",
     __func__, dataSize);
 
-  DPRINTF(TimingTree, "%s: Total space protected by tree: %llu bytes. "
+  DPRINTF(TimingTreeInit, "%s: Total space protected by tree: %llu bytes. "
     "(Requested: %llu bytes.)\n",
     __func__, statDataProtected(), total_data);
 
-  DPRINTF(TimingTree, "%s: Total space taken by tree: %llu bytes.\n",
+  DPRINTF(TimingTreeInit, "%s: Total space taken by tree: %llu bytes.\n",
     __func__, statStructureSize());
 }
 
