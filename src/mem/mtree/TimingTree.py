@@ -93,6 +93,7 @@ class TimingTree:
         min_local_size: int,
         total_local_size: int,
         total_remote_size: int,
+        arity: int,
     ) -> Tuple[int, int]:
         """
         :param min_local_size:    Minimum amount of size that must be protected
@@ -102,6 +103,7 @@ class TimingTree:
         :param total_remote_size: Total amount of memory available to work
                                   with in remote (essentially static
                                   contributor to available space).
+        :param arity:             The arity of the tree structure used.
 
         Returns the amount of data at most (in local, and remote memory) that
         can be protected based on the amount of data it would take to protect
@@ -178,7 +180,7 @@ class TimingTree:
 
             # Calculate tree size
             print(f"TimingTree.determine_max_protected_size: ==============")
-            tree = TimingTree(4, attempted_protected_size)
+            tree = TimingTree(arity, attempted_protected_size)
 
             print(
                 f"TimingTree.determine_max_protected_size: min_scale_factor: {min_scale_factor} (Local = {min_local_protected}, Remote = {total_remote_size}, Total = {min_local_protected + total_remote_size})"

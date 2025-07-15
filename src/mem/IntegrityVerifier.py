@@ -42,6 +42,10 @@ class IntegrityAllocationMode(Enum):
     vals = ["DramOnly", "CxlOnly", "BasicMix"]
 
 
+class IntegrityTreeType(Enum):
+    vals = ["TimingTree", "TimingBmt"]
+
+
 class AbstractIntegrityVerifier(ClockedObject):
     type = "AbstractIntegrityVerifier"
     cxx_header = "mem/integrity_verifier.hh"
@@ -76,6 +80,10 @@ class AbstractIntegrityVerifier(ClockedObject):
         "DramOnly",
         "The allocation strategy for integrity metadata across DRAM and CXL "
         "memory (if applicable).",
+    )
+
+    integrity_tree_type = Param.IntegrityTreeType(
+        "TimingTree", "Type of integrity tree class used."
     )
 
     integrity_tree_arity = Param.Int(4, "Arity of integrity tree.")

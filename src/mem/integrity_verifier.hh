@@ -41,6 +41,7 @@
 #include <queue>
 
 #include "enums/IntegrityAllocationMode.hh"
+#include "enums/IntegrityTreeType.hh"
 #include "mem/cache/metadata_cache.hh"
 #include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
@@ -339,6 +340,8 @@ class AbstractIntegrityVerifier : public ClockedObject
     AddrRange cxlIntegrityRange;
 
     enums::IntegrityAllocationMode integrityAllocationMode;
+
+    enums::IntegrityTreeType integrityTreeType;
 
     /**
      * Return if this integrity verifier has valid DRAM and CXL ranges stored,

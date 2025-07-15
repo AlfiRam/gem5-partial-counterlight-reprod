@@ -70,6 +70,17 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
+        "--integrity-tree-type",
+        type=str,
+        required=False,
+        default="TimingTree",
+        choices=[
+            "TimingTree",
+            "None",
+        ],
+    )
+
+    parser.add_argument(
         "--integrity-tree-arity",
         type=int,
         required=False,
@@ -111,11 +122,17 @@ def create_board(args):
         # All integrity data is stored in DRAM.
         # In this case, we consider DRAM "local" and CXL "remote", resizing the
         # "local" size until we can protect both the local and remote space.
-        dram_os_size, cxl_os_size = TimingTree.determine_max_protected_size(
-            min_local_size=toMemorySize(baseline_os_size),
-            total_local_size=toMemorySize(args.dram_size),
-            total_remote_size=toMemorySize(args.cxl_size),
-        )
+        match args.integrity_tree_type:
+            case "TimingTree":
+                dram_os_size, cxl_os_size = TimingTree.determine_max_protected_size(
+                    min_local_size=toMemorySize(baseline_os_size),
+                    total_local_size=toMemorySize(args.dram_size),
+                    total_remote_size=toMemorySize(args.cxl_size),
+                    arity=args.integrity_tree_arity,
+                )
+            case _:
+                print(f"Unknown integrity tree type '{args.integrity_tree_type}'")
+                exit(1)
     else:
         print(
             f"Unimplmented integrity allocation mode '{args.integrity_allocation_mode}'"
@@ -143,6 +160,7 @@ def create_board(args):
             membus=membus,
             metadata_cache_size=args.metadata_cache_size,
             integrity_allocation_mode=args.integrity_allocation_mode,
+            integrity_tree_type=args.integrity_tree_type,
             integrity_tree_arity=args.integrity_tree_arity,
         )
     else:

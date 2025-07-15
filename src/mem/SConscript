@@ -69,7 +69,10 @@ SimObject('SerialLink.py', sim_objects=['SerialLink'])
 SimObject('MemDelay.py', sim_objects=['MemDelay', 'SimpleMemDelay'])
 SimObject('IntegrityVerifier.py', sim_objects=[
     'AbstractIntegrityVerifier', 'IntegrityVerifier'],
-    enums=['IntegrityAllocationMode'])
+    enums=['IntegrityAllocationMode',
+           'IntegrityTreeType',
+    ]
+)
 SimObject('PortTerminator.py', sim_objects=['PortTerminator'])
 SimObject('ThreadBridge.py', sim_objects=['ThreadBridge'])
 

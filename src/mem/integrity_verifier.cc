@@ -64,13 +64,22 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       cxlOsRange(p.cxl_os_range),
       cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
       integrityAllocationMode(p.integrity_allocation_mode),
-      integrityTree(new TimingTree(
-        (unsigned int)p.integrity_tree_arity,
-        dramOsRange.size() + cxlOsRange.size())),
+      integrityTreeType(p.integrity_tree_type),
       metadataCache(SimpleMetadataCache(metadataCacheSize, &integrityTree)),
       hasRequestorId(false),
       _requestorId(0)
 {
+    switch (integrityTreeType) {
+        case enums::IntegrityTreeType::TimingTree:
+        integrityTree = new TimingTree(
+            (unsigned int)p.integrity_tree_arity,
+            dramOsRange.size() + cxlOsRange.size()
+        );
+        break;
+
+        default:
+        panic("Invalid integrity tree type.");
+    }
     DPRINTF(AbstractIntegrityVerifierInit,
         "%s: dramFullRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramFullRange.to_string(),
