@@ -70,9 +70,10 @@ namespace gem5
  */
 class AbstractIntegrityVerifier : public ClockedObject
 {
-
   public:
     AbstractIntegrityVerifier(const AbstractIntegrityVerifierParams &params);
+
+    ~AbstractIntegrityVerifier();
 
     void init() override;
 
@@ -357,11 +358,10 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     bool needsVerification(Addr addr);
 
-    typedef TimingTree IntegrityTree;
     /**
      * The simulated integrity tree. For now, this is a very basic tree.
      */
-    IntegrityTree integrityTree;
+    AbstractIntegrityTree *integrityTree;
 
     /**
      * Metadata cache.

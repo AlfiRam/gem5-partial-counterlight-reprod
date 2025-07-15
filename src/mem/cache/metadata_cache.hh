@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "mem/mtree/abstract_tree.hh"
 #include "mem/mtree/timing_tree.hh"
 
 namespace gem5
@@ -179,12 +180,15 @@ class SimpleMetadataCache
      * Reference to integrity tree. Can be helpful for finding certain
      * relationships between nodes.
      */
-    TimingTree *_tree;
+    AbstractIntegrityTree *_tree;
 
   public:
     SimpleMetadataCache(unsigned int capacity);
 
-    SimpleMetadataCache(unsigned int capacity, TimingTree *tree);
+    SimpleMetadataCache(
+      unsigned int capacity,
+      AbstractIntegrityTree *tree
+    );
 
     ~SimpleMetadataCache();
 

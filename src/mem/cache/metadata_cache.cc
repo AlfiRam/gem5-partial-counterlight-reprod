@@ -123,15 +123,17 @@ namespace gem5
   }
 
 
-  SimpleMetadataCache::SimpleMetadataCache(unsigned int capacity) :
-    capacity(capacity), dirty_lines(0), lines_pending_eviction(0),
+  SimpleMetadataCache::SimpleMetadataCache(
+    unsigned int capacity
+  ): capacity(capacity), dirty_lines(0), lines_pending_eviction(0),
     locked_lines(0), _tree(nullptr)
   {
     srand(time(0));
   }
 
   SimpleMetadataCache::SimpleMetadataCache(
-    unsigned int capacity, TimingTree *tree
+    unsigned int capacity,
+    AbstractIntegrityTree *tree
   ) : SimpleMetadataCache(capacity)
   {
     _tree = tree;

@@ -63,7 +63,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       cxlOsRange(p.cxl_os_range),
       cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
       integrityAllocationMode(p.integrity_allocation_mode),
-      integrityTree(TimingTree(4, dramOsRange.size() + cxlOsRange.size())),
+      integrityTree(new TimingTree(4, dramOsRange.size() + cxlOsRange.size())),
       metadataCache(SimpleMetadataCache(metadataCacheSize, &integrityTree)),
       hasRequestorId(false),
       _requestorId(0)
@@ -97,6 +97,11 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         cxlIntegrityRange.size());
 }
 
+AbstractIntegrityVerifier::~AbstractIntegrityVerifier()
+{
+    delete integrityTree;
+}
+
 void
 AbstractIntegrityVerifier::init()
 {
@@ -115,7 +120,7 @@ AbstractIntegrityVerifier::init()
               "Integrity structure size: %lld\n"
               "DRAM integrity size: %lld\n"
               "CXL integrity size: %lld\n",
-              integrityTree.statStructureSize(),
+              integrityTree->statStructureSize(),
               dramIntegrityRange.size(),
               cxlIntegrityRange.size());
     }
@@ -186,7 +191,7 @@ AbstractIntegrityVerifier::getIntegrityNodeLocation(size_t node)
             enums::IntegrityAllocationMode::DramOnly) {
         // All integrity data should be in DRAM
         addr = dramIntegrityRange.start() +
-                integrityTree.simulatedBlockOffset(node);
+                integrityTree->simulatedBlockOffset(node);
     } else {
         panic("Integrity allocation mode unimplemented.");
     }
@@ -205,12 +210,8 @@ AbstractIntegrityVerifier::generateMetadataRequest(PacketPtr pkt)
 
     // The simulated address for the request.
     uint64_t reqAddr;
-    if (hasValidRanges()) {
-        reqAddr = getIntegrityNodeLocation(parentNode);
-    } else {
-        // Use a "fake" address.
-        reqAddr = pkt->getAddr();
-    }
+    assert(hasValidRanges());
+    reqAddr = getIntegrityNodeLocation(parentNode);
 
     // Create the metadata request and packet.
     RequestPtr req = std::make_shared<Request>(
@@ -236,12 +237,8 @@ PacketPtr
 AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
 {
     uint64_t reqAddr;
-    if (hasValidRanges()) {
-        reqAddr = getIntegrityNodeLocation(node);
-    } else {
-        // Use a "fake" address.
-        reqAddr = integrityTree.blockIndexToAddress(node);
-    }
+    assert(hasValidRanges());
+    reqAddr = getIntegrityNodeLocation(node);
 
     // Create the metadata request and packet.
     RequestPtr req = std::make_shared<Request>(
@@ -429,9 +426,9 @@ AbstractIntegrityVerifier::getParentNode(PacketPtr pkt)
         // metadata node.
         assert(pkt->getMetadataNode() != 0);
 
-        return integrityTree.parentBlockIndex(pkt->getMetadataNode());
+        return integrityTree->parentBlockIndex(pkt->getMetadataNode());
     } else {
-        return integrityTree.addressToBlockIndex(pkt->getAddr());
+        return integrityTree->addressToBlockIndex(pkt->getAddr());
     }
 }
 
@@ -562,7 +559,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                 __func__, evictedData.first);
             // If this line is marked as pending eviction, we must first
             // make sure its parent is available in the metadata cache.
-            auto evictParent = integrityTree.parentBlockIndex(
+            auto evictParent = integrityTree->parentBlockIndex(
                                                 evictedData.first);
             if (!metadataCache.contains(evictParent)) {
                 DPRINTF(AbstractIntegrityVerifier,
@@ -1524,13 +1521,13 @@ AbstractIntegrityVerifier::sanityCheckEvictionVictim(
     assert(metadataCache.containsPendingOkay(victim));
 
     // Parent of victim would not be in the cache.
-    assert(!metadataCache.contains(integrityTree.parentBlockIndex(victim)));
+    assert(!metadataCache.contains(integrityTree->parentBlockIndex(victim)));
 
     // Metadata cache does not already have the replacement.
     assert(!metadataCache.contains(replacement));
 
-    uint64_t victimParent = integrityTree.parentBlockIndex(victim);
-    uint64_t replacementParent = integrityTree.parentBlockIndex(replacement);
+    uint64_t victimParent = integrityTree->parentBlockIndex(victim);
+    uint64_t replacementParent = integrityTree->parentBlockIndex(replacement);
 
     assert(victimParent != replacementParent);
     assert(victimParent != replacement);
@@ -1543,7 +1540,7 @@ AbstractIntegrityVerifier::sanityCheckEvictionVictim(
 
     // Assert that the lowest ancestor of victim is lower than replacement,
     // or that there is no ancestor of the victim at all cached.
-    assert(!integrityTree.isAncestor(replacement, victim) ||
+    assert(!integrityTree->isAncestor(replacement, victim) ||
            metadataCache.getLowestCachedAncestor(victim) != replacementParent);
 }
 
@@ -1650,7 +1647,7 @@ bool
 AbstractIntegrityVerifier::treeSizeValid()
 {
     DPRINTF(AbstractIntegrityVerifier, "%s: Integrity structure size: %lld\n",
-        __func__, integrityTree.statStructureSize());
+        __func__, integrityTree->statStructureSize());
 
     if (integrityAllocationMode ==
                 enums::IntegrityAllocationMode::DramOnly) {
@@ -1658,7 +1655,7 @@ AbstractIntegrityVerifier::treeSizeValid()
             "%s: DRAM size: %lld\n",
             __func__, dramIntegrityRange.size());
 
-        return integrityTree.statStructureSize() <= dramIntegrityRange.size();
+        return integrityTree->statStructureSize() <= dramIntegrityRange.size();
     }
     else if (integrityAllocationMode ==
                 enums::IntegrityAllocationMode::CxlOnly) {
@@ -1666,7 +1663,7 @@ AbstractIntegrityVerifier::treeSizeValid()
             "%s: CXL size: %lld\n",
             __func__, cxlIntegrityRange.size());
 
-        return integrityTree.statStructureSize() <= cxlIntegrityRange.size();
+        return integrityTree->statStructureSize() <= cxlIntegrityRange.size();
     }
     else if (integrityAllocationMode ==
                 enums::IntegrityAllocationMode::BasicMix) {

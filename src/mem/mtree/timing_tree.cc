@@ -8,29 +8,14 @@
 
 namespace gem5 {
 
-TimingTree::TimingTree(unsigned int height, unsigned int arity) :
-  height(height),
-  arity(arity),
-  hashInputSize(BLOCK_SIZE_BYTES),
-  hashOutputSize(hashInputSize / arity)
-{
-  // Size of the array depends on the arity and the number of tree levels.
-  // Level 1: 1 Node (top of tree -- but root is still one hash up)
-  // Level 2: arity
-  // Level 3: arity**2
-  // Level 4: arity**3
-  // ...
-  // Total: (arity**(treeLevels))/(arity - 1)
-
-  dataSize = integerPower(arity, height)/(arity - 1);
-}
-
 TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
   arity(arity),
   hashInputSize(BLOCK_SIZE_BYTES),
   hashOutputSize(hashInputSize / arity)
 {
   // Note this should be in sync with the Python version
+
+  assert(arity > 0);
 
   // Calculate the number of leaves needed to get this much data
 
@@ -66,8 +51,6 @@ TimingTree::TimingTree(unsigned int arity, uint64_t total_data) :
 
   DPRINTF(TimingTree, "%s: Total space taken by tree: %llu bytes.\n",
     __func__, statStructureSize());
-
-  // TODO Verify this constructor works as expected.
 }
 
 TimingTree::~TimingTree() {
@@ -203,6 +186,12 @@ bool TimingTree::isAncestor(size_t parent, size_t child) {
   return false;
 }
 
+AbstractIntegrityTree::TreeNodeType
+TimingTree::getNodeType(size_t index) {
+  // All nodes in the TimingTree are regular tree nodes.
+  return TreeNodeType::TreeNode;
+}
+
 
 size_t TimingTree::addressToBlockIndex(size_t address) {
   // Get the index of the first leaf node.
@@ -243,21 +232,6 @@ size_t TimingTree::addressToBlockIndex(size_t address) {
   return firstLeafIndex + leafOffset;
 }
 
-
-uint64_t TimingTree::blockIndexToAddress(size_t index) {
-  // Descend the tree until we reach a leaf.
-  auto currentBlock = index;
-  while (!isLeaf(currentBlock)) {
-    currentBlock = firstChildBlockIndex(currentBlock);
-  }
-
-  // currentBlock is now guaranteed to be a leaf.
-
-  size_t firstLeafIndex = integerPower(arity, height - 1)/(arity - 1);
-  uint64_t address = (currentBlock - firstLeafIndex) * hashInputSize * arity;
-
-  return address;
-}
 
 
 uint64_t TimingTree::simulatedBlockOffset(size_t index) {

@@ -67,12 +67,10 @@ namespace gem5 {
  *         (`arity` total hashes in one Block.)
  * ```
  */
-class TimingTree : AbstractIntegrityTree
+class TimingTree : public AbstractIntegrityTree
 {
   public:
     ////// Basic Functionality //////
-
-    TimingTree(unsigned int height = 5, unsigned int arity = 4);
 
     /**
      * Initializer for integrity tree based on a fixed arity and the total
@@ -165,17 +163,6 @@ class TimingTree : AbstractIntegrityTree
     const unsigned int CYCLES_UPDATE_PARENT = 0;
 
 
-
-    // Input hash size: 64 bytes, sometimes 128 bytes (cache line size)
-    // Output hash size: about 128 bits/16 bytes. (That's arity = 4 with 64
-    // byte blocks)
-
-    // Block* root;
-
-    /// @brief Data structure that actually contains the tree data. Like a
-    /// heap.
-    // Block** data;
-
     /**
      * Internal tracking of how large the `data` array is. (By number of array
      * indexes.)
@@ -212,10 +199,45 @@ class TimingTree : AbstractIntegrityTree
   // Child(i) = (arity * i) + j, where 1 <= j < arity (multiple children)
 
   public:
+    ////// API //////
+
+    /**
+     * Calculate the "location" of a tree node by its offset, in bytes.
+     *
+     * Consider the first node, 0, to be at offset 0, then the second node
+     * to be at offset BLOCK_SIZE_BYTES, and so on.
+     */
+    uint64_t simulatedBlockOffset(size_t index) override;
+
     /**
      * Get the index of the parent block for a given block.
      */
-    size_t parentBlockIndex(size_t index);
+    size_t parentBlockIndex(size_t index) override;
+
+    /**
+     * Get the index of the block (this will be a leaf) that corresponds to
+     * a given address.
+     *
+     * NOTE: This assumes a valid address is used.
+     *
+     * It is assumed that there is a linear mapping between memory addresses
+     * to leaf nodes, starting at the left-most leaf node.
+     */
+    size_t addressToBlockIndex(size_t address) override;
+
+    /**
+     * Determine if a given parent block index is an ancestor of a child block
+     * index.
+     */
+    bool isAncestor(size_t parent, size_t child) override;
+
+    /**
+     * Returns the type of node a requested node is.
+     */
+    TreeNodeType getNodeType(size_t index) override;
+
+
+    ////// TimingTree //////
 
   private:
     /**
@@ -230,46 +252,12 @@ class TimingTree : AbstractIntegrityTree
      */
     size_t relativeChildBlockIndex(size_t childIndex);
 
+  public:
     /**
      * Determine if a given block index corresponds to a leaf.
      */
     bool isLeaf(size_t index);
 
-  public:
-    /**
-     * Determine if a given parent block index is an ancestor of a child block
-     * index.
-     */
-    bool isAncestor(size_t parent, size_t child);
-
-    /**
-     * Get the index of the block (this will be a leaf) that corresponds to
-     * a given address.
-     *
-     * NOTE: This assumes a valid address is used.
-     *
-     * It is assumed that there is a linear mapping between memory addresses
-     * to leaf nodes, starting at the left-most leaf node.
-     */
-    size_t addressToBlockIndex(size_t address);
-
-    /**
-     * Get the first address that would correspond to a given block index.
-     *
-     * NOTE: This assumes that a valid block index is used.
-     *
-     * It is assumed that there is a linear mapping between memory addresses
-     * to leaf nodes.
-     */
-    uint64_t blockIndexToAddress(size_t index);
-
-    /**
-     * Calculate the "location" of a tree node by its offset, in bytes.
-     *
-     * Consider the first node, 0, to be at offset 0, then the second node
-     * to be at offset BLOCK_SIZE_BYTES, and so on.
-     */
-    uint64_t simulatedBlockOffset(size_t index);
 
   private:
     /**
@@ -307,27 +295,27 @@ class TimingTree : AbstractIntegrityTree
     /**
      * Get the number of levels in the tree.
      */
-    unsigned int statTreeHeight() { return height; }
+    unsigned int statTreeHeight() override { return height; }
 
     /**
      * Get the arity of the tree.
      */
-    unsigned int statTreeArity() { return arity; }
+    unsigned int statTreeArity() override { return arity; }
 
     /**
      * Get the size of a single hash, in bytes.
      */
-    unsigned int statOutputHashSize() { return hashOutputSize; }
+    unsigned int statOutputHashSize() override { return hashOutputSize; }
 
     /**
      * Get the total amount of data that is protected by the tree, in bytes.
      */
-    long long statDataProtected();
+    long long statDataProtected() override;
 
     /**
      * Get the total amount of data in the data structure, in bytes.
      */
-    long long statStructureSize();
+    long long statStructureSize() override;
 
     /**
      * Get the size of the full data structure relative to the amount of data
@@ -337,7 +325,7 @@ class TimingTree : AbstractIntegrityTree
      * size. So you could use the output of this function to say "You need X%
      * additional data to be able to protect this data."
      */
-    double statDataOverheadRatio();
+    double statDataOverheadRatio() override;
 };
 
 } // namespace gem5
