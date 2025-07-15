@@ -393,7 +393,7 @@ namespace gem5
     }
 
     EntryKey ignored_data_parent = 0;
-    if (ignored_data_parent != 0) {
+    if (ignored_data != 0) {
       ignored_data_parent = _tree->parentBlockIndex(ignored_data);
     }
 
