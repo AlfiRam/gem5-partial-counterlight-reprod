@@ -78,6 +78,8 @@ class AbstractIntegrityVerifier(ClockedObject):
         "memory (if applicable).",
     )
 
+    integrity_tree_arity = Param.Int(4, "Arity of integrity tree.")
+
 
 class IntegrityVerifier(AbstractIntegrityVerifier):
     type = "IntegrityVerifier"

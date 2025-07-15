@@ -5,6 +5,7 @@ from m5.objects import (
     BadAddr,
     SystemXBar,
 )
+from m5.util.convert import toMemorySize
 
 from gem5.components.boards.x86_board import X86Board
 from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy import (
@@ -22,7 +23,6 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.isas import ISA
 from gem5.utils.requires import requires
-from m5.util.convert import toMemorySize
 
 
 def add_arguments(parser):
@@ -67,6 +67,13 @@ def add_arguments(parser):
             "CxlOnly",
             "BasicMix",
         ],
+    )
+
+    parser.add_argument(
+        "--integrity-tree-arity",
+        type=int,
+        required=False,
+        default=4,
     )
 
     parser.add_argument(
@@ -136,6 +143,7 @@ def create_board(args):
             membus=membus,
             metadata_cache_size=args.metadata_cache_size,
             integrity_allocation_mode=args.integrity_allocation_mode,
+            integrity_tree_arity=args.integrity_tree_arity,
         )
     else:
         cache_hierarchy = PrivateL1SharedL2CacheHierarchy(

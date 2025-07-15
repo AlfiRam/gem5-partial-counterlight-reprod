@@ -64,7 +64,9 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       cxlOsRange(p.cxl_os_range),
       cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
       integrityAllocationMode(p.integrity_allocation_mode),
-      integrityTree(new TimingTree(4, dramOsRange.size() + cxlOsRange.size())),
+      integrityTree(new TimingTree(
+        (unsigned int)p.integrity_tree_arity,
+        dramOsRange.size() + cxlOsRange.size())),
       metadataCache(SimpleMetadataCache(metadataCacheSize, &integrityTree)),
       hasRequestorId(false),
       _requestorId(0)

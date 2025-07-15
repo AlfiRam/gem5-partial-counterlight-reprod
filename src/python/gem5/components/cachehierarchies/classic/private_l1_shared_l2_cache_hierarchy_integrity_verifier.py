@@ -92,6 +92,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         membus: Optional[BaseXBar] = None,
         metadata_cache_size: Optional[int] = 0,
         integrity_allocation_mode: Optional[str] = None,
+        integrity_tree_arity: Optional[int] = 0,
     ) -> None:
         """
         :param l1d_size: The size of the L1 Data Cache (e.g., "32KiB").
@@ -127,6 +128,10 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             self._metadata_cache_size = self._get_default_metadata_cache_size()
 
         self._integrity_allocation_mode = integrity_allocation_mode
+
+        if integrity_tree_arity:
+            assert integrity_tree_arity >= 0
+            self._integrity_tree_arity = integrity_tree_arity
 
     @overrides(AbstractClassicCacheHierarchy)
     def get_mem_side_port(self) -> Port:
@@ -213,6 +218,9 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             self.verifier.integrity_allocation_mode = (
                 self._integrity_allocation_mode
             )
+
+        if self._integrity_tree_arity:
+            self.verifier.integrity_tree_arity = self._integrity_tree_arity
 
     def _setup_io_cache(self, board: AbstractBoard) -> None:
         """Create a cache for coherent I/O connections"""
