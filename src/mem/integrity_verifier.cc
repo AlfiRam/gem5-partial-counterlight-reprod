@@ -70,6 +70,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       integrityTreeType(p.integrity_tree_type),
       hasRequestorId(false),
       _requestorId(0),
+      integrityHashingLatency(Cycles(p.integrity_hashing_latency)),
       stats(this)
 {
     switch (integrityTreeType) {
@@ -371,7 +372,7 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         __func__, pkt->print());
     schedule(
         new HashCompletionEvent(this, pkt),
-        curTick() + integrityHashingLatency
+        clockEdge(integrityHashingLatency)
     );
     // This packet should not already be in the process of being verified.
     assert(outstandingIntegrityHashes.find(pkt->req) ==

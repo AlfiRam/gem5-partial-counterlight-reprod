@@ -65,6 +65,10 @@ class AbstractIntegrityVerifier(ClockedObject):
 
     system = Param.System(Parent.any, "System that the object belongs to.")
 
+    integrity_hashing_latency = Param.Cycles(
+        40, "Time in cycles to encrypt or decrypt using an encryption engine."
+    )
+
     metadata_cache_type = Param.MetadataCacheType(
         "MetadataCache", "Class of metadata cache."
     )

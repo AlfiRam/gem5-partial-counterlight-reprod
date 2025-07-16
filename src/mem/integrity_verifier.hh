@@ -505,11 +505,9 @@ class AbstractIntegrityVerifier : public ClockedObject
     void sanityCheckEvictionVictim(uint64_t victim, uint64_t replacement);
 
     /**
-     * Time (in ticks) to complete hashing.
-     *
-     * TODO Define a default value
+     * Time (in cycles) to complete hashing.
      */
-    Tick integrityHashingLatency = 800;
+    Cycles integrityHashingLatency;
 
     /**
      * An event that represents when the hash generation for the data in a
