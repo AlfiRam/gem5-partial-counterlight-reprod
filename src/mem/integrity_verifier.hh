@@ -332,8 +332,6 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     std::unordered_set<RequestPtr> responseReady;
 
-    void regStats() override;
-
     AddrRange dramFullRange;
     AddrRange dramOsRange;
     AddrRange dramIntegrityRange;
@@ -644,17 +642,47 @@ class AbstractIntegrityVerifier : public ClockedObject
   private:
     // Stats
 
-    statistics::Scalar requestsHandled;
-    statistics::Scalar metadataReqHandled;
-    statistics::Scalar dataReqHandled;
+    struct IntegrityVerifierStats : public statistics::Group
+    {
+      IntegrityVerifierStats(statistics::Group *parent);
 
-    statistics::Scalar totalRequestingTime;
-    statistics::Scalar totalMetadataReqTime;
-    statistics::Scalar totalDataReqTime;
+      statistics::Scalar requestsHandled;
+      statistics::Scalar metadataReqHandled;
+      statistics::Scalar dataReqHandled;
 
-    statistics::Formula avgReqLatency;
-    statistics::Formula avgMetadataReqLatency;
-    statistics::Formula avgDataReqLatency;
+      statistics::Scalar reqHandledDramOs;
+      statistics::Scalar reqHandledDramIntegrity;
+      statistics::Scalar reqHandledCxlOs;
+      statistics::Scalar reqHandledCxlIntegrity;
+
+      statistics::Scalar metadataCacheAccesses;
+      statistics::Vector metadataCacheAccessesTypes;
+      statistics::Scalar metadataCacheMisses;
+      statistics::Vector metadataCacheMissesTypes;
+      statistics::Scalar metadataCacheHits;
+      statistics::Vector metadataCacheHitsTypes;
+      statistics::Formula metadataCacheHitRate;
+      statistics::Formula metadataCacheHitRateTypes;
+
+      statistics::Scalar totalRequestingTime;
+      statistics::Scalar totalMetadataReqTime;
+      statistics::Scalar totalDataReqTime;
+
+      statistics::Scalar totalReqTimeDramOs;
+      statistics::Scalar totalReqTimeDramIntegrity;
+      statistics::Scalar totalReqTimeCxlOs;
+      statistics::Scalar totalReqTimeCxlIntegrity;
+
+      statistics::Formula avgReqLatency;
+      statistics::Formula avgMetadataReqLatency;
+      statistics::Formula avgDataReqLatency;
+
+      statistics::Formula avgReqTimeDramOs;
+      statistics::Formula avgReqTimeDramIntegrity;
+      statistics::Formula avgReqTimeCxlOs;
+      statistics::Formula avgReqTimeCxlIntegrity;
+    } stats;
+
 };
 
 /**
