@@ -370,11 +370,9 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     AbstractMetadataCache *metadataCache;
 
-    bool hasRequestorId;
-
     /**
-     * Used if a new metadata request is generated and a phony (but realistic)
-     * requestor ID is needed.
+     * Used if a new metadata request is generated and a requestor ID is
+     * needed.
      */
     RequestorID _requestorId;
 

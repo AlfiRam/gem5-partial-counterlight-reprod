@@ -68,8 +68,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
       integrityAllocationMode(p.integrity_allocation_mode),
       integrityTreeType(p.integrity_tree_type),
-      hasRequestorId(false),
-      _requestorId(0),
+      _requestorId(p.system->getRequestorId(this)),
       integrityHashingLatency(Cycles(p.integrity_hashing_latency)),
       stats(this)
 {
@@ -261,7 +260,7 @@ AbstractIntegrityVerifier::generateMetadataRequest(PacketPtr pkt)
         reqAddr,
         64, // Size
         0, // No flags
-        pkt->requestorId()
+        _requestorId
     );
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Allocated request %p\n",
@@ -343,12 +342,6 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
             __func__, pkt->print());
         saveRetryVerify(pkt);
         return true;
-    }
-
-    // Save a valid requestor ID internally just in case it is needed.
-    if (!hasRequestorId) {
-        _requestorId = pkt->requestorId();
-        hasRequestorId = true;
     }
 
     // We are either getting a read response from memory or a writeback request
