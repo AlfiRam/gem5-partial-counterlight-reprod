@@ -100,10 +100,45 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
+        "--metadata-cache-type",
+        type=str,
+        required=False,
+        default="MetadataCache",
+        choices=[
+            "MetadataCache",
+            "PartitionedMetadataCache",
+        ],
+    )
+
+    parser.add_argument(
         "--metadata-cache-size",
         type=int,
         required=False,
-        help="Number of entries in the metadata cache, if applicable.",
+        help="Number of entries in the (unified) metadata cache, if applicable.",
+        default=2048,
+    )
+
+    parser.add_argument(
+        "--metadata-cache-size-tree-nodes",
+        type=int,
+        required=False,
+        help="Number of tree node entries in the (split) metadata cache, if applicable.",
+        default=2048,
+    )
+
+    parser.add_argument(
+        "--metadata-cache-size-counter-nodes",
+        type=int,
+        required=False,
+        help="Number of counter node entries in the (split) metadata cache, if applicable.",
+        default=2048,
+    )
+
+    parser.add_argument(
+        "--metadata-cache-size-mac-nodes",
+        type=int,
+        required=False,
+        help="Number of MAC node entries in the (split) metadata cache, if applicable.",
         default=2048,
     )
 
@@ -170,7 +205,11 @@ def create_board(args):
             l2_size="512KiB",
             l2_assoc=16,
             membus=membus,
+            metadata_cache_type=args.metadata_cache_type,
             metadata_cache_size=args.metadata_cache_size,
+            metadata_cache_size_tree_nodes=args.metadata_cache_size_tree_nodes,
+            metadata_cache_size_counter_nodes=args.metadata_cache_size_counter_nodes,
+            metadata_cache_size_mac_nodes=args.metadata_cache_size_mac_nodes,
             metadata_cache_assoc=args.metadata_cache_assoc,
             integrity_allocation_mode=args.integrity_allocation_mode,
             integrity_tree_type=args.integrity_tree_type,

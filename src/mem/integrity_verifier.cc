@@ -91,6 +91,17 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         );
         break;
 
+        case enums::MetadataCacheType::PartitionedMetadataCache:
+        metadataCache = new PartitionedMetadataCache(
+            (size_t)p.metadata_cache_size_tree_nodes,
+            (size_t)p.metadata_cache_size_counter_nodes,
+            (size_t)p.metadata_cache_size_mac_nodes,
+            (unsigned int)p.metadata_cache_assoc,
+            integrityTree,
+            AbstractMetadataCache::ReplacementPolicy::LRU
+        );
+        break;
+
         default:
         panic("Invalid metadata cache type.");
     }

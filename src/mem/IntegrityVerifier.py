@@ -71,6 +71,18 @@ class AbstractIntegrityVerifier(ClockedObject):
     metadata_cache_size = Param.Int(
         6144, "Metadata cache size (Non-partitioned only)"
     )
+    metadata_cache_size_tree_nodes = Param.Int(
+        2048,
+        "Number of tree nodes to store in metadata cache (Partitioned only)",
+    )
+    metadata_cache_size_counter_nodes = Param.Int(
+        2048,
+        "Number of counter nodes to store in metadata cache (Partitioned only)",
+    )
+    metadata_cache_size_mac_nodes = Param.Int(
+        2048,
+        "Number of MAC nodes to store in metadata cache (Partitioned only)",
+    )
     metadata_cache_assoc = Param.Int(8, "Metadata cache associativity")
 
     dram_full_range = Param.AddrRange(

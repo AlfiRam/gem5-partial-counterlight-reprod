@@ -895,6 +895,48 @@ namespace gem5
       "%s: set %u: %llu evicted. Lines pending eviction: %u\n",
       __func__, _id, evicted_data, lines_pending_eviction);
   }
+
+
+  PartitionedMetadataCache::PartitionedMetadataCache(
+    size_t tree_entries,
+    size_t counter_entries,
+    size_t mac_entries,
+    unsigned int associativity,
+    AbstractIntegrityTree *tree,
+    ReplacementPolicy rp
+  ) : MetadataCache(tree_entries + counter_entries + mac_entries,
+        associativity, tree, rp)
+  {
+    assert(tree_entries > 0);
+    assert(counter_entries > 0);
+    assert(mac_entries > 0);
+
+    setTypeCounts[TreeNodeType::TreeNode] = tree_entries / associativity;
+    setTypeCounts[TreeNodeType::Counter] = counter_entries / associativity;
+    setTypeCounts[TreeNodeType::MAC] = mac_entries / associativity;
+
+    setTypeFirstIndex[TreeNodeType::TreeNode] = 0;
+    setTypeFirstIndex[TreeNodeType::Counter] =
+      setTypeCounts[TreeNodeType::TreeNode];
+    setTypeFirstIndex[TreeNodeType::MAC] =
+      setTypeCounts[TreeNodeType::TreeNode] +
+      setTypeCounts[TreeNodeType::Counter];
+  }
+
+  PartitionedMetadataCache::~PartitionedMetadataCache()
+  {
+  }
+
+  size_t
+  PartitionedMetadataCache::selectCacheSet(EntryKey data)
+  {
+    TreeNodeType type = _tree->getNodeType(data);
+
+    // Index within this set type.
+    size_t index = data % setTypeCounts[type];
+
+    // Index of set among the total amount of sets.
+    return setTypeFirstIndex[type] + index;
   }
 
 } // namespace gem5

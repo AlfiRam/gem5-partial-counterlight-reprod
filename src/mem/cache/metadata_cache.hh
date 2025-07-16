@@ -533,6 +533,44 @@ class MetadataCache : public AbstractMetadataCache
     void finishEvict(EntryKey evicted_data) override;
 };
 
+
+class PartitionedMetadataCache : public MetadataCache
+{
+  public:
+    typedef AbstractIntegrityTree::TreeNodeType TreeNodeType;
+
+    // Constructor based on total size and associativity
+    PartitionedMetadataCache(
+      size_t tree_entries,
+      size_t counter_entries,
+      size_t mac_entries,
+      unsigned int associativity,
+      AbstractIntegrityTree *tree,
+      ReplacementPolicy rp = ReplacementPolicy::Random
+    );
+
+    ~PartitionedMetadataCache();
+
+    /**
+     * Return the cache set that is associated with this entry.
+     *
+     * There should only ever be one possible return value for each entry.
+     */
+    size_t selectCacheSet(EntryKey data) override;
+
+  private:
+    /**
+     * Counts of how many of each type of cache set there are for this metadata
+     * cache, for each type of tree node.
+     */
+    std::unordered_map<TreeNodeType, size_t> setTypeCounts;
+
+    /**
+     * The first cache set index of each type.
+     */
+    std::unordered_map<TreeNodeType, size_t> setTypeFirstIndex;
+};
+
 } // namespace gem5
 
 #endif // __MEM_CACHE_METADATA_CACHE_HH__

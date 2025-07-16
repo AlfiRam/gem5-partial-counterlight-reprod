@@ -90,7 +90,11 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         l1i_assoc: int = 8,
         l2_assoc: int = 16,
         membus: Optional[BaseXBar] = None,
+        metadata_cache_type: Optional[str] = None,
         metadata_cache_size: Optional[int] = 0,
+        metadata_cache_size_tree_nodes: Optional[int] = 0,
+        metadata_cache_size_counter_nodes: Optional[int] = 0,
+        metadata_cache_size_mac_nodes: Optional[int] = 0,
         metadata_cache_assoc: Optional[int] = 0,
         integrity_allocation_mode: Optional[str] = None,
         integrity_tree_type: Optional[str] = None,
@@ -123,11 +127,28 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         )
 
         self.membus = membus if membus else self._get_default_membus()
+        self._metadata_cache_type = metadata_cache_type
         if metadata_cache_size:
             assert metadata_cache_size >= 1
             self._metadata_cache_size = metadata_cache_size
         else:
             self._metadata_cache_size = self._get_default_metadata_cache_size()
+
+        if metadata_cache_size_tree_nodes:
+            assert metadata_cache_size_tree_nodes >= 1
+            self._metadata_cache_size_tree_nodes = (
+                metadata_cache_size_tree_nodes
+            )
+
+        if metadata_cache_size_counter_nodes:
+            assert metadata_cache_size_counter_nodes >= 1
+            self._metadata_cache_size_counter_nodes = (
+                metadata_cache_size_counter_nodes
+            )
+
+        if metadata_cache_size_mac_nodes:
+            assert metadata_cache_size_mac_nodes >= 1
+            self._metadata_cache_size_mac_nodes = metadata_cache_size_mac_nodes
 
         self._metadata_cache_assoc = metadata_cache_assoc
 
@@ -233,6 +254,24 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
 
         if self._integrity_tree_arity:
             self.verifier.integrity_tree_arity = self._integrity_tree_arity
+
+        if self._metadata_cache_type:
+            self.verifier.metadata_cache_type = self._metadata_cache_type
+
+        if self._metadata_cache_size_tree_nodes:
+            self.verifier.metadata_cache_size_tree_nodes = (
+                self._metadata_cache_size_tree_nodes
+            )
+
+        if self._metadata_cache_size_counter_nodes:
+            self.verifier.metadata_cache_size_counter_nodes = (
+                self._metadata_cache_size_counter_nodes
+            )
+
+        if self._metadata_cache_size_mac_nodes:
+            self.verifier.metadata_cache_size_mac_nodes = (
+                self._metadata_cache_size_mac_nodes
+            )
 
     def _setup_io_cache(self, board: AbstractBoard) -> None:
         """Create a cache for coherent I/O connections"""
