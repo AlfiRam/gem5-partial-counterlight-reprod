@@ -119,7 +119,8 @@ board, processor = create_board(args)
 command = (
     "m5 exit;"  # Third exit event
     + "cd microbenchmarks;"
-    + f'echo "12345" | ./{args.benchmark} {args.page_size} {args.page_count} {args.passes};'
+    # Arguments: <page_size> <pages> <passes> <show_progress: 0 or 1> <progress_frequency> <use_m5: 0 or 1>
+    + f'echo "12345" | ./{args.benchmark} {args.page_size} {args.page_count} {args.passes} 1 10 1;'
     # The end of ROI hook will stop the simulation from here.
     + "sleep 5;"  # This delay is to allow any print statements to finish before the simulation abruptly stops.
     + "m5 exit;"
