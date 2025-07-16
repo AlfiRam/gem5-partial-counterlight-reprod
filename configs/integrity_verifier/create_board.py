@@ -107,6 +107,14 @@ def add_arguments(parser):
         default=2048,
     )
 
+    parser.add_argument(
+        "--metadata-cache-assoc",
+        type=int,
+        required=False,
+        help="Associativity of metadata cache.",
+        default=8,
+    )
+
     return parser
 
 
@@ -124,14 +132,18 @@ def create_board(args):
         # "local" size until we can protect both the local and remote space.
         match args.integrity_tree_type:
             case "TimingTree":
-                dram_os_size, cxl_os_size = TimingTree.determine_max_protected_size(
-                    min_local_size=toMemorySize(baseline_os_size),
-                    total_local_size=toMemorySize(args.dram_size),
-                    total_remote_size=toMemorySize(args.cxl_size),
-                    arity=args.integrity_tree_arity,
+                dram_os_size, cxl_os_size = (
+                    TimingTree.determine_max_protected_size(
+                        min_local_size=toMemorySize(baseline_os_size),
+                        total_local_size=toMemorySize(args.dram_size),
+                        total_remote_size=toMemorySize(args.cxl_size),
+                        arity=args.integrity_tree_arity,
+                    )
                 )
             case _:
-                print(f"Unknown integrity tree type '{args.integrity_tree_type}'")
+                print(
+                    f"Unknown integrity tree type '{args.integrity_tree_type}'"
+                )
                 exit(1)
     else:
         print(
@@ -159,6 +171,7 @@ def create_board(args):
             l2_assoc=16,
             membus=membus,
             metadata_cache_size=args.metadata_cache_size,
+            metadata_cache_assoc=args.metadata_cache_assoc,
             integrity_allocation_mode=args.integrity_allocation_mode,
             integrity_tree_type=args.integrity_tree_type,
             integrity_tree_arity=args.integrity_tree_arity,

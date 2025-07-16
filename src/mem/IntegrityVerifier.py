@@ -38,6 +38,10 @@ from m5.params import *
 from m5.proxy import *  # Used for Parent.any
 
 
+class MetadataCacheType(Enum):
+    vals = ["MetadataCache", "PartitionedMetadataCache"]
+
+
 class IntegrityAllocationMode(Enum):
     vals = ["DramOnly", "CxlOnly", "BasicMix"]
 
@@ -61,7 +65,13 @@ class AbstractIntegrityVerifier(ClockedObject):
 
     system = Param.System(Parent.any, "System that the object belongs to.")
 
-    metadata_cache_size = Param.Int(2000, "Metadata cache size")
+    metadata_cache_type = Param.MetadataCacheType(
+        "MetadataCache", "Class of metadata cache."
+    )
+    metadata_cache_size = Param.Int(
+        6144, "Metadata cache size (Non-partitioned only)"
+    )
+    metadata_cache_assoc = Param.Int(8, "Metadata cache associativity")
 
     dram_full_range = Param.AddrRange(
         AddrRange(0, size=0), "Full available range of DRAM"

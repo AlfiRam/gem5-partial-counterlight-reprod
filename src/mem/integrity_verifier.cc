@@ -52,6 +52,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
     : ClockedObject(p),
       system(p.system),
       metadataCacheSize(p.metadata_cache_size),
+      metadataCacheAssoc(p.metadata_cache_assoc),
       requestPort(name() + "-mem_side_port", *this),
       responsePort(name() + "-cpu_side_port", *this),
       reqQueue(*this, requestPort),
@@ -65,7 +66,6 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
       integrityAllocationMode(p.integrity_allocation_mode),
       integrityTreeType(p.integrity_tree_type),
-      metadataCache(SimpleMetadataCache(metadataCacheSize, &integrityTree)),
       hasRequestorId(false),
       _requestorId(0)
 {
@@ -80,6 +80,21 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         default:
         panic("Invalid integrity tree type.");
     }
+
+    switch (p.metadata_cache_type) {
+        case enums::MetadataCacheType::MetadataCache:
+        metadataCache = new MetadataCache(
+            (size_t)metadataCacheSize,
+            (unsigned int)p.metadata_cache_assoc,
+            integrityTree,
+            AbstractMetadataCache::ReplacementPolicy::LRU
+        );
+        break;
+
+        default:
+        panic("Invalid metadata cache type.");
+    }
+
     DPRINTF(AbstractIntegrityVerifierInit,
         "%s: dramFullRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramFullRange.to_string(),
@@ -112,6 +127,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
 AbstractIntegrityVerifier::~AbstractIntegrityVerifier()
 {
     delete integrityTree;
+    delete metadataCache;
 }
 
 void
@@ -382,7 +398,7 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
             } else {
                 addToPendingToUnlock(parentNode, 0);
             }
-            metadataCache.lockDupeOkay(parentNode);
+            metadataCache->lockDupeOkay(parentNode);
         }
         completeIntegrityVerification(pkt);
 
@@ -460,10 +476,10 @@ AbstractIntegrityVerifier::parentNodeIsPendingEviction(PacketPtr pkt)
     }
 
     auto parentNode = getParentNode(pkt);
-    if (!metadataCache.containsPendingOkay(parentNode)) {
+    if (!metadataCache->containsPendingOkay(parentNode)) {
         return false;
     }
-    auto search = metadataCache.find(parentNode);
+    auto search = metadataCache->find(parentNode);
 
     return (search.second.pending_eviction);
 }
@@ -478,7 +494,7 @@ AbstractIntegrityVerifier::parentNodeAvailable(PacketPtr pkt)
     }
 
     auto parentNode = getParentNode(pkt);
-    return (metadataCache.contains(parentNode));
+    return (metadataCache->contains(parentNode));
 }
 
 
@@ -506,7 +522,8 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
     // We are now ready to verify.
     // Assume that the verification was successful, and effectively instant.
     if (!parentNodeIsSecureRoot(pkt)) {
-        metadataCache.access(getParentNode(pkt));
+        // Consider the metadata cache accessed for tracking purposes.
+        metadataCache->access(getParentNode(pkt));
     }
 
     // Metadata requests have more logic involved so this is handled
@@ -534,7 +551,7 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         // This means we can now update the metadata cache and forward the data
         // to memory for storage.
         auto parentNode = getParentNode(pkt);
-        metadataCache.modify(parentNode);
+        metadataCache->modify(parentNode);
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Modifying cache line %lu in metadata cache\n",
             __func__, parentNode);
@@ -550,7 +567,7 @@ bool
 AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
 {
     // Attempt to add the metadata to the cache.
-    bool inserted = metadataCache.insert(pkt->getMetadataNode());
+    bool inserted = metadataCache->insert(pkt->getMetadataNode());
     if (!inserted) {
         // We must evict something to make room for more.
         DPRINTF(AbstractIntegrityVerifier,
@@ -558,12 +575,12 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             "Conducting eviction.\n",
             __func__, pkt->print());
 
-        std::unordered_set<SimpleMetadataCache::EntryKey> ignoredData;
+        std::unordered_set<AbstractMetadataCache::EntryKey> ignoredData;
         for (auto it : outstandingMetadataRequests) {
             ignoredData.insert(it.first);
         }
         ignoredData.insert(0);
-        auto evictedData = metadataCache.evict(ignoredData,
+        auto evictedData = metadataCache->evict(ignoredData,
                                                 pkt->getMetadataNode());
         if (evictedData.second.pending_eviction) {
             DPRINTF(AbstractIntegrityVerifier,
@@ -573,7 +590,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             // make sure its parent is available in the metadata cache.
             auto evictParent = integrityTree->parentBlockIndex(
                                                 evictedData.first);
-            if (!metadataCache.contains(evictParent)) {
+            if (!metadataCache->contains(evictParent)) {
                 DPRINTF(AbstractIntegrityVerifier,
                     "%s: The parent of %lld, %lld, is not cached.\n",
                     __func__, evictedData.first, evictParent);
@@ -613,13 +630,13 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
                 "%s: The parent of %lld is cached. Evicting %lld.\n",
                 __func__, evictParent, evictedData.first);
             // The parent is in the cache, so we can safely evict (writeback).
-            metadataCache.finishEvict(evictedData.first);
+            metadataCache->finishEvict(evictedData.first);
             // TODO Create writeback packet
         }
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Evicted %lu from metadata cache.\n",
             __func__, evictedData.first);
-        inserted = metadataCache.insert(pkt->getMetadataNode());
+        inserted = metadataCache->insert(pkt->getMetadataNode());
     }
     assert(inserted);
 
@@ -631,7 +648,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             "%s: Locking cache line %llu for outstanding "
             "metadata request(s)\n",
             __func__, pkt->getMetadataNode());
-        metadataCache.lock(pkt->getMetadataNode());
+        metadataCache->lock(pkt->getMetadataNode());
         copyOMRtoPTU(pkt->getMetadataNode());
     }
 
@@ -668,7 +685,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
             "%s: %s is verified. %llu can now be evicted for %s.\n",
             __func__, pkt->print(), e.first, e.second->print());
 
-        metadataCache.finishEvict(e.first);
+        metadataCache->finishEvict(e.first);
         bool successful = completeIntegrityVerification(e.second);
 
         // If insertion wasn't successful immediately after eviction,
@@ -732,7 +749,7 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     // the cache line now.
     if (pendingToUnlock.find(pkt->getMetadataNode()) ==
         pendingToUnlock.end()) {
-        metadataCache.unlockDupeOkay(pkt->getMetadataNode());
+        metadataCache->unlockDupeOkay(pkt->getMetadataNode());
     }
 
     removeFromPacketLookup(pkt);
@@ -808,7 +825,7 @@ AbstractIntegrityVerifier::unlockIfPossible(
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Unlocking cache line %llu\n",
             __func__, node);
-        metadataCache.unlock(node);
+        metadataCache->unlock(node);
     }
 }
 
@@ -1298,10 +1315,11 @@ AbstractIntegrityVerifier::fullDebugOutput()
 
     cprintf("-------\n");
     cprintf("METADATA CACHE:\n");
-    cprintf("size: %d\n", metadataCache.getSize());
-    cprintf("locked: %d\n", metadataCache.getLockedLineCount());
-    cprintf("dirty: %d\n", metadataCache.getDirtyLineCount());
-    cprintf("pending eviction: %d\n", metadataCache.getPendingEvictionCount());
+    cprintf("size: %d\n", metadataCache->getSize());
+    cprintf("locked: %d\n", metadataCache->getLockedLineCount());
+    cprintf("dirty: %d\n", metadataCache->getDirtyLineCount());
+    cprintf("pending eviction: %d\n",
+        metadataCache->getPendingEvictionCount());
     cprintf("==============================\n");
 }
 
@@ -1530,13 +1548,13 @@ AbstractIntegrityVerifier::sanityCheckEvictionVictim(
 )
 {
     // Victim should be in the cache.
-    assert(metadataCache.containsPendingOkay(victim));
+    assert(metadataCache->containsPendingOkay(victim));
 
     // Parent of victim would not be in the cache.
-    assert(!metadataCache.contains(integrityTree->parentBlockIndex(victim)));
+    assert(!metadataCache->contains(integrityTree->parentBlockIndex(victim)));
 
     // Metadata cache does not already have the replacement.
-    assert(!metadataCache.contains(replacement));
+    assert(!metadataCache->contains(replacement));
 
     uint64_t victimParent = integrityTree->parentBlockIndex(victim);
     uint64_t replacementParent = integrityTree->parentBlockIndex(replacement);
@@ -1553,7 +1571,8 @@ AbstractIntegrityVerifier::sanityCheckEvictionVictim(
     // Assert that the lowest ancestor of victim is lower than replacement,
     // or that there is no ancestor of the victim at all cached.
     assert(!integrityTree->isAncestor(replacement, victim) ||
-           metadataCache.getLowestCachedAncestor(victim) != replacementParent);
+           metadataCache->getLowestCachedAncestor(victim) !=
+            replacementParent);
 }
 
 void

@@ -91,6 +91,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         l2_assoc: int = 16,
         membus: Optional[BaseXBar] = None,
         metadata_cache_size: Optional[int] = 0,
+        metadata_cache_assoc: Optional[int] = 0,
         integrity_allocation_mode: Optional[str] = None,
         integrity_tree_type: Optional[str] = None,
         integrity_tree_arity: Optional[int] = 0,
@@ -127,6 +128,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             self._metadata_cache_size = metadata_cache_size
         else:
             self._metadata_cache_size = self._get_default_metadata_cache_size()
+
+        self._metadata_cache_assoc = metadata_cache_assoc
 
         self._integrity_allocation_mode = integrity_allocation_mode
 
@@ -212,6 +215,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             # req_size = 512,
             # resp_size = 512,
             metadata_cache_size=self._metadata_cache_size,
+            metadata_cache_assoc=self._metadata_cache_assoc,
         )
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port

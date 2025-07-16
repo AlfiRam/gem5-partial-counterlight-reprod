@@ -42,6 +42,7 @@
 
 #include "enums/IntegrityAllocationMode.hh"
 #include "enums/IntegrityTreeType.hh"
+#include "enums/MetadataCacheType.hh"
 #include "mem/cache/metadata_cache.hh"
 #include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
@@ -298,6 +299,7 @@ class AbstractIntegrityVerifier : public ClockedObject
     System *system;
 
     int metadataCacheSize;
+    int metadataCacheAssoc;
 
     RequestPort requestPort;
     ResponsePort responsePort;
@@ -369,7 +371,7 @@ class AbstractIntegrityVerifier : public ClockedObject
     /**
      * Metadata cache.
      */
-    SimpleMetadataCache metadataCache;
+    AbstractMetadataCache *metadataCache;
 
     bool hasRequestorId;
 

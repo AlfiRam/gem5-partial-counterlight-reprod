@@ -16,93 +16,364 @@ namespace gem5
 {
 
 /**
- * Basic class that represents a cache entry. This allows the entry to be
- * flexible and implement other functionality or data (i.e., counters).
+ * Top-level interface for a metadata cache. This specifies the structure of
+ * cache entries and the API that other components can interact with the cache.
  */
-class AbstractCacheEntry
+class AbstractMetadataCache
 {
-  private:
-    /**
-     * Whether or not this entry contains valid data.
-     */
-    bool valid;
-
-    /**
-     * Whether or not this entry is dirty (modified).
-     */
-    bool dirty;
-
   public:
-    AbstractCacheEntry() {};
-    virtual ~AbstractCacheEntry() {};
+    typedef uint64_t EntryKey;
+    typedef struct
+    {
+      bool dirty;
+      bool pending_eviction;
+      bool locked;
+      /**
+       * Relative counter for what the least-recently used item is.
+       *
+       * 0 is most recent, max value is least recent.
+       */
+      unsigned short last_used;
+    } EntryValue;
+
+    enum ReplacementPolicy
+    {
+      /// The basic tree node.
+      Random = 0,
+      LRU = 1
+    };
+
+    virtual ~AbstractMetadataCache() {};
+
+    ReplacementPolicy replacementPolicy;
+
+    virtual std::pair<EntryKey, EntryValue> find(EntryKey new_data) = 0;
 
     /**
-     * Return the size (in bytes) that one cache entry takes.
-     */
-    static size_t entrySize() { return 0; }
-};
-
-
-class BasicCacheEntry : public AbstractCacheEntry
-{
-  private:
-    /**
-     * Each cache entry is simply an ID to a Merkle tree block (for now).
+     * Mock the access of a metadata cache entry.
      *
-     * However, if this was a real cache, we would be storing the block itself.
+     * @returns True if cache hit, false if cache miss.
      */
-    size_t mtBlock;
-
-  public:
-    BasicCacheEntry() {};
-    ~BasicCacheEntry() {};
+    virtual bool access(EntryKey data) = 0;
 
     /**
-     * Return the size (in bytes) that one cache entry takes. Rounded up to the
-     * nearest byte when necessary.
+     * Insert a piece of data to the metadata cache. If there is no space,
+     * nothing will be inserted.
      *
-     * For this cache entry type, you store the following:
-     *   - Valid bit (1 bit)
-     *   - Dirty bit (1 bit)
-     *   - Merkle tree node (size of one cacheline = 64 bytes)
-     *   - Tree node ID (technically this is 8 bytes at most, but really
-     *     depends on the size of the tree)
+     * @returns True if the insertion was successful, false otherwise.
      */
-    static size_t entrySize() { return 1 + 64 + 8; }
-};
+    virtual bool insert(EntryKey new_data) = 0;
 
+    /**
+     * Simulate modification of a cache line by specifying the entry to edit.
+     * This will cause the line to be marked as dirty.
+     *
+     * This assumes that `data` already exists in the cache.
+     */
+    virtual void modify(EntryKey modified_data) = 0;
 
-// template <typename T>
-class CacheSet
-{
-  // static_assert(std::is_base_of<AbstractCacheEntry, T>::value,
-  //    "CacheSet type T must derive from AbstractCacheEntry.");
+    /**
+     * Check for the existence of `search_data` in the metadata cache.
+     */
+    virtual bool contains(EntryKey search_data) = 0;
 
-  private:
-    unsigned int ways;
+    /**
+     * Check for the existence of `search_data` in the metadata cache.
+     *
+     * Do not panic if the data being checked is pending eviction.
+     */
+    virtual bool containsPendingOkay(EntryKey search_data) = 0;
 
-    // std::vector<T> entries;
-    std::vector<BasicCacheEntry*> entries;
+    /**
+     * Evict a random cache line from the metadata cache. If the selected cache
+     * line is dirty, then it will be marked as 'pending eviction', and require
+     * the caller to perform additional checks as needed and call
+     * `finishEvict(evicted_data)`, where `evicted_data` is
+     * `evict(...).first`.
+     *
+     * It is guaranteed that a line already pending eviction will not be
+     * selected for eviction.
+     *
+     * @param ignored_data Data that should not be evicted.
+     * @param replacement The node that is intended to replace the evicted
+     *                    cache line. If no replacement is specified, `0` can
+     *                    be used to indicate the replacement.
+     * @return The data that was evicted. Note that if the entry returned has
+     *         the 'pending eviction' flag set to true, the eviction is not
+     *         complete.
+     */
+    virtual std::pair<EntryKey, EntryValue> evict(
+      std::unordered_set<EntryKey> ignored_data, EntryKey replacement) = 0;
 
-  public:
-    CacheSet(unsigned int ways);
+    virtual std::pair<EntryKey, EntryValue> evict(
+      std::unordered_set<EntryKey> ignored_data) = 0;
 
-    ~CacheSet();
+    virtual std::pair<EntryKey, EntryValue> evict(EntryKey ignored_data) = 0;
+
+    virtual std::pair<EntryKey, EntryValue> evict() = 0;
+
+    /**
+     * Finish an eviction as followed from `evict()`.
+     */
+    virtual void finishEvict(EntryKey evicted_data) = 0;
+
+    /**
+     * Lock a node to prevent it from being evicted.
+     */
+    virtual void lock(EntryKey data) = 0;
+
+    /**
+     * Lock a node, but do not panic if this is called on an already-locked
+     * node.
+     */
+    virtual void lockDupeOkay(EntryKey data) = 0;
+
+    /**
+     * Unlock a node to allow it to be evicted.
+     */
+    virtual void unlock(EntryKey data) = 0;
+
+    /**
+     * Unlock a node, but do not panic if this is called on an already-unlocked
+     * node.
+     */
+    virtual void unlockDupeOkay(EntryKey data) = 0;
+
+    virtual size_t getSize() = 0;
+
+    virtual unsigned int getDirtyLineCount() = 0;
+
+    virtual unsigned int getPendingEvictionCount() = 0;
+
+    virtual unsigned int getLockedLineCount() = 0;
+
+    /**
+     * Return the lowest cached entry that is an ancestor of `data`. If no
+     * entry exists, `data` is returned back.
+     */
+    virtual EntryKey getLowestCachedAncestor(EntryKey data) = 0;
 };
 
 
 /**
- * A basic metadata cache. This can store an arbitrary class that derives
- * AbstractCacheEntry.
+ * A basic unified metadata cache.
+ *
+ * A MetadataCache is composed of one or more `CacheSet`s, where the size of
+ * each CacheSet is based on the declared associativity of the MetadataCache.
  */
-// template <typename T>
-class MetadataCache
+class MetadataCache : public AbstractMetadataCache
 {
-  // static_assert(std::is_base_of<AbstractCacheEntry, T>::value,
-  //    "CacheSet type T must derive from AbstractCacheEntry.");
+  class CacheSet
+  {
+    private:
+      // Add defined entry type
+
+      typedef AbstractMetadataCache::EntryKey EntryKey;
+      typedef AbstractMetadataCache::EntryValue EntryValue;
+      typedef AbstractMetadataCache::ReplacementPolicy ReplacementPolicy;
+
+      /**
+       * Unique identifier for this cache set within a metadata cache.
+       */
+      unsigned int _id;
+
+      unsigned int ways;
+
+      /**
+       * Internal data structure.
+       */
+      std::unordered_map<EntryKey, EntryValue> _data;
+
+      /**
+       * Internal count for the number of dirty cache lines in this set.
+       */
+      unsigned int dirty_lines;
+
+      /**
+       * Internal count for the number of cache lines in this set that
+       * are currently pending eviction. These lines can be considered
+       * inaccessible until they are properly evicted.
+       */
+      unsigned int lines_pending_eviction;
+
+      /**
+       * Internal count for the number of cache lines that are locked and
+       * cannot be evicted. This is the case if a cache line is depended on by
+       * another cache line that is pending insertion.
+       */
+      unsigned int locked_lines;
+
+      /**
+       * Metadata cache that owns this cache set.
+       */
+      MetadataCache *_parent;
+
+      /**
+       * Reference to integrity tree. Can be helpful for finding certain
+       * relationships between nodes.
+       */
+      AbstractIntegrityTree *_tree;
+
+      ReplacementPolicy replacementPolicy;
+
+    public:
+      CacheSet(
+        unsigned int id,
+        unsigned int ways,
+        MetadataCache *parent,
+        ReplacementPolicy rp = ReplacementPolicy::Random
+      );
+
+      CacheSet(
+        unsigned int id,
+        unsigned int ways,
+        AbstractIntegrityTree *tree,
+        MetadataCache *parent,
+        ReplacementPolicy rp = ReplacementPolicy::Random
+      );
+
+      ~CacheSet();
+
+      /**
+       * Insert a piece of data to this set. If there is no space, nothing
+       * will be inserted.
+       *
+       * @returns True if the insertion was successful, false otherwise.
+       */
+      bool insert(EntryKey new_data);
+
+      std::pair<EntryKey, EntryValue> find(EntryKey new_data);
+
+      /**
+       * Mock the access of a cache entry in this set.
+       *
+       * @returns True if cache hit, false if cache miss.
+       */
+      bool access(EntryKey data);
+
+      /**
+       * Check for the existence of `search_data` in this cache set.
+       */
+      bool contains(EntryKey search_data);
+
+      /**
+       * Check for the existence of `search_data` in this set.
+       *
+       * Do not panic if the data being checked is pending eviction.
+       */
+      bool containsPendingOkay(EntryKey search_data);
+
+      /**
+       * Simulate modification of a cache line by specifying the entry to edit.
+       * This will cause the line to be marked as dirty.
+       *
+       * This assumes that `data` already exists in this set.
+       */
+      void modify(EntryKey modified_data);
+
+      /**
+       * Lock a node to prevent it from being evicted.
+       */
+      void lock(EntryKey data);
+
+      /**
+       * Lock a node, but do not panic if this is called on an already-locked
+       * node.
+       */
+      void lockDupeOkay(EntryKey data);
+
+      /**
+       * Unlock a node to allow it to be evicted.
+       */
+      void unlock(EntryKey data);
+
+      /**
+       * Unlock a node, but do not panic if this is called on an
+       * already-unlocked node.
+       */
+      void unlockDupeOkay(EntryKey data);
+
+      /**
+       * Return the lowest cached entry that is an ancestor of `data`. If no
+       * entry exists, `data` is returned back.
+       */
+      EntryKey getLowestCachedAncestor(EntryKey data);
+
+      size_t getSize();
+
+      unsigned int getDirtyLineCount();
+
+      unsigned int getPendingEvictionCount();
+
+      unsigned int getLockedLineCount();
+
+      unsigned int getEvictableCount();
+
+      unsigned int getEvictableCount(
+        std::unordered_set<EntryKey> ignored_data
+      );
+
+      unsigned int getEvictableCount(
+        std::unordered_set<EntryKey> ignored_data,
+        EntryKey replacement
+      );
+
+      std::vector<std::pair<EntryKey, EntryValue>> getEvictable(
+        std::unordered_set<EntryKey> ignored_data,
+        EntryKey replacement,
+        bool debug = false
+      );
+
+      std::string printLockedLines();
+
+      bool isFull();
+
+      bool evictionCausesCircularDependencyWithIgnoredData(
+        std::unordered_set<EntryKey> ignored_data,
+        EntryKey potential_victim
+      );
+
+      bool evictionCausesCircularDependencyWithIgnoredData(
+        EntryKey ignored_data,
+        EntryKey potential_victim
+      );
+
+      /**
+       * Evict a random cache line from this set. If the selected cache line
+       * is dirty, then it will be marked as 'pending eviction', and require
+       * the caller to perform additional checks as needed and call
+       * `finishEvict(evicted_data)`, where `evicted_data` is
+       * `evict(...).first`.
+       *
+       * It is guaranteed that a line already pending eviction will not be
+       * selected for eviction.
+       *
+       * @param ignored_data Data that should not be evicted.
+       * @param replacement The node that is intended to replace the evicted
+       *                    cache line. If no replacement is specified, `0` can
+       *                    be used to indicate the replacement.
+       * @return The data that was evicted. Note that if the entry returned has
+       *         the 'pending eviction' flag set to true, the eviction is not
+       *         complete.
+       */
+      std::pair<EntryKey, EntryValue> evict(
+        std::unordered_set<EntryKey> ignored_data, EntryKey replacement);
+
+      std::pair<EntryKey, EntryValue> evict(
+        std::unordered_set<EntryKey> ignored_data);
+
+      std::pair<EntryKey, EntryValue> evict(EntryKey ignored_data);
+
+      std::pair<EntryKey, EntryValue> evict();
+
+      /**
+       * Finish an eviction as followed from `evict()`.
+       */
+      void finishEvict(EntryKey evicted_data);
+  };
 
   private:
-    unsigned int associativity;
+    unsigned int _associativity;
     unsigned int set_count;
 
     /**
@@ -113,69 +384,9 @@ class MetadataCache
     /**
      * Individual sets being stored.
      */
-    // std::vector<CacheSet<T>> sets;
-    std::vector<CacheSet*> sets;
+    std::vector<CacheSet*> _sets;
 
-    unsigned int read_buffer_capacity;
-    std::vector<BasicCacheEntry*> read_buffer;
-
-
-
-  public:
-    // Constructor based on sets and associativity
-    MetadataCache(unsigned int set_count, unsigned int associativity);
-
-    // Constructor based on total size (and entry size)
-    MetadataCache(size_t total_bytes, unsigned int associativity);
-
-
-    ~MetadataCache();
-
-    void printInitDetails();
-
-    // Returns whether or not something was evicted.
-    // bool insert(size_t data);
-};
-
-class SimpleMetadataCache
-{
-  public:
-    typedef uint64_t EntryKey;
-    typedef struct
-    {
-      bool dirty;
-      bool pending_eviction;
-      bool locked;
-    } EntryValue;
-
-  private:
-    unsigned int capacity;
-
-    /**
-     * Internal data structure.
-     */
-    std::unordered_map<EntryKey, EntryValue> _data;
-
-    /**
-     * Internal count for the number of dirty cache lines in the metadata
-     * cache.
-     */
-    unsigned int dirty_lines;
-
-    /**
-     * Internal count for the number of cache lines in the metadata cache that
-     * are currently pending eviction. These lines can be considered
-     * inaccessible until they are properly evicted.
-     */
-    unsigned int lines_pending_eviction;
-
-    /**
-     * Internal count for the number of cache lines that are locked and cannot
-     * be evicted. This is the case if a cache line is depended on by another
-     * cache line that is pending insertion.
-     */
-    unsigned int locked_lines;
-
+  protected:
     /**
      * Reference to integrity tree. Can be helpful for finding certain
      * relationships between nodes.
@@ -183,14 +394,31 @@ class SimpleMetadataCache
     AbstractIntegrityTree *_tree;
 
   public:
-    SimpleMetadataCache(unsigned int capacity);
-
-    SimpleMetadataCache(
-      unsigned int capacity,
-      AbstractIntegrityTree *tree
+    // Constructor based on sets and associativity
+    MetadataCache(
+      unsigned int set_count,
+      unsigned int associativity,
+      ReplacementPolicy rp = ReplacementPolicy::Random
     );
 
-    ~SimpleMetadataCache();
+    // Constructor based on total size and associativity
+    MetadataCache(
+      size_t total_entries,
+      unsigned int associativity,
+      AbstractIntegrityTree *tree,
+      ReplacementPolicy rp = ReplacementPolicy::Random
+    );
+
+    ~MetadataCache();
+
+    // void printInitDetails();
+
+    /**
+     * Return the cache set that is associated with this entry.
+     *
+     * There should only ever be one possible return value for each entry.
+     */
+    virtual size_t selectCacheSet(EntryKey data);
 
     /**
      * Insert a piece of data to the metadata cache. If there is no space,
@@ -198,28 +426,28 @@ class SimpleMetadataCache
      *
      * @returns True if the insertion was successful, false otherwise.
      */
-    bool insert(EntryKey new_data);
+    bool insert(EntryKey new_data) override;
 
-    std::pair<EntryKey, EntryValue> find(EntryKey new_data);
+    std::pair<EntryKey, EntryValue> find(EntryKey new_data) override;
 
     /**
      * Mock the access of a metadata cache entry.
      *
      * @returns True if cache hit, false if cache miss.
      */
-    bool access(EntryKey data);
+    bool access(EntryKey data) override;
 
     /**
      * Check for the existence of `search_data` in the metadata cache.
      */
-    bool contains(EntryKey search_data);
+    bool contains(EntryKey search_data) override;
 
     /**
      * Check for the existence of `search_data` in the metadata cache.
      *
      * Do not panic if the data being checked is pending eviction.
      */
-    bool containsPendingOkay(EntryKey search_data);
+    bool containsPendingOkay(EntryKey search_data) override;
 
     /**
      * Simulate modification of a cache line by specifying the entry to edit.
@@ -227,57 +455,47 @@ class SimpleMetadataCache
      *
      * This assumes that `data` already exists in the cache.
      */
-    void modify(EntryKey modified_data);
+    void modify(EntryKey modified_data) override;
 
     /**
      * Lock a node to prevent it from being evicted.
      */
-    void lock(EntryKey data);
+    void lock(EntryKey data) override;
 
     /**
      * Lock a node, but do not panic if this is called on an already-locked
      * node.
      */
-    void lockDupeOkay(EntryKey data);
+    void lockDupeOkay(EntryKey data) override;
 
     /**
      * Unlock a node to allow it to be evicted.
      */
-    void unlock(EntryKey data);
+    void unlock(EntryKey data) override;
 
     /**
      * Unlock a node, but do not panic if this is called on an already-unlocked
      * node.
      */
-    void unlockDupeOkay(EntryKey data);
+    void unlockDupeOkay(EntryKey data) override;
 
     /**
      * Return the lowest cached entry that is an ancestor of `data`. If no
      * entry exists, `data` is returned back.
      */
-    EntryKey getLowestCachedAncestor(EntryKey data);
+    EntryKey getLowestCachedAncestor(EntryKey data) override;
 
-    size_t getSize();
+    size_t getSize() override;
 
-    unsigned int getDirtyLineCount();
+    unsigned int getDirtyLineCount() override;
 
-    unsigned int getPendingEvictionCount();
+    unsigned int getPendingEvictionCount() override;
 
-    unsigned int getLockedLineCount();
+    unsigned int getLockedLineCount() override;
 
     std::string printLockedLines();
 
     bool isFull();
-
-    bool evictionCausesCircularDependencyWithIgnoredData(
-      std::unordered_set<EntryKey> ignored_data,
-      EntryKey potential_victim
-    );
-
-    bool evictionCausesCircularDependencyWithIgnoredData(
-      EntryKey ignored_data,
-      EntryKey potential_victim
-    );
 
     /**
      * Evict a random cache line from the metadata cache. If the selected cache
@@ -298,19 +516,21 @@ class SimpleMetadataCache
      *         complete.
      */
     std::pair<EntryKey, EntryValue> evict(
-      std::unordered_set<EntryKey> ignored_data, EntryKey replacement);
+      std::unordered_set<EntryKey> ignored_data,
+      EntryKey replacement
+    ) override;
 
     std::pair<EntryKey, EntryValue> evict(
-      std::unordered_set<EntryKey> ignored_data);
+      std::unordered_set<EntryKey> ignored_data) override;
 
-    std::pair<EntryKey, EntryValue> evict(EntryKey ignored_data);
+    std::pair<EntryKey, EntryValue> evict(EntryKey ignored_data) override;
 
-    std::pair<EntryKey, EntryValue> evict();
+    std::pair<EntryKey, EntryValue> evict() override;
 
     /**
      * Finish an eviction as followed from `evict()`.
      */
-    void finishEvict(EntryKey evicted_data);
+    void finishEvict(EntryKey evicted_data) override;
 };
 
 } // namespace gem5
