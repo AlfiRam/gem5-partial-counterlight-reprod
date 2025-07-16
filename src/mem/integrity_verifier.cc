@@ -80,6 +80,13 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         );
         break;
 
+        case enums::IntegrityTreeType::TimingBmt:
+        integrityTree = new TimingBmt(
+            (unsigned int)p.integrity_tree_arity,
+            dramOsRange.size() + cxlOsRange.size()
+        );
+        break;
+
         default:
         panic("Invalid integrity tree type.");
     }
