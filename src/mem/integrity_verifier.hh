@@ -44,7 +44,6 @@
 #include "enums/IntegrityTreeType.hh"
 #include "enums/MetadataCacheType.hh"
 #include "mem/cache/metadata_cache.hh"
-#include "mem/mtree/timing_tree.hh"
 #include "mem/qport.hh"
 #include "params/AbstractIntegrityVerifier.hh"
 #include "params/IntegrityVerifier.hh"

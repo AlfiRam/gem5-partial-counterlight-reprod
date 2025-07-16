@@ -42,6 +42,8 @@
 #include "debug/AbstractIntegrityVerifierReqs.hh"
 #include "debug/AbstractIntegrityVerifierResps.hh"
 #include "debug/IntegrityNodeLocationMap.hh"
+#include "mem/mtree/timing_bmt.hh"
+#include "mem/mtree/timing_tree.hh"
 
 namespace gem5
 {
