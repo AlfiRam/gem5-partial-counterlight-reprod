@@ -14,6 +14,7 @@ from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarc
 from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy_integrity_verifier import (
     PrivateL1SharedL2CacheHierarchyIntegrityVerifier,
 )
+from gem5.components.memory.mtree.TimingBmt import TimingBmt
 from gem5.components.memory.mtree.TimingTree import TimingTree
 from gem5.components.memory.single_channel import DIMM_DDR5_4400
 from gem5.components.processors.cpu_types import CPUTypes
@@ -26,6 +27,7 @@ from gem5.utils.requires import requires
 
 
 def add_arguments(parser):
+    # CPU Configuration
     parser.add_argument(
         "--cores",
         type=int,
@@ -34,12 +36,21 @@ def add_arguments(parser):
         default=2,
     )
 
+    # Memory sizes
     parser.add_argument(
         "--dram-size",
         type=str,
         required=False,
         help="Total size of DRAM.",
-        default="3GiB",
+        # default="3GiB",
+        # default="0B",
+    )
+
+    parser.add_argument(
+        "--dram-os-size",
+        type=str,
+        required=False,
+        help="Total OS-visible size of DRAM. Overrides any auto-calculated values.",
     )
 
     parser.add_argument(
@@ -47,9 +58,11 @@ def add_arguments(parser):
         type=str,
         required=False,
         help="Total size of CXL memory, if enabled. This option does nothing if CXL is not enabled.",
+        # default="8GiB",
         default="0B",
     )
 
+    # Integrity verification
     parser.add_argument(
         "--use-integrity-verifier",
         action="store_true",
@@ -61,7 +74,7 @@ def add_arguments(parser):
         type=str,
         required=False,
         help="Allocation scheme for integrity data.",
-        default="DramOnly",
+        # default="DramOnly",
         choices=[
             "DramOnly",
             "CxlOnly",
@@ -76,6 +89,7 @@ def add_arguments(parser):
         default="TimingTree",
         choices=[
             "TimingTree",
+            "TimingBmt",
             "None",
         ],
     )
@@ -87,6 +101,7 @@ def add_arguments(parser):
         default=4,
     )
 
+    # Simulation modeling
     parser.add_argument(
         "--timing-from-start",
         action="store_true",
@@ -99,6 +114,7 @@ def add_arguments(parser):
         help="Switch from Atomic cores to timing cores when reaching the POI.",
     )
 
+    # Integrity metadata cache
     parser.add_argument(
         "--metadata-cache-type",
         type=str,
@@ -150,6 +166,41 @@ def add_arguments(parser):
         default=8,
     )
 
+    # CXL configuration
+    parser.add_argument(
+        "--cxl-mode",
+        type=str,
+        help="Enable CXL memory.",
+        default="Disabled",
+        choices=[
+            "Disabled",
+            "PCIe",
+        ],
+    )
+
+    parser.add_argument(
+        "--is-asic",
+        action="store_true",
+        help="Choose to simulate CXL ASIC Device (if true) or FPGA Device (if false). This option does nothing if CXL is not enabled.",
+    )
+
+    parser.add_argument(
+        "--main-memory-type",
+        type=str,
+        help="Type of memory that is used as primary memory. (Starting at address 0.)",
+        default="DRAM",
+        choices=[
+            "DRAM",
+            "CXL",
+        ],
+    )
+
+    parser.add_argument(
+        "--no-apps-on-secondary-memory",
+        action="store_true",
+        help="Disable the use of secondary memory for application/OS data. (Use it for integrity data only.) The secondary memory type is based on --main-memory-type.",
+    )
+
     return parser
 
 
@@ -158,38 +209,136 @@ def create_board(args):
     requires(
         isa_required=ISA.X86,
     )
+
+    # Sanity checking parameters.
+    # TODO
+    if args.cxl_mode == "Disabled":
+        # You cannot have a non-zero CXL size when not using CXL.
+        assert args.cxl_size == "0B"
+
     # Assume wherever the OS is, there is some space available for it
     baseline_os_size = "256MiB"
 
-    if args.integrity_allocation_mode == "DramOnly":
-        # All integrity data is stored in DRAM.
-        # In this case, we consider DRAM "local" and CXL "remote", resizing the
-        # "local" size until we can protect both the local and remote space.
-        match args.integrity_tree_type:
-            case "TimingTree":
-                dram_os_size, cxl_os_size = (
-                    TimingTree.determine_max_protected_size(
-                        min_local_size=toMemorySize(baseline_os_size),
-                        total_local_size=toMemorySize(args.dram_size),
-                        total_remote_size=toMemorySize(args.cxl_size),
-                        arity=args.integrity_tree_arity,
-                    )
-                )
-            case _:
-                print(
-                    f"Unknown integrity tree type '{args.integrity_tree_type}'"
-                )
-                exit(1)
-    else:
-        print(
-            f"Unimplmented integrity allocation mode '{args.integrity_allocation_mode}'"
+    tree_classes = {
+        "TimingTree": TimingTree,
+        "TimingBmt": TimingBmt,
+    }
+
+    if args.use_integrity_verifier:
+        # Consider "local" memory the memory that may have a variable
+        # OS-visible size. This is the memory that integrity data is stored
+        # on, so the exact size visible to the OS depends on the tree size.
+        # "Remote" memory is the memory that has a statically-sized
+        # OS-visible size. Integrity data is not stored here, so the size is
+        # not changed no matter the tree size.
+
+        integrity_on_main_memory = (
+            args.integrity_allocation_mode == "DramOnly"
+            and args.main_memory_type == "DRAM"
+        ) or (
+            args.integrity_allocation_mode == "CxlOnly"
+            and args.main_memory_type == "CXL"
         )
-        exit(1)
+
+        match args.main_memory_type:
+            case "DRAM":
+                primary_memory_size = args.dram_size
+                # Create override if needed.
+                primary_memory_os_size = args.dram_os_size
+                secondary_memory_size = args.cxl_size
+
+            case "CXL":
+                primary_memory_size = args.cxl_size
+                # No override.
+                primary_memory_os_size = None
+                secondary_memory_size = (
+                    args.dram_size
+                    if not args.dram_os_size
+                    else args.dram_os_size
+                )
+
+            case _:
+                pass
+
+        if integrity_on_main_memory:
+            # Main memory will always have a minimum size.
+            min_variable_memory = (
+                baseline_os_size
+                if primary_memory_os_size is None
+                else primary_memory_os_size
+            )
+            # If needed, force a certain "OS size" for local memory (overrides max) -- 0 means to fallback to total memory size.
+            max_variable_memory = (
+                "0B"
+                if primary_memory_os_size is None
+                else primary_memory_os_size
+            )
+            total_variable_memory_size = primary_memory_size
+            # If secondary memory should not be used by apps, do not consider its size.
+            total_static_memory_size = (
+                secondary_memory_size
+                if not args.no_apps_on_secondary_memory
+                else "0B"
+            )
+        else:
+            # If secondary memory should not be used by apps, there are no minimum limits to its OS-visible size.
+            min_variable_memory = (
+                baseline_os_size
+                if not args.no_apps_on_secondary_memory
+                else "0B"
+            )
+            max_variable_memory = "0B"
+            total_variable_memory_size = secondary_memory_size
+            total_static_memory_size = primary_memory_size
+
+        tree_class = tree_classes[args.integrity_tree_type]
+
+        variable_os_size, static_os_size = (
+            tree_class.determine_max_protected_size(
+                min_local_size=toMemorySize(min_variable_memory),
+                max_local_size=toMemorySize(max_variable_memory),
+                total_local_size=toMemorySize(total_variable_memory_size),
+                total_remote_size=toMemorySize(total_static_memory_size),
+                arity=args.integrity_tree_arity,
+            )
+        )
+
+        match args.integrity_allocation_mode:
+            case "DramOnly":
+                dram_os_size = variable_os_size
+                cxl_os_size = static_os_size
+            case "CxlOnly":
+                dram_os_size = static_os_size
+                cxl_os_size = variable_os_size
+            case _:
+                pass
+    else:
+        dram_os_size = toMemorySize(args.dram_size)
+        cxl_os_size = toMemorySize(args.cxl_size)
 
     print(f"Computed DRAM OS Size: {dram_os_size}")
     print(f"Computed CXL OS Size: {cxl_os_size}")
-    # Main memory
-    memory = DIMM_DDR5_4400(size=args.dram_size, os_size=f"{dram_os_size}B")
+
+    # Override if necessary.
+    if args.dram_os_size:
+        dram_os_size = toMemorySize(args.dram_os_size)
+        print(f"Overriding DRAM OS Size to {dram_os_size}")
+
+    # DRAM
+    if toMemorySize(args.dram_size) > 0:
+        memory = DIMM_DDR5_4400(
+            size=args.dram_size, os_size=f"{dram_os_size}B"
+        )
+    else:
+        memory = None
+
+    # CXL memory
+    if args.cxl_mode != "Disabled" and toMemorySize(args.cxl_size) > 0:
+        cxl_memory = DIMM_DDR5_4400(
+            size=args.cxl_size, os_size=f"{cxl_os_size}B"
+        )
+    else:
+        cxl_memory = None
 
     membus = SystemXBar(width=64)
     membus.badaddr_responder = BadAddr()
@@ -266,6 +415,10 @@ def create_board(args):
         processor=processor,
         memory=memory,
         cache_hierarchy=cache_hierarchy,
+        cxl_mode=args.cxl_mode,
+        cxl_memory=cxl_memory,
+        is_asic=args.is_asic,
+        main_memory_type=args.main_memory_type,
     )
 
     return board, processor

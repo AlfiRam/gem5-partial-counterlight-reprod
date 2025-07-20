@@ -37,6 +37,7 @@ from typing import (
 )
 
 from m5.objects import (
+    Addr,
     AddrRange,
     ClockDomain,
     IOXBar,
@@ -79,11 +80,12 @@ class AbstractBoard:
         self,
         clk_freq: str,
         processor: "AbstractProcessor",
-        memory: "AbstractMemorySystem",
-        cache_hierarchy: Optional["AbstractCacheHierarchy"],
-        enable_cxl: Optional[bool] = False,
+        memory: Optional["AbstractMemorySystem"] = None,
+        cache_hierarchy: Optional["AbstractCacheHierarchy"] = None,
+        cxl_mode: Optional[str] = "Disabled",
         cxl_memory: Optional["AbstractMemorySystem"] = None,
         is_asic: Optional[bool] = False,
+        main_memory_type: Optional[str] = "DRAM",
     ) -> None:
         """
         :param clk_freq: The clock frequency for this board.
@@ -104,17 +106,58 @@ class AbstractBoard:
 
         # Set the processor, memory, and cache hierarchy.
         self.processor = processor
-        self.memory = memory
+
+        assert cxl_mode in ["Disabled", "PCIe"]
+        self._cxl_mode = cxl_mode
+
+        self._is_asic = is_asic
+
+        assert main_memory_type in ["DRAM", "CXL"]
+        self._main_memory_type = main_memory_type
+
+        # Sanity checking arguments.
+        if self._cxl_mode == "Disabled":
+            assert cxl_memory is None
+        else:
+            assert cxl_memory is not None
+
+        self._indexed_memory = []
+
+        if memory:
+            self.memory = memory
+            self._has_memory = True
+        else:
+            self._has_memory = False
+
+        if cxl_memory:
+            self.cxl_memory = cxl_memory
+
+        # Set the primary memory type.
+        match self._main_memory_type:
+            case "DRAM":
+                assert self.memory is not None
+                self._indexed_memory.append(self.memory)
+            case "CXL":
+                assert self.cxl_memory is not None
+                self._indexed_memory.append(self.cxl_memory)
+
+        # Set the secondary memory type, if it exists.
+        match self._main_memory_type:
+            case "DRAM":
+                # CXL may be secondary memory.
+                if cxl_memory:
+                    self._indexed_memory.append(self.cxl_memory)
+                    self._secondary_memory_type = "CXL"
+            case "CXL":
+                # DRAM may be secondary memory.
+                if memory:
+                    self._indexed_memory.append(self.memory)
+                    self._secondary_memory_type = "DRAM"
+
         self._cache_hierarchy = cache_hierarchy
         if cache_hierarchy is not None:
             self.cache_hierarchy = cache_hierarchy
 
-        # Set the CXL memory size and whether the device is an ASIC or not.
-        self._enable_cxl = enable_cxl
-        if self._enable_cxl:
-            assert cxl_memory is not None
-            self.cxl_memory = cxl_memory
-            self._is_asic = is_asic
         # This variable determines whether the board is to be executed in
         # full-system or syscall-emulation mode. This is set when the workload
         # is defined. Whether or not the board is to be run in FS mode is
@@ -145,12 +188,40 @@ class AbstractBoard:
         """
         return self.memory
 
+    def has_memory(self) -> bool:
+        """Get whether or not this board has memory (DRAM).
+
+        This may be the case if CXL memory is used as primary memory.
+        """
+        return self._has_memory
+
     def get_cxl_memory(self) -> "AbstractMemory":
         """Get the cxl memory (RAM) connected to the board.
 
         :returns: The memory system.
         """
         return self.cxl_memory
+
+    def get_indexed_memory(self, index: int) -> "AbstractMemory":
+        """Get the memory based on the index provided.
+
+        Index 0 is "main memory", index 1 is "secondary memory", and so on.
+
+        `None` is returned if the memory requested does not exist.
+        """
+        if index >= len(self._indexed_memory):
+            # Index does not exist.
+            return None
+        else:
+            return self._indexed_memory[index]
+
+    def get_starting_memory_addr(self, index: int) -> Addr:
+        """Get the starting memory address to use for memory ranges.
+
+        There may be multiple memory ranges used by multiple memory devices,
+        and this provides a centralized function to get this information.
+        """
+        raise NotImplementedError
 
     def get_mem_ports(self) -> Sequence[Tuple[AddrRange, Port]]:
         """Get the memory ports exposed on this board
@@ -160,7 +231,12 @@ class AbstractBoard:
             The ports should be returned such that the address ranges are
             in ascending order.
         """
-        return self.get_memory().get_mem_ports()
+        if self.has_memory():
+            return self.get_memory().get_mem_ports()
+        else:
+            # There are no applicable memory ports if CXL is used as the
+            # main form of memory.
+            return []
 
     def get_cache_hierarchy(self) -> Optional["AbstractCacheHierarchy"]:
         """Get the cache hierarchy connected to the board.
@@ -407,7 +483,8 @@ class AbstractBoard:
             )
 
         # Incorporate the memory into the motherboard.
-        self.get_memory().incorporate_memory(self)
+        if self.has_memory():
+            self.get_memory().incorporate_memory(self)
 
         # Incorporate the cache hierarchy for the motherboard.
         if self.get_cache_hierarchy():
@@ -423,7 +500,8 @@ class AbstractBoard:
         self.get_processor()._post_instantiate()
         if self.get_cache_hierarchy():
             self.get_cache_hierarchy()._post_instantiate()
-        self.get_memory()._post_instantiate()
+        if self.has_memory():
+            self.get_memory()._post_instantiate()
 
     def _pre_instantiate(self, full_system: Optional[bool] = None) -> Root:
         """To be called immediately before ``m5.instantiate``. This is where
@@ -454,7 +532,8 @@ class AbstractBoard:
 
         # 3. Call any of the components' `_pre_instantiate` functions.
         self.get_processor()._pre_instantiate(root)
-        self.get_memory()._pre_instantiate(root)
+        if self.has_memory():
+            self.get_memory()._pre_instantiate(root)
         if self.get_cache_hierarchy():
             self.get_cache_hierarchy()._pre_instantiate(root)
 

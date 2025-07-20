@@ -47,11 +47,12 @@ class AbstractSystemBoard(System, AbstractBoard):
         self,
         clk_freq: str,
         processor: "AbstractProcessor",
-        memory: "AbstractMemorySystem",
         cache_hierarchy: "AbstractCacheHierarchy",
-        enable_cxl: Optional[bool] = False,
+        memory: Optional["AbstractMemorySystem"] = None,
+        cxl_mode: Optional[str] = "Disabled",
         cxl_memory: Optional["AbstractMemorySystem"] = None,
         is_asic: Optional[bool] = False,
+        main_memory_type: Optional[str] = "DRAM",
     ):
         System.__init__(self)
         AbstractBoard.__init__(
@@ -60,9 +61,10 @@ class AbstractSystemBoard(System, AbstractBoard):
             processor=processor,
             memory=memory,
             cache_hierarchy=cache_hierarchy,
-            enable_cxl=enable_cxl,
+            cxl_mode=cxl_mode,
             cxl_memory=cxl_memory,
             is_asic=is_asic,
+            main_memory_type=main_memory_type,
         )
 
     @overrides(SimObject)

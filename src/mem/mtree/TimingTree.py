@@ -91,6 +91,7 @@ class TimingTree:
     @staticmethod
     def determine_max_protected_size(
         min_local_size: int,
+        max_local_size: int,
         total_local_size: int,
         total_remote_size: int,
         arity: int,
@@ -98,6 +99,9 @@ class TimingTree:
         """
         :param min_local_size:    Minimum amount of size that must be protected
                                   in local memory.
+        :param max_local_size:    Maximum amount of size that must be protected
+                                  in local memory. If this option is `0`, the
+                                  theoretical maximum is `total_local_size`.
         :param total_local_size:  Total amount of memory available to work with
                                   in local memory.
         :param total_remote_size: Total amount of memory available to work
@@ -124,7 +128,10 @@ class TimingTree:
         # Scale factor represents the amount of data to use in local memory.
         if min_local_size != 0:
             min_scale_factor = 1
-            max_scale_factor = total_local_size / min_local_size
+            if max_local_size != 0:
+                max_scale_factor = max_local_size / min_local_size
+            else:
+                max_scale_factor = total_local_size / min_local_size
         else:
             min_scale_factor = 0
             max_scale_factor = 0

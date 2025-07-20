@@ -241,8 +241,67 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port
 
+        dram_memory = None
+        cxl_memory = None
+        primary_memory = board.get_indexed_memory(0)
+        primary_full_range = AddrRange(
+            start=board.get_starting_memory_addr(0),
+            size=primary_memory.get_size(),
+        )
+        primary_os_range = AddrRange(
+            start=board.get_starting_memory_addr(0),
+            size=primary_memory.get_os_size(),
+        )
+        match board._main_memory_type:
+            case "DRAM":
+                dram_memory = primary_memory
+                dram_full_range = primary_full_range
+                dram_os_range = primary_os_range
+
+            case "CXL":
+                cxl_memory = primary_memory
+                cxl_full_range = primary_full_range
+                cxl_os_range = primary_os_range
+
+            case _:
+                pass
+
+        secondary_memory = board.get_indexed_memory(1)
+        if secondary_memory:
+            secondary_full_range = AddrRange(
+                start=board.get_starting_memory_addr(1),
+                size=secondary_memory.get_size(),
+            )
+            secondary_os_range = AddrRange(
+                start=board.get_starting_memory_addr(1),
+                size=secondary_memory.get_os_size(),
+            )
+            match board._secondary_memory_type:
+                case "DRAM":
+                    # The case where there are two DRAMs is not yet handled.
+                    assert dram_memory is None
+                    dram_memory = secondary_memory
+                    dram_full_range = secondary_full_range
+                    dram_os_range = secondary_os_range
+
+                case "CXL":
+                    # The case where there are two CXL memories is not yet handled.
+                    assert cxl_memory is None
+                    cxl_memory = secondary_memory
+                    cxl_full_range = secondary_full_range
+                    cxl_os_range = secondary_os_range
+
+                case _:
+                    pass
+
         # Configure verifier
-        dram_mem_start = 0
+        if dram_memory is not None:
+            self.verifier.dram_full_range = dram_full_range
+            self.verifier.dram_os_range = dram_os_range
+
+        if cxl_memory is not None:
+            self.verifier.cxl_full_range = cxl_full_range
+            self.verifier.cxl_os_range = cxl_os_range
 
         if self._integrity_allocation_mode:
             self.verifier.integrity_allocation_mode = (

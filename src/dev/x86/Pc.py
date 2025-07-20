@@ -56,11 +56,7 @@ class Pc(Platform):
     cxx_class = "gem5::Pc"
     system = Param.System(Parent.any, "system")
 
-    enable_cxl = Param.Bool(False, "Enable CXL functionality.")
-
-    south_bridge = Param.SouthBridge(
-        SouthBridge(enable_cxl=enable_cxl), "Southbridge"
-    )
+    south_bridge = Param.SouthBridge(SouthBridge(), "Southbridge")
     pci_host = PcPciHost()
 
     # Serial port and terminal
@@ -93,8 +89,8 @@ class Pc(Platform):
     # A device to handle any other type of unclaimed access.
     bad_addr = BadAddr(pio=default_bus.default)
 
-    def attachIO(self, bus, dma_ports=[]):
-        self.south_bridge.attachIO(bus, dma_ports)
+    def attachIO(self, bus, dma_ports=[], cxl_mode="Disabled"):
+        self.south_bridge.attachIO(bus, dma_ports, cxl_mode)
         self.com_1.pio = bus.mem_side_ports
         self.fake_com_2.pio = bus.mem_side_ports
         self.fake_com_3.pio = bus.mem_side_ports
