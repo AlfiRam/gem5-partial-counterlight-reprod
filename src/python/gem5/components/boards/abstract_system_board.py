@@ -53,6 +53,7 @@ class AbstractSystemBoard(System, AbstractBoard):
         cxl_memory: Optional["AbstractMemorySystem"] = None,
         is_asic: Optional[bool] = False,
         main_memory_type: Optional[str] = "DRAM",
+        use_ncx: Optional[bool] = False,
         cxl_latency: Optional[str] = "35ns",
     ):
         System.__init__(self)
@@ -66,6 +67,7 @@ class AbstractSystemBoard(System, AbstractBoard):
             cxl_memory=cxl_memory,
             is_asic=is_asic,
             main_memory_type=main_memory_type,
+            use_ncx=use_ncx,
             cxl_latency=cxl_latency,
         )
 

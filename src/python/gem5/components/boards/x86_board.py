@@ -94,6 +94,8 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         cxl_memory: Optional[AbstractMemorySystem] = None,
         is_asic: Optional[bool] = False,
         main_memory_type: Optional[str] = "DRAM",
+        # Use noncoherent-xbar
+        use_ncx: Optional[bool] = False,
         cxl_latency: Optional[str] = "35ns",
     ) -> None:
         super().__init__(
@@ -105,6 +107,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             cxl_memory=cxl_memory,
             is_asic=is_asic,
             main_memory_type=main_memory_type,
+            use_ncx=use_ncx,
             cxl_latency=cxl_latency,
         )
 
@@ -209,6 +212,8 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
             # Configure CXL Device
             if self._cxl_mode == "PCIe":
+                assert not self.use_ncx()
+
                 # Set starting address of CXL memory
                 if self._main_memory_type == "CXL":
                     cxl_mem_start = self.get_starting_memory_addr(0)
@@ -264,9 +269,14 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                     )
 
                     delay.mem_side_port = port
-                    delay.cpu_side_port = (
-                        self.get_cache_hierarchy().get_mem_side_port()
-                    )
+
+                    if not self.use_ncx():
+                        delay.cpu_side_port = (
+                            self.get_cache_hierarchy().get_mem_side_port()
+                        )
+
+                    else:
+                        delay.cpu_side_port = self.get_ncx().mem_side_ports
 
                     self._delay_modules.append(delay)
                     setattr(self, f"delay{i}", delay)

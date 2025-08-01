@@ -40,7 +40,9 @@ from m5.objects import (
     Addr,
     AddrRange,
     ClockDomain,
+    InstrumentedNoncoherentXBar,
     IOXBar,
+    NoncoherentXBar,
     Port,
     Root,
     SrcClockDomain,
@@ -86,6 +88,7 @@ class AbstractBoard:
         cxl_memory: Optional["AbstractMemorySystem"] = None,
         is_asic: Optional[bool] = False,
         main_memory_type: Optional[str] = "DRAM",
+        use_ncx: Optional[bool] = False,
         cxl_latency: Optional[str] = "35ns",
     ) -> None:
         """
@@ -158,6 +161,10 @@ class AbstractBoard:
         self._cache_hierarchy = cache_hierarchy
         if cache_hierarchy is not None:
             self.cache_hierarchy = cache_hierarchy
+
+        self._use_ncx = use_ncx
+        if use_ncx:
+            self.ncx = InstrumentedNoncoherentXBar()
 
         self._cxl_latency = cxl_latency
 
@@ -240,6 +247,12 @@ class AbstractBoard:
             # There are no applicable memory ports if CXL is used as the
             # main form of memory.
             return []
+
+    def use_ncx(self) -> bool:
+        return self._use_ncx
+
+    def get_ncx(self) -> Optional["NoncoherentXBar"]:
+        return self.ncx
 
     def get_cache_hierarchy(self) -> Optional["AbstractCacheHierarchy"]:
         """Get the cache hierarchy connected to the board.

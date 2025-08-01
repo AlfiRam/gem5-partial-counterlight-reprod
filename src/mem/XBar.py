@@ -185,7 +185,7 @@ class L3XBar(CoherentXBar):
     forward_latency = 0
     response_latency = 1
     snoop_response_latency = 1
-    snoop_filter = SnoopFilter(lookup_latency = 0)
+    snoop_filter = SnoopFilter(lookup_latency=0)
     point_of_unification = True
 
 
@@ -217,6 +217,22 @@ class SystemXBar(CoherentXBar):
     # without caches where the SystemXBar is also the point of
     # unification.
     point_of_unification = True
+
+
+class InstrumentedNoncoherentXBar(NoncoherentXBar):
+    type = "InstrumentedNoncoherentXBar"
+    cxx_header = "mem/noncoherent_xbar.hh"
+    cxx_class = "gem5::InstrumentedNoncoherentXBar"
+
+    # 512-bit crossbar (128*4); fat width
+    width = 64
+
+    # Assume a simpler datapath than a coherent crossbar, incuring
+    # less pipeline stages for decision making and forwarding of
+    # requests.
+    frontend_latency = 2
+    forward_latency = 1
+    response_latency = 2
 
 
 # In addition to the system interconnect, we typically also have one

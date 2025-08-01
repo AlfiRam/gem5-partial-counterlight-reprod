@@ -175,9 +175,6 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         # Set up the system port for functional access from the simulator.
         board.connect_system_port(self.membus.cpu_side_ports)
 
-        for _, port in board.get_mem_ports():
-            self.membus.mem_side_ports = port
-
         self.l1icaches = [
             L1ICache(
                 size=self._l1i_size,
@@ -240,6 +237,21 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         )
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port
+
+        # Memory <--> NCX <--> membus
+        if board.use_ncx():
+            # Connect the NCX to the memory bus directly.
+            self.membus.mem_side_ports = board.get_ncx().cpu_side_ports
+
+            # Connect memory to NCX.
+            for _, port in board.get_mem_ports():
+                board.get_ncx().mem_side_ports = port
+
+        # Memory <--> membus
+        else:
+            # Do not use NCX. Connect memory directly to membus.
+            for _, port in board.get_mem_ports():
+                self.membus.mem_side_ports = port
 
         dram_memory = None
         cxl_memory = None

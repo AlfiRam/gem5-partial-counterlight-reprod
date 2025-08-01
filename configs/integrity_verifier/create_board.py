@@ -209,6 +209,13 @@ def add_arguments(parser):
         help="Disable the use of secondary memory for application/OS data. (Use it for integrity data only.) The secondary memory type is based on --main-memory-type.",
     )
 
+    # Page swapping
+    parser.add_argument(
+        "--use-ncx",
+        action="store_true",
+        help="Use noncoherent xbar structure.",
+    )
+
     return parser
 
 
@@ -427,6 +434,7 @@ def create_board(args):
         cxl_memory=cxl_memory,
         is_asic=args.is_asic,
         main_memory_type=args.main_memory_type,
+        use_ncx=args.use_ncx,
         cxl_latency=args.cxl_latency,
     )
 

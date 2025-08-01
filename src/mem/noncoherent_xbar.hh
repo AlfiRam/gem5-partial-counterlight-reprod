@@ -47,6 +47,7 @@
 #define __MEM_NONCOHERENT_XBAR_HH__
 
 #include "mem/xbar.hh"
+#include "params/InstrumentedNoncoherentXBar.hh"
 #include "params/NoncoherentXBar.hh"
 
 namespace gem5
@@ -195,6 +196,16 @@ class NoncoherentXBar : public BaseXBar
 
     virtual ~NoncoherentXBar();
 };
+
+
+class InstrumentedNoncoherentXBar : public NoncoherentXBar
+{
+  public:
+    InstrumentedNoncoherentXBar(const InstrumentedNoncoherentXBarParams &p);
+
+    virtual ~InstrumentedNoncoherentXBar();
+};
+
 
 } // namespace gem5
 

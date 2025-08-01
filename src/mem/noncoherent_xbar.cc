@@ -322,4 +322,17 @@ NoncoherentXBar::recvFunctional(PacketPtr pkt, PortID cpu_side_port_id)
     memSidePorts[dest_id]->sendFunctional(pkt);
 }
 
+
+InstrumentedNoncoherentXBar::InstrumentedNoncoherentXBar(
+    const InstrumentedNoncoherentXBarParams &p
+) : NoncoherentXBar(p)
+{
+}
+
+InstrumentedNoncoherentXBar::~InstrumentedNoncoherentXBar()
+{
+}
+
+
+
 } // namespace gem5
