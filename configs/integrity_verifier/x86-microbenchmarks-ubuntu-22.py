@@ -73,6 +73,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--seed",
+    type=int,
+    required=False,
+    default=0,
+    help="Seed for random number generation (0 for time-based seed).",
+)
+
+parser.add_argument(
     "--no-stop-after-roi",
     action="store_true",
     help="Stop the simulation after all commands are completely finished, not just at the end of the ROI. Helpful for debugging or getting extra output.",
@@ -119,8 +127,8 @@ board, processor = create_board(args)
 command = (
     "m5 exit;"  # Third exit event
     + "cd microbenchmarks;"
-    # Arguments: <page_size> <pages> <passes> <show_progress: 0 or 1> <progress_frequency> <use_m5: 0 or 1>
-    + f'echo "12345" | ./{args.benchmark} {args.page_size} {args.page_count} {args.passes} 1 10 1;'
+    # Arguments: <page_size> <pages> <passes> <show_progress: 0 or 1> <progress_frequency> <use_m5: 0 or 1> <seed: 0 for TIME, else to set>
+    + f'echo "12345" | ./{args.benchmark} {args.page_size} {args.page_count} {args.passes} 1 10 1 {args.seed};'
     # The end of ROI hook will stop the simulation from here.
     + "sleep 5;"  # This delay is to allow any print statements to finish before the simulation abruptly stops.
     + "m5 exit;"
