@@ -34,6 +34,7 @@ from m5.objects import (
     Cache,
     IntegrityVerifier,
     L2XBar,
+    PageSwapper,
     Port,
     SystemXBar,
 )
@@ -99,6 +100,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         integrity_allocation_mode: Optional[str] = None,
         integrity_tree_type: Optional[str] = None,
         integrity_tree_arity: Optional[int] = 0,
+        use_page_swapper: Optional[bool] = False,
     ) -> None:
         """
         :param l1d_size: The size of the L1 Data Cache (e.g., "32KiB").
@@ -161,6 +163,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         if integrity_tree_arity:
             assert integrity_tree_arity >= 0
             self._integrity_tree_arity = integrity_tree_arity
+
+        self._use_page_swapper = use_page_swapper
 
     @overrides(AbstractClassicCacheHierarchy)
     def get_mem_side_port(self) -> Port:
@@ -240,8 +244,18 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
 
         # Memory <--> NCX <--> membus
         if board.use_ncx():
-            # Connect the NCX to the memory bus directly.
-            self.membus.mem_side_ports = board.get_ncx().cpu_side_ports
+            if self._use_page_swapper:
+                # If using the page swapper, place it between memory bus and NCX.
+                self.page_swapper = PageSwapper()
+                self.page_swapper.cpu_side_port = self.membus.mem_side_ports
+                board.get_ncx().cpu_side_ports = (
+                    self.page_swapper.mem_side_port
+                )
+            else:
+                # If not using the page swapper, connect the NCX to the
+                # memory bus directly.
+                # self.membus.cpu_side_ports = self.verifier.mem_side_port
+                self.membus.mem_side_ports = board.get_ncx().cpu_side_ports
 
             # Connect memory to NCX.
             for _, port in board.get_mem_ports():
@@ -249,6 +263,9 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
 
         # Memory <--> membus
         else:
+            # The page swapper cannot work without NCX, as it does not have multiple ports implemented.
+            assert not self._use_page_swapper
+
             # Do not use NCX. Connect memory directly to membus.
             for _, port in board.get_mem_ports():
                 self.membus.mem_side_ports = port
@@ -306,14 +323,22 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
                 case _:
                     pass
 
-        # Configure verifier
+        # Configure verifier and page swapper (if applicable)
         if dram_memory is not None:
             self.verifier.dram_full_range = dram_full_range
             self.verifier.dram_os_range = dram_os_range
 
+            if self._use_page_swapper:
+                self.page_swapper.dram_full_range = dram_full_range
+                self.page_swapper.dram_os_range = dram_os_range
+
         if cxl_memory is not None:
             self.verifier.cxl_full_range = cxl_full_range
             self.verifier.cxl_os_range = cxl_os_range
+
+            if self._use_page_swapper:
+                self.page_swapper.cxl_full_range = cxl_full_range
+                self.page_swapper.cxl_os_range = cxl_os_range
 
         if self._integrity_allocation_mode:
             self.verifier.integrity_allocation_mode = (

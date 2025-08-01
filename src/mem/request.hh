@@ -479,6 +479,12 @@ class Request : public Extensible<Request>
 
     size_t _metadataNode;
 
+    bool _isForPageSwap;
+
+    bool _isTranslatedPageSwap;
+
+    Addr _originalAddr;
+
   public:
 
     /**
@@ -489,6 +495,9 @@ class Request : public Extensible<Request>
     Request() {
         _isMetadataRequest = false;
         _metadataNode = 0;
+        _isForPageSwap = false;
+        _isTranslatedPageSwap = false;
+        _originalAddr = Addr(0);
     }
 
     /**
@@ -505,6 +514,9 @@ class Request : public Extensible<Request>
         _isGPUFuncAccess = false;
         _isMetadataRequest = false;
         _metadataNode = 0;
+        _isForPageSwap = false;
+        _isTranslatedPageSwap = false;
+        _originalAddr = Addr(0);
     }
 
     Request(Addr vaddr, unsigned size, Flags flags,
@@ -517,6 +529,9 @@ class Request : public Extensible<Request>
         _isGPUFuncAccess = false;
         _isMetadataRequest = false;
         _metadataNode = 0;
+        _isForPageSwap = false;
+        _isTranslatedPageSwap = false;
+        _originalAddr = Addr(0);
     }
 
     Request(const Request& other)
@@ -534,6 +549,9 @@ class Request : public Extensible<Request>
           _localAccessor(other._localAccessor),
           _isMetadataRequest(other._isMetadataRequest),
           _metadataNode(other._metadataNode),
+          _isForPageSwap(other._isForPageSwap),
+          _isTranslatedPageSwap(other._isTranslatedPageSwap),
+          _originalAddr(other._originalAddr),
           translateDelta(other.translateDelta),
           accessDelta(other.accessDelta), depth(other.depth)
     {
@@ -1173,6 +1191,36 @@ class Request : public Extensible<Request>
     getMetadataNode()
     {
         return _metadataNode;
+    }
+
+    void
+    setForPageSwap(bool flag) {
+        _isForPageSwap = flag;
+    }
+
+    bool
+    getForPageSwap() {
+        return _isForPageSwap;
+    }
+
+    void
+    setTranslatedPageSwap(bool flag) {
+        _isTranslatedPageSwap = flag;
+    }
+
+    bool
+    getTranslatedPageSwap() {
+        return _isTranslatedPageSwap;
+    }
+
+    void
+    setOriginalAddr(Addr addr) {
+        _originalAddr = addr;
+    }
+
+    Addr
+    getOriginalAddr() {
+        return _originalAddr;
     }
 };
 

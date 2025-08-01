@@ -211,6 +211,12 @@ def add_arguments(parser):
 
     # Page swapping
     parser.add_argument(
+        "--use-page-swapper",
+        action="store_true",
+        help="Add a 'page swapper' component. Requires an integrity verifier.",
+    )
+
+    parser.add_argument(
         "--use-ncx",
         action="store_true",
         help="Use noncoherent xbar structure.",
@@ -230,6 +236,9 @@ def create_board(args):
     if args.cxl_mode == "Disabled":
         # You cannot have a non-zero CXL size when not using CXL.
         assert args.cxl_size == "0B"
+
+    if args.use_page_swapper:
+        assert args.use_integrity_verifier
 
     # Assume wherever the OS is, there is some space available for it
     baseline_os_size = "256MiB"
@@ -378,6 +387,7 @@ def create_board(args):
             integrity_allocation_mode=args.integrity_allocation_mode,
             integrity_tree_type=args.integrity_tree_type,
             integrity_tree_arity=args.integrity_tree_arity,
+            use_page_swapper=args.use_page_swapper,
         )
     else:
         cache_hierarchy = PrivateL1SharedL2CacheHierarchy(

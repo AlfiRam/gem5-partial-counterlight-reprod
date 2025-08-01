@@ -382,16 +382,20 @@ Packet::print(std::ostream &o, const int verbosity,
     if (!isMetadataRequest()) {
         ccprintf(o, "%x:%x", getAddr(), getAddr() + getSize() - 1);
     } else {
-        ccprintf(o, "METADATA %lu", getMetadataNode());
+        ccprintf(o, "METADATA %lu | %x:%x",
+            getMetadataNode(),
+            getAddr(), getAddr() + getSize() - 1);
     }
 
-    ccprintf(o, "]%s%s%s%s%s%s",
+    ccprintf(o, "]%s%s%s%s%s%s%s%s",
             req->isSecure() ? " (s)" : "",
             req->isInstFetch() ? " IF" : "",
             req->isUncacheable() ? " UC" : "",
             isExpressSnoop() ? " ES" : "",
             req->isToPOC() ? " PoC" : "",
-            req->isToPOU() ? " PoU" : "");
+            req->isToPOU() ? " PoU" : "",
+            isForPageSwap() ? " PAGE_SWP" : "",
+            isTranslatedPageSwap() ? " TRANSL" : "");
 
 }
 

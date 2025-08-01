@@ -80,6 +80,7 @@ SimObject('IntegrityVerifier.py', sim_objects=[
            'MetadataCacheType',
     ]
 )
+SimObject('PageSwapper.py', sim_objects=['AbstractPageSwapper', 'PageSwapper'])
 SimObject('PortTerminator.py', sim_objects=['PortTerminator'])
 SimObject('ThreadBridge.py', sim_objects=['ThreadBridge'])
 
@@ -121,6 +122,7 @@ Source('htm.cc')
 Source('serial_link.cc')
 Source('mem_delay.cc')
 Source('integrity_verifier.cc')
+Source('page_swapper.cc')
 Source('port_terminator.cc')
 
 GTest('backdoor_manager.test', 'backdoor_manager.test.cc',
@@ -183,6 +185,8 @@ DebugFlag('MemDelay')
 DebugFlag('MMU')
 DebugFlag('MemoryAccess')
 DebugFlag('PacketQueue')
+DebugFlag('AbstractPageSwapper')
+DebugFlag('AbstractPageSwapperTest')
 DebugFlag("PortTrace")
 DebugFlag('ResponsePort')
 DebugFlag('StackDist')

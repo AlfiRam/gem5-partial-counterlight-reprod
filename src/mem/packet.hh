@@ -150,7 +150,7 @@ class MemCmd
         // Tlb shootdown
         TlbiExtSync,
         // cxl.mem extended
-        /** enum type:it is necessary to align the command item here 
+        /** enum type:it is necessary to align the command item here
          *  with the attribute item in the .cc file.
          */
         M2SReq, // Requset              (read)
@@ -642,6 +642,19 @@ class Packet : public Printable, public Extensible<Packet>
      */
     uint64_t getMetadataNode() const     { return req->getMetadataNode(); }
     void setMetadataNode(uint64_t node)  { req->setMetadataNode(node); }
+
+    bool isForPageSwap() const       { return req->getForPageSwap(); }
+    void setForPageSwap()            { req->setForPageSwap(true); }
+
+    bool isTranslatedPageSwap() const  { return req->getTranslatedPageSwap(); }
+    void setTranslatedPageSwap()       { req->setTranslatedPageSwap(true); }
+    void unsetTranslatedPageSwap()      { req->setTranslatedPageSwap(false); }
+
+    Addr getOriginalAddr() const {
+        assert(isTranslatedPageSwap());
+        return req->getOriginalAddr();
+    }
+    void setOriginalAddr(Addr addr)  { req->setOriginalAddr(addr); }
 
     bool isWholeLineWrite(unsigned blk_size)
     {
