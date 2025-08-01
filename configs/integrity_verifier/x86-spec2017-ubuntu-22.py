@@ -42,33 +42,63 @@ from gem5.resources.resource import (
 from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 
-# Following are the list of benchmark programs for PARSEC.
-# TODO Update for SPEC2017
+# Following are the list of benchmark programs for SPEC2017.
 benchmark_choices = [
-    "blackscholes",
-    "bodytrack",
-    "canneal",
-    "dedup",
-    "facesim",
-    "ferret",
-    "fluidanimate",
-    "freqmine",
-    "raytrace",
-    "streamcluster",
-    "swaptions",
-    "vips",
-    "x264",
+    "500.perlbench_r",
+    "502.gcc_r",  # Validated
+    "503.bwaves_r",  # peak is not built
+    "505.mcf_r",
+    "507.cactusBSSN_r",
+    "508.namd_r",
+    "510.parest_r",
+    "511.povray_r",
+    "519.lbm_r",
+    "520.omnetpp_r",
+    "521.wrf_r",
+    "523.xalancbmk_r",
+    "525.x264_r",
+    "527.cam4_r",
+    "531.deepsjeng_r",
+    "538.imagick_r",
+    "541.leela_r",
+    "544.nab_r",
+    "548.exchange2_r",
+    "549.fotonik3d_r",
+    "554.roms_r",
+    "557.xz_r",
+    "600.perlbench_s",
+    "602.gcc_s",
+    "603.bwaves_s",
+    "605.mcf_s",
+    "607.cactusBSSN_s",
+    "608.namd_s",
+    "610.parest_s",
+    "611.povray_s",
+    "619.lbm_s",
+    "620.omnetpp_s",
+    "621.wrf_s",
+    "623.xalancbmk_s",
+    "625.x264_s",
+    "627.cam4_s",
+    "631.deepsjeng_s",
+    "638.imagick_s",
+    "641.leela_s",
+    "644.nab_s",
+    "648.exchange2_s",
+    "649.fotonik3d_s",
+    "654.roms_s",
+    "996.specrand_fs",
+    "997.specrand_fr",
+    "998.specrand_is",
+    "999.specrand_ir",
 ]
 
 # Following are the input sizes.
-# size_choices = [
-#     "test",
-#     "simdev",
-#     "simsmall",
-#     "simmedium",
-#     "simlarge",
-#     "native",
-# ]
+size_choices = [
+    "test",
+    "train",
+    "ref",
+]
 
 
 # Argument parsing.
@@ -77,21 +107,21 @@ parser = argparse.ArgumentParser(
 )
 add_arguments(parser)
 
-# parser.add_argument(
-#     "--benchmark",
-#     type=str,
-#     required=True,
-#     help="Input the benchmark program to execute.",
-#     choices=benchmark_choices,
-# )
+parser.add_argument(
+    "--benchmark",
+    type=str,
+    required=True,
+    help="Input the benchmark program to execute.",
+    choices=benchmark_choices,
+)
 
-# parser.add_argument(
-#     "--size",
-#     type=str,
-#     required=True,
-#     help="Simulation size the benchmark program.",
-#     choices=size_choices,
-# )
+parser.add_argument(
+    "--size",
+    type=str,
+    required=True,
+    help="Simulation size the benchmark program.",
+    choices=size_choices,
+)
 
 parser.add_argument(
     "--no-stop-after-roi",
@@ -141,7 +171,7 @@ command = (
     "m5 exit;"  # Third exit event
     + "cd spec2017;"
     + "source shrc;"
-    + 'runcpu --size test --iterations 1 --config myconfig.x86.cfg --define gcc_dir="/usr" --noreportable --nobuild 600.perlbench_s;'
+    + f'runcpu --size test --iterations 1 --config myconfig.x86.cfg --define gcc_dir="/usr" --noreportable --nobuild {args.benchmark};'
     # The end of ROI hook will stop the simulation from here.
     + "sleep 5;"  # This delay is to allow any print statements to finish before the simulation abruptly stops.
     + "m5 exit;"
