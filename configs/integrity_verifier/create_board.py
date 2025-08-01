@@ -86,7 +86,7 @@ def add_arguments(parser):
         "--integrity-tree-type",
         type=str,
         required=False,
-        default="TimingTree",
+        default="TimingBmt",
         choices=[
             "TimingTree",
             "TimingBmt",
@@ -98,7 +98,7 @@ def add_arguments(parser):
         "--integrity-tree-arity",
         type=int,
         required=False,
-        default=4,
+        default=8,
     )
 
     # Simulation modeling
@@ -119,7 +119,7 @@ def add_arguments(parser):
         "--metadata-cache-type",
         type=str,
         required=False,
-        default="MetadataCache",
+        default="PartitionedMetadataCache",
         choices=[
             "MetadataCache",
             "PartitionedMetadataCache",
