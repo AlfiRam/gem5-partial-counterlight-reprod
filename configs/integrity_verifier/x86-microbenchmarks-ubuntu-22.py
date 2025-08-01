@@ -43,6 +43,7 @@ from gem5.simulate.simulator import Simulator
 
 # Following are the list of microbenchmark programs.
 benchmark_choices = [
+    "skippass",
     "widepass",
     "widerandom",
 ]
