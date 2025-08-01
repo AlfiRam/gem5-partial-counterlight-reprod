@@ -241,6 +241,11 @@ AbstractIntegrityVerifier::getIntegrityNodeLocation(size_t node)
         // All integrity data should be in DRAM
         addr = dramIntegrityRange.start() +
                 integrityTree->simulatedBlockOffset(node);
+    } else if (integrityAllocationMode ==
+            enums::IntegrityAllocationMode::CxlOnly) {
+        // All integrity data should be in CXL
+        addr = cxlIntegrityRange.start() +
+                integrityTree->simulatedBlockOffset(node);
     } else {
         panic("Integrity allocation mode unimplemented.");
     }
