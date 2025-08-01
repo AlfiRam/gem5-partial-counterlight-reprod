@@ -45,6 +45,7 @@ from m5.objects import (
     Pc,
     Port,
     RawDiskImage,
+    SimpleMemDelay,
     X86ACPIMadt,
     X86ACPIMadtIntSourceOverride,
     X86ACPIMadtIOAPIC,
@@ -93,6 +94,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         cxl_memory: Optional[AbstractMemorySystem] = None,
         is_asic: Optional[bool] = False,
         main_memory_type: Optional[str] = "DRAM",
+        cxl_latency: Optional[str] = "35ns",
     ) -> None:
         super().__init__(
             clk_freq=clk_freq,
@@ -103,6 +105,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             cxl_memory=cxl_memory,
             is_asic=is_asic,
             main_memory_type=main_memory_type,
+            cxl_latency=cxl_latency,
         )
 
         if self.get_processor().get_isa() != ISA.X86:
@@ -245,6 +248,28 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                     )
                     self.pc.south_bridge.cxlmemory.rsp_size = 36
                     self.pc.south_bridge.cxlmemory.req_size = 36
+            elif self._cxl_mode == "DRAM":
+                cxl_dram = self.get_cxl_memory()
+
+                self._delay_modules = []
+
+                # Attach CXL memory to delay module (one per MemCtrl)
+                for i, (_, port) in enumerate(cxl_dram.get_mem_ports()):
+                    delay_time = self._cxl_latency
+                    delay = SimpleMemDelay(
+                        read_req=delay_time,
+                        read_resp=delay_time,
+                        write_req=delay_time,
+                        write_resp=delay_time,
+                    )
+
+                    delay.mem_side_port = port
+                    delay.cpu_side_port = (
+                        self.get_cache_hierarchy().get_mem_side_port()
+                    )
+
+                    self._delay_modules.append(delay)
+                    setattr(self, f"delay{i}", delay)
 
             self.apicbridge = Bridge(delay="50ns")
             self.apicbridge.cpu_side_port = self.get_io_bus().mem_side_ports
@@ -530,28 +555,45 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             )
             secondary_memory.set_memory_range([secondary_range])
 
-        # Add abstract memory to parent System class. (Only applies to DRAM.)
+        # Add abstract memory to parent System class. (Only applies to DRAM-like memory.)
         cpu_abstract_mems = []
-        if self._main_memory_type == "DRAM":
+        if self._main_memory_type == "DRAM" or (
+            self._main_memory_type == "CXL" and self._cxl_mode == "DRAM"
+        ):
+            # DRAM is primary memory. Nothing crazy here.
             for mc in primary_memory.get_memory_controllers():
                 cpu_abstract_mems.append(mc.dram)
-        if secondary_memory and self._secondary_memory_type == "DRAM":
+        if secondary_memory and (
+            self._secondary_memory_type == "DRAM"
+            or (
+                self._secondary_memory_type == "CXL"
+                and self._cxl_mode == "DRAM"
+            )
+        ):
             for mc in secondary_memory.get_memory_controllers():
                 cpu_abstract_mems.append(mc.dram)
 
         self.memories = cpu_abstract_mems
 
-        # Add the address range for the IO. (Only applies to DRAM.)
+        # Add the address range for the IO. (Only applies to DRAM-like memory.)
         self.mem_ranges = []
 
-        if self._main_memory_type == "DRAM":
+        if self._main_memory_type == "DRAM" or (
+            self._main_memory_type == "CXL" and self._cxl_mode == "DRAM"
+        ):
             self.mem_ranges.append(primary_range)
 
         self.mem_ranges.append(
             AddrRange(0xC0000000, size=0x100000),  # For I/0
         )
 
-        if secondary_memory and self._secondary_memory_type == "DRAM":
+        if secondary_memory and (
+            self._secondary_memory_type == "DRAM"
+            or (
+                self._secondary_memory_type == "CXL"
+                and self._cxl_mode == "DRAM"
+            )
+        ):
             self.mem_ranges.append(secondary_range)
 
     @overrides(KernelDiskWorkload)

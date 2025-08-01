@@ -86,6 +86,7 @@ class AbstractBoard:
         cxl_memory: Optional["AbstractMemorySystem"] = None,
         is_asic: Optional[bool] = False,
         main_memory_type: Optional[str] = "DRAM",
+        cxl_latency: Optional[str] = "35ns",
     ) -> None:
         """
         :param clk_freq: The clock frequency for this board.
@@ -107,7 +108,7 @@ class AbstractBoard:
         # Set the processor, memory, and cache hierarchy.
         self.processor = processor
 
-        assert cxl_mode in ["Disabled", "PCIe"]
+        assert cxl_mode in ["Disabled", "PCIe", "DRAM"]
         self._cxl_mode = cxl_mode
 
         self._is_asic = is_asic
@@ -157,6 +158,8 @@ class AbstractBoard:
         self._cache_hierarchy = cache_hierarchy
         if cache_hierarchy is not None:
             self.cache_hierarchy = cache_hierarchy
+
+        self._cxl_latency = cxl_latency
 
         # This variable determines whether the board is to be executed in
         # full-system or syscall-emulation mode. This is set when the workload
@@ -485,6 +488,8 @@ class AbstractBoard:
         # Incorporate the memory into the motherboard.
         if self.has_memory():
             self.get_memory().incorporate_memory(self)
+        if self._cxl_mode == "DRAM":
+            self.get_cxl_memory().incorporate_memory(self)
 
         # Incorporate the cache hierarchy for the motherboard.
         if self.get_cache_hierarchy():
@@ -502,6 +507,8 @@ class AbstractBoard:
             self.get_cache_hierarchy()._post_instantiate()
         if self.has_memory():
             self.get_memory()._post_instantiate()
+        if self._cxl_mode == "DRAM":
+            self.get_cxl_memory()._post_instantiate()
 
     def _pre_instantiate(self, full_system: Optional[bool] = None) -> Root:
         """To be called immediately before ``m5.instantiate``. This is where
@@ -534,6 +541,8 @@ class AbstractBoard:
         self.get_processor()._pre_instantiate(root)
         if self.has_memory():
             self.get_memory()._pre_instantiate(root)
+        if self._cxl_mode == "DRAM":
+            self.get_cxl_memory()._pre_instantiate(root)
         if self.get_cache_hierarchy():
             self.get_cache_hierarchy()._pre_instantiate(root)
 

@@ -175,7 +175,15 @@ def add_arguments(parser):
         choices=[
             "Disabled",
             "PCIe",
+            "DRAM",
         ],
+    )
+
+    parser.add_argument(
+        "--cxl-latency",
+        type=str,
+        help="Custom CXL latency. For CXL on DRAM mode only.",
+        default="35ns",
     )
 
     parser.add_argument(
@@ -419,6 +427,7 @@ def create_board(args):
         cxl_memory=cxl_memory,
         is_asic=args.is_asic,
         main_memory_type=args.main_memory_type,
+        cxl_latency=args.cxl_latency,
     )
 
     return board, processor
