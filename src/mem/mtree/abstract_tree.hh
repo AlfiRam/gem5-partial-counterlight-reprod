@@ -37,8 +37,10 @@ class AbstractIntegrityTree
       TreeNode = 0,
       Counter = 1,
       MAC = 2,
+      TREE_NODE_TYPE_COUNT
     };
-    static const unsigned int TREE_NODE_TYPE_COUNT = 3;
+
+    static const char* treeNodeStrings[TREE_NODE_TYPE_COUNT];
 
     /**
      * Calculate the "location" of a tree node by its offset, in bytes.
