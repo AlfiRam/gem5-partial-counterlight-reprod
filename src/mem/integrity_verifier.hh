@@ -483,6 +483,12 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     std::unordered_map<RequestPtr, Tick> arrivalTime;
 
+    /**
+     * Track when a piece of metadata is first missed, until it is inserted
+     * into the metadata cache.
+     */
+    std::unordered_map<RequestPtr, Tick> metadataMissTime;
+
     std::string printPendingToUnlock();
 
     /**
@@ -645,8 +651,10 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Scalar metadataReqHandled;
       statistics::Scalar dataReqHandled;
 
+      statistics::Scalar reqHandledDram;
       statistics::Scalar reqHandledDramOs;
       statistics::Scalar reqHandledDramIntegrity;
+      statistics::Scalar reqHandledCxl;
       statistics::Scalar reqHandledCxlOs;
       statistics::Scalar reqHandledCxlIntegrity;
 
@@ -656,15 +664,20 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Vector metadataCacheMissesTypes;
       statistics::Scalar metadataCacheHits;
       statistics::Vector metadataCacheHitsTypes;
-      statistics::Formula metadataCacheHitRate;
-      statistics::Formula metadataCacheHitRateTypes;
+      statistics::Formula metadataCacheMissRate;
+      statistics::Formula metadataCacheMissRateTypes;
+
+      statistics::Scalar metadataCacheMissLatencyTotal;
+      statistics::Formula metadataCacheMissLatencyAverage;
 
       statistics::Scalar totalRequestingTime;
       statistics::Scalar totalMetadataReqTime;
       statistics::Scalar totalDataReqTime;
 
+      statistics::Scalar totalReqTimeDram;
       statistics::Scalar totalReqTimeDramOs;
       statistics::Scalar totalReqTimeDramIntegrity;
+      statistics::Scalar totalReqTimeCxl;
       statistics::Scalar totalReqTimeCxlOs;
       statistics::Scalar totalReqTimeCxlIntegrity;
 
@@ -672,8 +685,10 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Formula avgMetadataReqLatency;
       statistics::Formula avgDataReqLatency;
 
+      statistics::Formula avgReqTimeDram;
       statistics::Formula avgReqTimeDramOs;
       statistics::Formula avgReqTimeDramIntegrity;
+      statistics::Formula avgReqTimeCxl;
       statistics::Formula avgReqTimeCxlOs;
       statistics::Formula avgReqTimeCxlIntegrity;
     } stats;

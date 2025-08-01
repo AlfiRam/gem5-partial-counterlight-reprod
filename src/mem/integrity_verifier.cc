@@ -701,6 +701,12 @@ AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Verified pkt %s\n", __func__, pkt->print());
 
+    // Update stats for miss time.
+    assert(metadataMissTime.find(pkt->req) != metadataMissTime.end());
+    stats.metadataCacheMissLatencyTotal +=
+            curTick() - metadataMissTime[pkt->req];
+    metadataMissTime.erase(pkt->req);
+
     // Check to see if there were evictions that were waiting for this (parent)
     // metadata.
     DPRINTF(AbstractIntegrityVerifier,
@@ -1153,6 +1159,16 @@ AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
         "%s: arrivalTime increased. size: %d\n",
         __func__, arrivalTime.size());
+
+    // Mark the time since we start missing this metadata entry.
+    if (pkt->isMetadataRequest()) {
+        assert(metadataMissTime.find(pkt->req) == metadataMissTime.end());
+
+        metadataMissTime[pkt->req] = curTick();
+
+        // This should be removed from metadataMissTime once inserted into the
+        // metadata cache.
+    }
 }
 
 
@@ -1170,24 +1186,34 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
     } else {
         stats.dataReqHandled++;
         stats.totalDataReqTime += curTick() - arrivalTime[pkt->req];
+    }
 
-        if (dramOsRange.contains(pkt->getAddr())) {
-            stats.reqHandledDramOs++;
-            stats.totalReqTimeDramOs +=
-                curTick() - arrivalTime[pkt->req];
-        } else if (dramIntegrityRange.contains(pkt->getAddr())) {
-            stats.reqHandledDramIntegrity++;
-            stats.totalReqTimeDramIntegrity +=
-                curTick() - arrivalTime[pkt->req];
-        } else if (cxlOsRange.contains(pkt->getAddr())) {
-            stats.reqHandledCxlOs++;
-            stats.totalReqTimeCxlOs +=
-                curTick() - arrivalTime[pkt->req];
-        } else if (cxlIntegrityRange.contains(pkt->getAddr())) {
-            stats.reqHandledCxlIntegrity++;
-            stats.totalReqTimeCxlIntegrity +=
-                curTick() - arrivalTime[pkt->req];
-        }
+    if (dramFullRange.contains(pkt->getAddr())) {
+        stats.reqHandledDram++;
+        stats.totalReqTimeDram +=
+            curTick() - arrivalTime[pkt->req];
+    } else if (cxlFullRange.contains(pkt->getAddr())) {
+        stats.reqHandledCxl++;
+        stats.totalReqTimeCxl +=
+            curTick() - arrivalTime[pkt->req];
+    }
+
+    if (dramOsRange.contains(pkt->getAddr())) {
+        stats.reqHandledDramOs++;
+        stats.totalReqTimeDramOs +=
+            curTick() - arrivalTime[pkt->req];
+    } else if (dramIntegrityRange.contains(pkt->getAddr())) {
+        stats.reqHandledDramIntegrity++;
+        stats.totalReqTimeDramIntegrity +=
+            curTick() - arrivalTime[pkt->req];
+    } else if (cxlOsRange.contains(pkt->getAddr())) {
+        stats.reqHandledCxlOs++;
+        stats.totalReqTimeCxlOs +=
+            curTick() - arrivalTime[pkt->req];
+    } else if (cxlIntegrityRange.contains(pkt->getAddr())) {
+        stats.reqHandledCxlIntegrity++;
+        stats.totalReqTimeCxlIntegrity +=
+            curTick() - arrivalTime[pkt->req];
     }
 
     arrivalTime.erase(pkt->req);
@@ -1659,10 +1685,14 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
     ADD_STAT(dataReqHandled, statistics::units::Count::get(),
             "Total number of data requests handled"),
 
+    ADD_STAT(reqHandledDram, statistics::units::Count::get(),
+            "Total number of requests to memory in DRAM"),
     ADD_STAT(reqHandledDramOs, statistics::units::Count::get(),
             "Total number of requests to (non-integrity) memory in DRAM"),
     ADD_STAT(reqHandledDramIntegrity, statistics::units::Count::get(),
             "Total number of requests to integrity memory in DRAM"),
+    ADD_STAT(reqHandledCxl, statistics::units::Count::get(),
+            "Total number of requests to memory in CXL"),
     ADD_STAT(reqHandledCxlOs, statistics::units::Count::get(),
             "Total number of requests to (non-integrity) memory in CXL"),
     ADD_STAT(reqHandledCxlIntegrity, statistics::units::Count::get(),
@@ -1680,10 +1710,15 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Total number of metadata cache hits"),
     ADD_STAT(metadataCacheHitsTypes, statistics::units::Count::get(),
             "Total number of metadata cache hits (typed)"),
-    ADD_STAT(metadataCacheHitRate, statistics::units::Ratio::get(),
-            "Metadata cache hit rate"),
-    ADD_STAT(metadataCacheHitRateTypes, statistics::units::Ratio::get(),
-            "Metadata cache hit rate (typed)"),
+    ADD_STAT(metadataCacheMissRate, statistics::units::Ratio::get(),
+            "Metadata cache miss rate"),
+    ADD_STAT(metadataCacheMissRateTypes, statistics::units::Ratio::get(),
+            "Metadata cache miss rate (typed)"),
+
+    ADD_STAT(metadataCacheMissLatencyTotal, statistics::units::Tick::get(),
+            "Total amount of time taken for metadata cache misses"),
+    ADD_STAT(metadataCacheMissLatencyAverage, statistics::units::Tick::get(),
+            "Average time taken for metadata cache misses"),
 
     ADD_STAT(totalRequestingTime, statistics::units::Tick::get(),
             "Total amount of time where a request is out then in"),
@@ -1692,12 +1727,18 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
     ADD_STAT(totalDataReqTime, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in"),
 
+    ADD_STAT(totalReqTimeDram, statistics::units::Tick::get(),
+            "Total amount of time where a data request is out then in, "
+            "for memory in DRAM"),
     ADD_STAT(totalReqTimeDramOs, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in, "
             "for (non-integrity) memory in DRAM"),
     ADD_STAT(totalReqTimeDramIntegrity, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in, "
             "for integrity memory in DRAM"),
+    ADD_STAT(totalReqTimeCxl, statistics::units::Tick::get(),
+            "Total amount of time where a data request is out then in, "
+            "for memory in CXL"),
     ADD_STAT(totalReqTimeCxlOs, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in, "
             "for (non-integrity) memory in CXL"),
@@ -1715,12 +1756,18 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Average data request latency from leaving to entering "
             "IntegrityVerifier"),
 
+    ADD_STAT(avgReqTimeDram, statistics::units::Tick::get(),
+            "Average data request latency from leaving to entering "
+            "IntegrityVerifier, for memory in DRAM"),
     ADD_STAT(avgReqTimeDramOs, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
             "IntegrityVerifier, for (non-integrity) memory in DRAM"),
     ADD_STAT(avgReqTimeDramIntegrity, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
             "IntegrityVerifier, for integrity memory in DRAM"),
+    ADD_STAT(avgReqTimeCxl, statistics::units::Tick::get(),
+            "Average data request latency from leaving to entering "
+            "IntegrityVerifier, for memory in CXL"),
     ADD_STAT(avgReqTimeCxlOs, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
             "IntegrityVerifier, for (non-integrity) memory in CXL"),
@@ -1735,17 +1782,33 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
     metadataCacheHitsTypes.init(
         AbstractIntegrityTree::TREE_NODE_TYPE_COUNT);
 
-    metadataCacheHitRate = metadataCacheHits / metadataCacheAccesses;
-    metadataCacheHitRateTypes =
-        metadataCacheHitsTypes / metadataCacheAccessesTypes;
+    for (int i = 0; i < AbstractIntegrityTree::TREE_NODE_TYPE_COUNT; i++) {
+        metadataCacheAccessesTypes.subname(i,
+            AbstractIntegrityTree::treeNodeStrings[i]);
+        metadataCacheMissesTypes.subname(i,
+            AbstractIntegrityTree::treeNodeStrings[i]);
+        metadataCacheHitsTypes.subname(i,
+            AbstractIntegrityTree::treeNodeStrings[i]);
+        metadataCacheMissRateTypes.subname(i,
+            AbstractIntegrityTree::treeNodeStrings[i]);
+    }
+
+    metadataCacheMissRate = metadataCacheMisses / metadataCacheAccesses;
+    metadataCacheMissRateTypes =
+        metadataCacheMissesTypes / metadataCacheAccessesTypes;
+
+    metadataCacheMissLatencyAverage =
+        metadataCacheMissLatencyTotal / metadataCacheMisses;
 
     avgReqLatency = totalRequestingTime / requestsHandled;
     avgMetadataReqLatency = totalMetadataReqTime / metadataReqHandled;
     avgDataReqLatency = totalDataReqTime / dataReqHandled;
 
+    avgReqTimeDram = totalReqTimeDram / reqHandledDram;
     avgReqTimeDramOs = totalReqTimeDramOs / reqHandledDramOs;
     avgReqTimeDramIntegrity =
         totalReqTimeDramIntegrity / reqHandledDramIntegrity;
+    avgReqTimeCxl = totalReqTimeCxl / reqHandledCxl;
     avgReqTimeCxlOs = totalReqTimeCxlOs / reqHandledCxlOs;
     avgReqTimeCxlIntegrity = totalReqTimeCxlIntegrity / reqHandledCxlIntegrity;
 }
