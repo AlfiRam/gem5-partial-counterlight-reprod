@@ -36,12 +36,14 @@ from m5.objects import (
     AddrRange,
     BaseXBar,
     Bridge,
+    CommMonitor,
     CowDiskImage,
     CXLBridge,
     CXLMemBar,
     CXLMemory,
     IdeDisk,
     IOXBar,
+    NoncoherentXBar,
     Pc,
     Port,
     RawDiskImage,
@@ -254,32 +256,44 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                     self.pc.south_bridge.cxlmemory.rsp_size = 36
                     self.pc.south_bridge.cxlmemory.req_size = 36
             elif self._cxl_mode == "DRAM":
-                cxl_dram = self.get_cxl_memory()
+                self.cxl_comm_monitor = CommMonitor()
 
-                self._delay_modules = []
-
-                # Attach CXL memory to delay module (one per MemCtrl)
-                for i, (_, port) in enumerate(cxl_dram.get_mem_ports()):
-                    delay_time = self._cxl_latency
-                    delay = SimpleMemDelay(
-                        read_req=delay_time,
-                        read_resp=delay_time,
-                        write_req=delay_time,
-                        write_resp=delay_time,
+                # Connect the CXL comm monitor to the bottom of the cache hierarchy or NCX, whichever is lower
+                if not self.use_ncx():
+                    self.cxl_comm_monitor.cpu_side_port = (
+                        self.get_cache_hierarchy().get_mem_side_port()
+                    )
+                else:
+                    self.cxl_comm_monitor.cpu_side_port = (
+                        self.get_ncx().mem_side_ports
                     )
 
-                    delay.mem_side_port = port
+                # Add CXL communication latency
+                delay_time = self._cxl_latency
+                self.cxl_delay = SimpleMemDelay(
+                    read_req=delay_time,
+                    read_resp=delay_time,
+                    write_req=delay_time,
+                    write_resp=delay_time,
+                )
+                self.cxl_delay.cpu_side_port = (
+                    self.cxl_comm_monitor.mem_side_port
+                )
 
-                    if not self.use_ncx():
-                        delay.cpu_side_port = (
-                            self.get_cache_hierarchy().get_mem_side_port()
-                        )
+                # Add CXL XBar to merge multiple MemCtrls into one port on CXL delay
+                self.cxl_xbar = NoncoherentXBar(
+                    frontend_latency=2,
+                    forward_latency=1,
+                    response_latency=2,
+                    width=16,  # 128 bits
+                )
+                self.cxl_xbar.cpu_side_ports = self.cxl_delay.mem_side_port
 
-                    else:
-                        delay.cpu_side_port = self.get_ncx().mem_side_ports
+                cxl_dram = self.get_cxl_memory()
 
-                    self._delay_modules.append(delay)
-                    setattr(self, f"delay{i}", delay)
+                # Attach CXL memory to delay module with CXL XBar to merge them together (one per MemCtrl)
+                for i, (_, port) in enumerate(cxl_dram.get_mem_ports()):
+                    self.cxl_xbar.mem_side_ports = port
 
             self.apicbridge = Bridge(delay="50ns")
             self.apicbridge.cpu_side_port = self.get_io_bus().mem_side_ports
