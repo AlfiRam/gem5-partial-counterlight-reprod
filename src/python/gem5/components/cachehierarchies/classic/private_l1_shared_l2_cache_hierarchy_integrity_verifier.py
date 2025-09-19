@@ -103,6 +103,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         integrity_tree_type: Optional[str] = None,
         integrity_tree_arity: Optional[int] = 0,
         use_page_swapper: Optional[bool] = False,
+        page_swap_epoch: Optional[int] = 200,
     ) -> None:
         """
         :param l1d_size: The size of the L1 Data Cache (e.g., "32KiB").
@@ -169,6 +170,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             self._integrity_tree_arity = integrity_tree_arity
 
         self._use_page_swapper = use_page_swapper
+
+        self._page_swap_epoch = page_swap_epoch
 
     @overrides(AbstractClassicCacheHierarchy)
     def get_mem_side_port(self) -> Port:
@@ -274,7 +277,9 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         if board.use_ncx():
             if self._use_page_swapper:
                 # If using the page swapper, place it between memory bus and NCX.
-                self.page_swapper = PageSwapper()
+                self.page_swapper = PageSwapper(
+                    swap_epoch=self._page_swap_epoch,
+                )
                 self.page_swapper.cpu_side_port = self.membus.mem_side_ports
                 board.get_ncx().cpu_side_ports = (
                     self.page_swapper.mem_side_port
