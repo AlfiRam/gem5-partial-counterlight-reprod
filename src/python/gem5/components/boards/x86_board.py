@@ -29,6 +29,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Tuple,
 )
 
 from m5.objects import (
@@ -99,6 +100,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         # Use noncoherent-xbar
         use_ncx: Optional[bool] = False,
         cxl_latency: Optional[str] = "35ns",
+        cxl_latency_read_req: Optional[str] = None,
+        cxl_latency_read_resp: Optional[str] = None,
+        cxl_latency_write_req: Optional[str] = None,
+        cxl_latency_write_resp: Optional[str] = None,
     ) -> None:
         super().__init__(
             clk_freq=clk_freq,
@@ -111,6 +116,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             main_memory_type=main_memory_type,
             use_ncx=use_ncx,
             cxl_latency=cxl_latency,
+            cxl_latency_read_req=cxl_latency_read_req,
+            cxl_latency_read_resp=cxl_latency_read_resp,
+            cxl_latency_write_req=cxl_latency_write_req,
+            cxl_latency_write_resp=cxl_latency_write_resp,
         )
 
         if self.get_processor().get_isa() != ISA.X86:
@@ -269,12 +278,26 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                     )
 
                 # Add CXL communication latency
-                delay_time = self._cxl_latency
+                # Any of the more specific parameters will override the generic latency.
+                # It is recommended to change all of these values if changing one,
+                # so that the values are more predictable.
+                delay_time_read_req = (
+                    self._cxl_latency_read_req or self._cxl_latency
+                )
+                delay_time_read_resp = (
+                    self._cxl_latency_read_resp or self._cxl_latency
+                )
+                delay_time_write_req = (
+                    self._cxl_latency_write_req or self._cxl_latency
+                )
+                delay_time_write_resp = (
+                    self._cxl_latency_write_resp or self._cxl_latency
+                )
                 self.cxl_delay = SimpleMemDelay(
-                    read_req=delay_time,
-                    read_resp=delay_time,
-                    write_req=delay_time,
-                    write_resp=delay_time,
+                    read_req=delay_time_read_req,
+                    read_resp=delay_time_read_resp,
+                    write_req=delay_time_write_req,
+                    write_resp=delay_time_write_resp,
                 )
                 self.cxl_delay.cpu_side_port = (
                     self.cxl_comm_monitor.mem_side_port

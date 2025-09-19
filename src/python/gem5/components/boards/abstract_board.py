@@ -90,6 +90,10 @@ class AbstractBoard:
         main_memory_type: Optional[str] = "DRAM",
         use_ncx: Optional[bool] = False,
         cxl_latency: Optional[str] = "35ns",
+        cxl_latency_read_req: Optional[str] = None,
+        cxl_latency_read_resp: Optional[str] = None,
+        cxl_latency_write_req: Optional[str] = None,
+        cxl_latency_write_resp: Optional[str] = None,
     ) -> None:
         """
         :param clk_freq: The clock frequency for this board.
@@ -167,6 +171,10 @@ class AbstractBoard:
             self.ncx = InstrumentedNoncoherentXBar()
 
         self._cxl_latency = cxl_latency
+        self._cxl_latency_read_req = cxl_latency_read_req
+        self._cxl_latency_read_resp = cxl_latency_read_resp
+        self._cxl_latency_write_req = cxl_latency_write_req
+        self._cxl_latency_write_resp = cxl_latency_write_resp
 
         # This variable determines whether the board is to be executed in
         # full-system or syscall-emulation mode. This is set when the workload
