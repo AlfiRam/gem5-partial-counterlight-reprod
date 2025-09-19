@@ -33,6 +33,7 @@ from m5.objects import (
     Bridge,
     Cache,
     IntegrityVerifier,
+    L1XBar,
     L2XBar,
     PageSwapper,
     Port,
@@ -90,6 +91,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         l1d_assoc: int = 8,
         l1i_assoc: int = 8,
         l2_assoc: int = 16,
+        unified_l1_cache: bool = False,
         membus: Optional[BaseXBar] = None,
         metadata_cache_type: Optional[str] = None,
         metadata_cache_size: Optional[int] = 0,
@@ -127,6 +129,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             l2_size=l2_size,
             l2_assoc=l2_assoc,
         )
+
+        self._unified_l1_cache = unified_l1_cache
 
         self.membus = membus if membus else self._get_default_membus()
         self._metadata_cache_type = metadata_cache_type
@@ -179,18 +183,32 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         # Set up the system port for functional access from the simulator.
         board.connect_system_port(self.membus.cpu_side_ports)
 
-        self.l1icaches = [
-            L1ICache(
-                size=self._l1i_size,
-                assoc=self._l1i_assoc,
-                writeback_clean=False,
-            )
-            for i in range(board.get_processor().get_num_cores())
-        ]
-        self.l1dcaches = [
-            L1DCache(size=self._l1d_size, assoc=self._l1d_assoc)
-            for i in range(board.get_processor().get_num_cores())
-        ]
+        if not self._unified_l1_cache:
+            self.l1icaches = [
+                L1ICache(
+                    size=self._l1i_size,
+                    assoc=self._l1i_assoc,
+                    writeback_clean=False,
+                )
+                for i in range(board.get_processor().get_num_cores())
+            ]
+            self.l1dcaches = [
+                L1DCache(size=self._l1d_size, assoc=self._l1d_assoc)
+                for i in range(board.get_processor().get_num_cores())
+            ]
+        else:
+            assert self._l1i_assoc == self._l1d_assoc
+            self.l1buses = [
+                L1XBar() for i in range(board.get_processor().get_num_cores())
+            ]
+            self.l1caches = [
+                L1DCache(
+                    size=f"{toMemorySize(self._l1i_size) + toMemorySize(self._l1d_size)}B",
+                    assoc=self._l1i_assoc,
+                    writeback_clean=False,
+                )
+                for i in range(board.get_processor().get_num_cores())
+            ]
         self.l2bus = L2XBar()
         self.l2cache = L2Cache(size=self._l2_size, assoc=self._l2_assoc)
         # ITLB Page walk caches
@@ -208,11 +226,21 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             self._setup_io_cache(board)
 
         for i, cpu in enumerate(board.get_processor().get_cores()):
-            cpu.connect_icache(self.l1icaches[i].cpu_side)
-            cpu.connect_dcache(self.l1dcaches[i].cpu_side)
+            if not self._unified_l1_cache:
+                # Separate I/D cache
+                # CPU <--> L1D, L1I <--> L2 bus
+                cpu.connect_icache(self.l1icaches[i].cpu_side)
+                cpu.connect_dcache(self.l1dcaches[i].cpu_side)
+                self.l1icaches[i].mem_side = self.l2bus.cpu_side_ports
+                self.l1dcaches[i].mem_side = self.l2bus.cpu_side_ports
+            else:
+                # Combined I/D cache
+                # CPU <--> L1 bus <--> L1 <--> L2 bus
+                cpu.connect_icache(self.l1buses[i].cpu_side_ports)
+                cpu.connect_dcache(self.l1buses[i].cpu_side_ports)
+                self.l1caches[i].cpu_side = self.l1buses[i].mem_side_ports
+                self.l1caches[i].mem_side = self.l2bus.cpu_side_ports
 
-            self.l1icaches[i].mem_side = self.l2bus.cpu_side_ports
-            self.l1dcaches[i].mem_side = self.l2bus.cpu_side_ports
             self.iptw_caches[i].mem_side = self.l2bus.cpu_side_ports
             self.dptw_caches[i].mem_side = self.l2bus.cpu_side_ports
 

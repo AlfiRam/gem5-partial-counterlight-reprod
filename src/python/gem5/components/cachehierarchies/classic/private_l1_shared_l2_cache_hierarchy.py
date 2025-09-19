@@ -30,10 +30,12 @@ from m5.objects import (
     BadAddr,
     BaseXBar,
     Cache,
+    L1XBar,
     L2XBar,
     Port,
     SystemXBar,
 )
+from m5.util.convert import toMemorySize
 
 from ....isas import ISA
 from ....utils.override import *
@@ -79,6 +81,7 @@ class PrivateL1SharedL2CacheHierarchy(
         l1d_assoc: int = 8,
         l1i_assoc: int = 8,
         l2_assoc: int = 16,
+        unified_l1_cache: bool = False,
         membus: Optional[BaseXBar] = None,
     ) -> None:
         """
@@ -104,6 +107,8 @@ class PrivateL1SharedL2CacheHierarchy(
             l2_assoc=l2_assoc,
         )
 
+        self._unified_l1_cache = unified_l1_cache
+
         self.membus = membus if membus else self._get_default_membus()
 
     @overrides(AbstractClassicCacheHierarchy)
@@ -122,18 +127,35 @@ class PrivateL1SharedL2CacheHierarchy(
         for _, port in board.get_mem_ports():
             self.membus.mem_side_ports = port
 
-        self.l1icaches = [
-            L1ICache(
-                size=self._l1i_size,
-                assoc=self._l1i_assoc,
-                writeback_clean=False,
-            )
-            for i in range(board.get_processor().get_num_cores())
-        ]
-        self.l1dcaches = [
-            L1DCache(size=self._l1d_size, assoc=self._l1d_assoc)
-            for i in range(board.get_processor().get_num_cores())
-        ]
+        if not self._unified_l1_cache:
+            # Separate I/D cache
+            self.l1icaches = [
+                L1ICache(
+                    size=self._l1i_size,
+                    assoc=self._l1i_assoc,
+                    writeback_clean=False,
+                )
+                for i in range(board.get_processor().get_num_cores())
+            ]
+            self.l1dcaches = [
+                L1DCache(size=self._l1d_size, assoc=self._l1d_assoc)
+                for i in range(board.get_processor().get_num_cores())
+            ]
+        else:
+            # Combined I/D cache
+            # Use XBar to connect CPU Icache and Dcache port to unified cache
+            assert self._l1i_assoc == self._l1d_assoc
+            self.l1buses = [
+                L1XBar() for i in range(board.get_processor().get_num_cores())
+            ]
+            self.l1caches = [
+                L1DCache(
+                    size=f"{toMemorySize(self._l1i_size) + toMemorySize(self._l1d_size)}B",
+                    assoc=self._l1i_assoc,
+                    writeback_clean=False,
+                )
+                for i in range(board.get_processor().get_num_cores())
+            ]
         self.l2bus = L2XBar()
         self.l2cache = L2Cache(size=self._l2_size, assoc=self._l2_assoc)
         # ITLB Page walk caches
@@ -151,11 +173,21 @@ class PrivateL1SharedL2CacheHierarchy(
             self._setup_io_cache(board)
 
         for i, cpu in enumerate(board.get_processor().get_cores()):
-            cpu.connect_icache(self.l1icaches[i].cpu_side)
-            cpu.connect_dcache(self.l1dcaches[i].cpu_side)
+            if not self._unified_l1_cache:
+                # Separate I/D cache
+                # CPU <--> L1D, L1I <--> L2 bus
+                cpu.connect_icache(self.l1icaches[i].cpu_side)
+                cpu.connect_dcache(self.l1dcaches[i].cpu_side)
+                self.l1icaches[i].mem_side = self.l2bus.cpu_side_ports
+                self.l1dcaches[i].mem_side = self.l2bus.cpu_side_ports
+            else:
+                # Combined I/D cache
+                # CPU <--> L1 bus <--> L1 <--> L2 bus
+                cpu.connect_icache(self.l1buses[i].cpu_side_ports)
+                cpu.connect_dcache(self.l1buses[i].cpu_side_ports)
+                self.l1caches[i].cpu_side = self.l1buses[i].mem_side_ports
+                self.l1caches[i].mem_side = self.l2bus.cpu_side_ports
 
-            self.l1icaches[i].mem_side = self.l2bus.cpu_side_ports
-            self.l1dcaches[i].mem_side = self.l2bus.cpu_side_ports
             self.iptw_caches[i].mem_side = self.l2bus.cpu_side_ports
             self.dptw_caches[i].mem_side = self.l2bus.cpu_side_ports
 
