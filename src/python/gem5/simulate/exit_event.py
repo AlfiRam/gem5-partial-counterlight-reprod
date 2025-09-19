@@ -45,8 +45,8 @@ class ExitEvent(Enum):
     CHECKPOINT = "checkpoint"  # An exit to load a checkpoint.
     SCHEDULED_TICK = "scheduled tick exit"
     MAX_TICK = "max tick"  # An exit due to a maximum tick value being met.
-    USER_INTERRUPT = (  # An exit due to a user interrupt (e.g., cntr + c)
-        "user interupt"
+    USER_INTERRUPT = (  # An exit due to a user interrupt (e.g., ctrl + c)
+        "user interrupt"
     )
     SIMPOINT_BEGIN = "simpoint begins"
     MAX_INSTS = "number of instructions reached"
