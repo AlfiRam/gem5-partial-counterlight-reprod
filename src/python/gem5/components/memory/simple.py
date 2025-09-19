@@ -29,6 +29,7 @@
 
 from typing import (
     List,
+    Optional,
     Sequence,
     Tuple,
 )
@@ -36,6 +37,7 @@ from typing import (
 from m5.objects import (
     AddrRange,
     MemCtrl,
+    MemorySize,
     Port,
     SimpleMemory,
 )
@@ -55,7 +57,12 @@ class SingleChannelSimpleMemory(AbstractMemorySystem):
     """
 
     def __init__(
-        self, latency: str, latency_var: str, bandwidth: str, size: str
+        self,
+        latency: str,
+        latency_var: str,
+        bandwidth: str,
+        size: str,
+        os_size: Optional[str] = None,
     ):
         """
         :param latency: The average of request to response latency.
@@ -69,6 +76,11 @@ class SingleChannelSimpleMemory(AbstractMemorySystem):
             latency=latency, latency_var=latency_var, bandwidth=bandwidth
         )
         self._size = toMemorySize(size)
+
+        if os_size is not None:
+            self._os_size = toMemorySize(os_size)
+        else:
+            self._os_size = toMemorySize(size)
 
     @overrides(AbstractMemorySystem)
     def incorporate_memory(self, board: AbstractBoard) -> None:
@@ -85,6 +97,10 @@ class SingleChannelSimpleMemory(AbstractMemorySystem):
     @overrides(AbstractMemorySystem)
     def get_size(self) -> int:
         return self._size
+
+    @overrides(AbstractMemorySystem)
+    def get_os_size(self) -> MemorySize:
+        return self._os_size
 
     @overrides(AbstractMemorySystem)
     def set_memory_range(self, ranges: List[AddrRange]) -> None:
