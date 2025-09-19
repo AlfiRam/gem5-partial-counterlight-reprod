@@ -1,6 +1,7 @@
 #include "mem/page_swapper.hh"
 
 #include "debug/AbstractPageSwapper.hh"
+#include "debug/AbstractPageSwapperInit.hh"
 #include "debug/AbstractPageSwapperTest.hh"
 
 namespace gem5
@@ -26,29 +27,29 @@ AbstractPageSwapper::AbstractPageSwapper(const AbstractPageSwapperParams &p)
       cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
       stats(this)
 {
-    DPRINTF(AbstractPageSwapper,
+    DPRINTF(AbstractPageSwapperInit,
         "%s: dramFullRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramFullRange.to_string(),
         dramFullRange.start(), dramFullRange.end(), dramFullRange.size());
-    DPRINTF(AbstractPageSwapper,
+    DPRINTF(AbstractPageSwapperInit,
         "%s: dramOsRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramOsRange.to_string(),
         dramOsRange.start(), dramOsRange.end(), dramOsRange.size());
-    DPRINTF(AbstractPageSwapper,
+    DPRINTF(AbstractPageSwapperInit,
         "%s: dramIntegrityRange: %s (%llu:%llu, size %llu)\n",
         __func__, dramIntegrityRange.to_string(),
         dramIntegrityRange.start(), dramIntegrityRange.end(),
         dramIntegrityRange.size());
 
-    DPRINTF(AbstractPageSwapper,
+    DPRINTF(AbstractPageSwapperInit,
         "%s: cxlFullRange: %s (%llu:%llu, size %llu)\n",
         __func__, cxlFullRange.to_string(),
         cxlFullRange.start(), cxlFullRange.end(), cxlFullRange.size());
-    DPRINTF(AbstractPageSwapper,
+    DPRINTF(AbstractPageSwapperInit,
         "%s: cxlOsRange: %s (%llu:%llu, size %llu)\n",
         __func__, cxlOsRange.to_string(),
         cxlOsRange.start(), cxlOsRange.end(), cxlOsRange.size());
-    DPRINTF(AbstractPageSwapper,
+    DPRINTF(AbstractPageSwapperInit,
         "%s: cxlIntegrityRange: %s (%llu:%llu, size %llu)\n",
         __func__, cxlIntegrityRange.to_string(),
         cxlIntegrityRange.start(), cxlIntegrityRange.end(),
