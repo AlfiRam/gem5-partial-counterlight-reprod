@@ -81,7 +81,8 @@ LocalInstTracker::stopListening()
 
 GlobalInstTracker::GlobalInstTracker(const GlobalInstTrackerParams &params)
     : SimObject(params),
-      instCount(0)
+      instCount(0),
+      useApproximateExit(params.use_approximate_exit)
 {
     for (const auto &threshold : params.inst_thresholds) {
         instThresholdSet.insert(threshold);
@@ -101,11 +102,20 @@ GlobalInstTracker::updateAndCheckInstCount(const uint64_t& inst)
                                 "instCount = %lu\n",
                                 instCount);
         instThresholdSet.erase(instCount);
+        DPRINTF(InstTracker,
+                "%s: Attempting scheduling at %lu\n",
+                __func__, curTick());
         // note that when the threshold is reached, the simulation will raise
         // and exit event but it will not reset the instruction counter.
         // user can reset the counter by calling the resetCounter() function
         // in the simulation script.
-        exitSimLoopNow("a thread reached the max instruction count");
+        if (useApproximateExit) {
+            exitSimLoop("a thread reached the max instruction count",
+                        0, curTick() + 1);
+        } else {
+            // Default behavior.
+            exitSimLoopNow("a thread reached the max instruction count");
+        }
     }
 }
 

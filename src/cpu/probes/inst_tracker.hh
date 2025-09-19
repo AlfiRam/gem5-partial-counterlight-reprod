@@ -103,6 +103,24 @@ class GlobalInstTracker : public SimObject
     uint64_t instCount;
 
     /**
+     * Determine whether the exit event launched after reaching an instruction
+     * threshold should have approximate timing.
+     *
+     * Default behavior is `false`, and exit events are executed at the same
+     * tick as when an instruction threshold is reached.
+     *
+     * Due to some misalignment of event queues when using KVM cores, non-KVM
+     * cores will have exit events fail if using an exactly-timed exit event.
+     * Instead, by approximating the exit event schedule time, the exit event
+     * will not fail. This is sort of a hack, and should ideally be removed
+     * if this issue with KVM is resolved.
+     *
+     * However, this will cause some inaccuracy and exit events will no longer
+     * run exactly at the requested instruction threshold.
+     */
+    bool useApproximateExit;
+
+    /**
       * a set of thresholds for the number of instructions that should be
       * executed before the simulation exits
      */

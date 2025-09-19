@@ -48,6 +48,11 @@ class GlobalInstTracker(SimObject):
         PyBindMethod("resetThresholds"),
     ]
 
+    use_approximate_exit = Param.Bool(
+        False,
+        "Use approximately-scheduled exit events. (Useful for some use cases with KVM.)",
+    )
+
     inst_thresholds = VectorParam.Counter(
         "A list of instruction thresholds to trigger an exit event"
     )
