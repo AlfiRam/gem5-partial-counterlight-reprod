@@ -197,7 +197,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     const bool is_destination = isDestination(pkt);
 
     const bool snoop_caches = !system->bypassCaches() &&
-        pkt->cmd != MemCmd::WriteClean && !pkt->isMetadataRequest();
+        pkt->cmd != MemCmd::WriteClean && !pkt->isMetadataRequest() &&
+        !pkt->isForPageSwap();
     if (snoop_caches) {
         assert(pkt->snoopDelay == 0);
 
@@ -219,7 +220,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
         // the packet is a memory-mapped request and should be
         // broadcasted to our snoopers but the source
-        if (snoopFilter && !pkt->isMetadataRequest()) {
+        if (snoopFilter && !pkt->isMetadataRequest()
+                        && !pkt->isForPageSwap()) {
             // check with the snoop filter where to forward this packet
             auto sf_res = snoopFilter->lookupRequest(pkt, *src_port);
             // the time required by a packet to be delivered through
@@ -258,7 +260,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     // snooping above
     const bool expect_snoop_resp = !cache_responding &&
                                    pkt->cacheResponding() &&
-                                   !pkt->isMetadataRequest();
+                                   !pkt->isMetadataRequest() &&
+                                   !pkt->isForPageSwap();
     bool expect_response = pkt->needsResponse() && !pkt->cacheResponding();
 
     const bool sink_packet = sinkPacket(pkt);
@@ -281,7 +284,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             // the line was needs writable, and the responding only
             // had an Owned copy, so we need to immidiately let the
             // downstream caches know, bypass any flow control
-            if (pkt->cacheResponding() && !pkt->isMetadataRequest()) {
+            if (pkt->cacheResponding() && !pkt->isMetadataRequest() &&
+                !pkt->isForPageSwap()) {
                 pkt->setExpressSnoop();
             }
 
@@ -305,7 +309,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
         }
     }
 
-    if (snoopFilter && snoop_caches && !pkt->isMetadataRequest()) {
+    if (snoopFilter && snoop_caches && !pkt->isMetadataRequest()
+                                    && !pkt->isForPageSwap()) {
         // Let the snoop filter know about the success of the send operation
         snoopFilter->finishRequest(!success, addr, pkt->isSecure());
     }
@@ -484,7 +489,9 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // determine how long to be crossbar layer is busy
     Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
 
-    if (snoopFilter && !system->bypassCaches() && !pkt->isMetadataRequest()) {
+    if (snoopFilter && !system->bypassCaches()
+                    && !pkt->isMetadataRequest()
+                    && !pkt->isForPageSwap()) {
         // let the snoop filter inspect the response and update its state
         snoopFilter->updateResponse(pkt, *cpuSidePorts[cpu_side_port_id]);
     }
