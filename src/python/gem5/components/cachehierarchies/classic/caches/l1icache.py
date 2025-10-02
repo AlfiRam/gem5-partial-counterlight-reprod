@@ -54,6 +54,7 @@ class L1ICache(Cache):
         tgts_per_mshr: int = 20,
         writeback_clean: bool = True,
         PrefetcherCls: Type[BasePrefetcher] = StridePrefetcher,
+        enable_west_stats: bool = False,
     ):
         super().__init__()
         self.size = size
@@ -65,3 +66,4 @@ class L1ICache(Cache):
         self.tgts_per_mshr = tgts_per_mshr
         self.writeback_clean = writeback_clean
         self.prefetcher = PrefetcherCls()
+        self.enable_west_stats = enable_west_stats

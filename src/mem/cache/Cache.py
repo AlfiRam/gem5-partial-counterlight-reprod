@@ -171,6 +171,10 @@ class BaseCache(ClockedObject):
 
     enable_cxl = Param.Bool(False, "Enable CXL functionality")
 
+    enable_west_stats = Param.Bool(
+        False, "Enable statistic collection based on the WEST paper."
+    )
+
 
 class Cache(BaseCache):
     type = "Cache"

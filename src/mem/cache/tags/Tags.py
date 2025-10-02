@@ -121,6 +121,11 @@ class BaseSetAssoc(BaseTags):
         Parent.replacement_policy, "Replacement policy"
     )
 
+    enable_west_stats = Param.Bool(
+        Parent.enable_west_stats,
+        "Enable statistic collection based on the WEST paper.",
+    )
+
 
 class SectorTags(BaseTags):
     type = "SectorTags"

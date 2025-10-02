@@ -203,6 +203,9 @@ class IndexingPolicyTemplate : public SimObject
      */
     virtual Addr regenerateAddr(const KeyType &key,
                                 const ReplaceableEntry* entry) const = 0;
+
+    // For WEST-style data collection
+    friend class BaseSetAssoc;
 };
 
 class AddrTypes

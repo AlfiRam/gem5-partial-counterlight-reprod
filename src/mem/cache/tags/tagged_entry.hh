@@ -100,6 +100,9 @@ class TaggedSetAssociative : public TaggedIndexingPolicy
     {
         return (key.address << tagShift) | (entry->getSet() << setShift);
     }
+
+    // For WEST-style data collection
+    friend class BaseSetAssoc;
 };
 
 /**

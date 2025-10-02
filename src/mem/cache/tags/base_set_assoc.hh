@@ -53,9 +53,11 @@
 
 #include "base/logging.hh"
 #include "base/types.hh"
+#include "debug/WestStats.hh"
 #include "mem/cache/base.hh"
 #include "mem/cache/cache_blk.hh"
 #include "mem/cache/replacement_policies/base.hh"
+#include "mem/cache/replacement_policies/lru_rp.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "mem/cache/tags/base.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
@@ -87,6 +89,74 @@ class BaseSetAssoc : public BaseTags
 
     /** Replacement policy */
     replacement_policy::Base *replacementPolicy;
+
+    /**
+     * Enable statistics for reproducing the WEST paper.
+     */
+    const bool enableWestStats;
+
+    /**
+     * Statistics for reproducing the WEST paper.
+     */
+    typedef struct WestTagStats : public statistics::Group
+    {
+        WestTagStats(BaseSetAssoc &tags);
+
+        void regStats() override;
+
+        const std::string &name() { return _name; }
+
+        BaseSetAssoc &tags;
+
+        std::string _name;
+
+        /**
+         * Number of recently-used sets that should be tracked.
+         */
+        unsigned int recentSetCount;
+
+        std::list<uint32_t> recentSets;
+
+        /**
+         * The number of times a data block in a certain set and stack position
+         * is accessed.
+         */
+        statistics::Vector2d setStackDistance;
+
+        /**
+         * The number of times an access is to a set in a certain position of
+         * the most-recently visited sets.
+         */
+        statistics::Vector setReuse;
+
+        /**
+         * Number of writes for each set and stack position.
+         */
+        statistics::Vector2d writeCount;
+
+        /**
+         * Number of reads for each set and stack position.
+         */
+        statistics::Vector2d readCount;
+
+        /**
+         * The number of accesses to each set.
+         */
+        statistics::Vector setAccessDistribution;
+
+        /**
+         * Update the list of recent sets with a newly-accessed set.
+         */
+        void updateRecentSets(uint32_t set);
+
+        /**
+         * Get the reuse distance of a set. If the specified set is not within
+         * the list of recently-accessed sets, return recentSetCount.
+         */
+        uint32_t getSetReuseDistance(uint32_t set);
+    } WestTagStats;
+
+    WestTagStats *westStats;
 
   public:
     /** Convenience typedef. */
@@ -129,6 +199,112 @@ class BaseSetAssoc : public BaseTags
     {
         CacheBlk *blk = findBlock({pkt->getAddr(), pkt->isSecure()});
 
+        // Set corresponding to a block.
+        uint32_t set;
+
+        // Statistic collection for WEST paper reproduction. Applicable to LRU
+        // replacement policy only.
+        if (enableWestStats) {
+            DPRINTF(WestStats,
+                    "%s: Computing WEST stats for pkt %s\n",
+                    __func__, pkt->print());
+
+            // In case this is a miss, we will always compute the set, rather
+            // than basing on the block found from a hit.
+            set = dynamic_cast<TaggedSetAssociative*>(
+                    indexingPolicy)->extractSet(
+                        {pkt->getAddr(), pkt->isSecure()}
+                    );
+            DPRINTF(WestStats,
+                    "%s: pkt %s -> set = %u\n",
+                    __func__, pkt->print(), set);
+
+            // We are not interested in the way value, but the stack position
+            // value. To do this, we can iterate over all blocks in the set,
+            // sorting by the most recent time, and then the index of the item
+            // selected in this sorted list is the stack position index.
+            uint32_t stackPosition;
+
+            if (blk != nullptr) {
+                // Get all the entries for this set.
+                const std::vector<ReplaceableEntry*> entries =
+                    indexingPolicy->getPossibleEntries(
+                        {pkt->getAddr(), pkt->isSecure()});
+
+                // Build a sorted list of the last tick access time based on
+                // this set. With the lastTouchTick, we can use this to find
+                // the relative access times (like an LRU counter) of each
+                // block, in this case materializing as an index. This assumes
+                // no blocks will have identical last access times.
+                std::list<Tick> lastTicksSorted;
+                for (auto entry : entries) {
+                    auto tick = std::dynamic_pointer_cast<
+                        replacement_policy::LRU::LRUReplData>(
+                        entry->replacementData)->lastTouchTick;
+
+                    // Find the position to insert the new value
+                    auto it = lastTicksSorted.begin();
+                    while (it != lastTicksSorted.end() && *it > tick) {
+                        ++it;
+                    }
+                    // Insert the value at the found position
+                    lastTicksSorted.insert(it, tick);
+                }
+
+                // Print for debugging
+                std::ostringstream str;
+                ccprintf(str, "[");
+                for (auto entry : lastTicksSorted) {
+                    ccprintf(str, "%llu, ", entry);
+                }
+                ccprintf(str, "]");
+                DPRINTF(WestStats,
+                        "%s: lastTicksSorted: %s\n",
+                        __func__, str.str());
+
+                // Find where this specific block requested was last accessed,
+                // relative to the other blocks in this set. This gets the
+                // effective stack position.
+                Tick thisTick = std::dynamic_pointer_cast<
+                        replacement_policy::LRU::LRUReplData>(
+                        blk->replacementData)->lastTouchTick;
+
+                stackPosition = lastTicksSorted.size();
+                int i = 0;
+                for (auto it = lastTicksSorted.begin();
+                    it != lastTicksSorted.end();
+                    it++)
+                {
+                    if (*it == thisTick) {
+                        stackPosition = i;
+                        break;
+                    }
+                    i++;
+                }
+                assert(stackPosition != lastTicksSorted.size());
+            } else {
+                // If this is a miss, the stack position is simply the end.
+                stackPosition = indexingPolicy->assoc;
+            }
+            DPRINTF(WestStats,
+                    "%s: stackPosition: %d\n",
+                    __func__, stackPosition);
+
+            uint32_t setReusePosition = westStats->getSetReuseDistance(set);
+            DPRINTF(WestStats,
+                    "%s: setReusePosition: %d\n",
+                    __func__, setReusePosition);
+
+            westStats->setStackDistance[set][stackPosition]++;
+            westStats->setReuse[setReusePosition]++;
+            if (pkt->isWrite()) {
+                westStats->writeCount[set][stackPosition]++;
+            } else if (pkt->isRead()) {
+                westStats->readCount[set][stackPosition]++;
+            }
+            westStats->setAccessDistribution[set]++;
+        }
+
         // Access all tags in parallel, hence one in each way.  The data side
         // either accesses all blocks in parallel, or one block sequentially on
         // a hit.  Sequential access with a miss doesn't access data.
@@ -148,6 +324,10 @@ class BaseSetAssoc : public BaseTags
 
             // Update replacement data of accessed block
             replacementPolicy->touch(blk->replacementData, pkt);
+
+            if (enableWestStats) {
+                westStats->updateRecentSets(set);
+            }
         }
 
         // The tag lookup latency is the same for a hit or a miss

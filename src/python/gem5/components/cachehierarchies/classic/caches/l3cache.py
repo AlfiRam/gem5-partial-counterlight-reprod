@@ -54,6 +54,7 @@ class L3Cache(Cache):
         writeback_clean: bool = False,
         clusivity: Clusivity = "mostly_incl",
         PrefetcherCls: Type[BasePrefetcher] = StridePrefetcher,
+        enable_west_stats: bool = False,
     ):
         super().__init__()
         self.size = size
@@ -67,3 +68,4 @@ class L3Cache(Cache):
         self.writeback_clean = writeback_clean
         self.clusivity = clusivity
         self.prefetcher = PrefetcherCls()
+        self.enable_west_stats = enable_west_stats

@@ -47,6 +47,7 @@
 
 #include <string>
 
+#include "base/cprintf.hh"
 #include "base/intmath.hh"
 
 namespace gem5
@@ -55,7 +56,8 @@ namespace gem5
 BaseSetAssoc::BaseSetAssoc(const Params &p)
     :BaseTags(p), allocAssoc(p.assoc), blks(p.size / p.block_size),
      sequentialAccess(p.sequential_access),
-     replacementPolicy(p.replacement_policy)
+     replacementPolicy(p.replacement_policy),
+     enableWestStats(p.enable_west_stats)
 {
     // There must be a indexing policy
     fatal_if(!p.indexing_policy, "An indexing policy is required");
@@ -63,6 +65,15 @@ BaseSetAssoc::BaseSetAssoc(const Params &p)
     // Check parameters
     if (blkSize < 4 || !isPowerOf2(blkSize)) {
         fatal("Block size must be at least 4 and a power of 2");
+    }
+
+    westStats = nullptr;
+    if (enableWestStats) {
+        bool useLruPolicy = dynamic_cast<replacement_policy::LRU*>(
+                replacementPolicy) != nullptr;
+        fatal_if(!useLruPolicy, "LRU replacement policy is required for WEST");
+
+        westStats = new WestTagStats(*this);
     }
 }
 
@@ -115,6 +126,101 @@ BaseSetAssoc::moveBlock(CacheBlk *src_blk, CacheBlk *dest_blk)
     // the one that is being moved.
     replacementPolicy->invalidate(src_blk->replacementData);
     replacementPolicy->reset(dest_blk->replacementData);
+}
+
+BaseSetAssoc::WestTagStats::WestTagStats(BaseSetAssoc &_tags)
+    : statistics::Group(&_tags),
+    tags(_tags),
+    _name(_tags.name() + ".westStats"),
+    recentSetCount(8),
+
+    ADD_STAT(setStackDistance, statistics::units::Count::get(),
+            "The number of times a data block in a certain set and stack "
+            "position is accessed."),
+    ADD_STAT(setReuse, statistics::units::Count::get(),
+            "The number of times an access is to a set in a certain position "
+            "of the most-recently visited sets."),
+    ADD_STAT(writeCount, statistics::units::Count::get(),
+            "Number of writes for each set and stack position."),
+    ADD_STAT(readCount, statistics::units::Count::get(),
+            "Number of reads for each set and stack position."),
+    ADD_STAT(setAccessDistribution, statistics::units::Count::get(),
+            "The number of accesses to each set.")
+{
+}
+
+void
+BaseSetAssoc::WestTagStats::regStats()
+{
+    using namespace statistics;
+
+    statistics::Group::regStats();
+
+    // One additional element for set accesses beyond the number tracked.
+    setStackDistance
+        .init(tags.indexingPolicy->numSets, tags.indexingPolicy->assoc + 1);
+
+    setReuse
+        .init(recentSetCount + 1);
+
+    writeCount
+        .init(tags.indexingPolicy->numSets, tags.indexingPolicy->assoc + 1);
+
+    readCount
+        .init(tags.indexingPolicy->numSets, tags.indexingPolicy->assoc + 1);
+
+    setAccessDistribution
+        .init(tags.indexingPolicy->numSets);
+}
+
+
+void
+BaseSetAssoc::WestTagStats::updateRecentSets(uint32_t set)
+{
+    // Check to see if this set is already in the list.
+    for (auto it = recentSets.begin(); it != recentSets.end(); it++) {
+        if (*it == set) {
+            // This set is already in the list. Move it to the front of the
+            // list (most recent).
+            recentSets.erase(it);
+            recentSets.push_front(set);
+            return;
+        }
+    }
+
+    // This set is not in the list of recent sets.
+
+    // Make space if needed.
+    if (recentSets.size() == recentSetCount) {
+        recentSets.pop_back();
+    }
+
+    // Add this set as the most recent set.
+    recentSets.push_front(set);
+
+    // Print for debugging.
+    std::ostringstream str;
+    ccprintf(str, "[");
+    for (auto it = recentSets.begin(); it != recentSets.end(); it++) {
+        ccprintf(str, "%llu, ", *it);
+    }
+    ccprintf(str, "]");
+    DPRINTF(WestStats, "%s: recentSets: %s\n", __func__, str.str());
+}
+
+
+uint32_t
+BaseSetAssoc::WestTagStats::getSetReuseDistance(uint32_t set)
+{
+    int i = 0;
+    for (auto it = recentSets.begin(); it != recentSets.end(); it++) {
+        if (*it == set) {
+            return i;
+        }
+        i++;
+    }
+
+    return recentSetCount;
 }
 
 } // namespace gem5

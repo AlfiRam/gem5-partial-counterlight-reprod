@@ -66,6 +66,7 @@ namespace gem5
 
 class System;
 class ReplaceableEntry;
+// class BaseSetAssoc;
 
 /**
  * A common base class of Cache tagstore objects.
@@ -104,6 +105,8 @@ class BaseTags : public ClockedObject
 
     /** The data blocks, 1 per cache block. */
     std::unique_ptr<uint8_t[]> dataBlks;
+
+    // friend class BaseSetAssoc;
 
     /**
      * TODO: It would be good if these stats were acquired after warmup.

@@ -41,6 +41,7 @@ namespace gem5
 {
 
 struct LRURPParams;
+class BaseSetAssoc;
 
 namespace replacement_policy
 {
@@ -107,6 +108,9 @@ class LRU : public Base
      * @return A shared pointer to the new replacement data.
      */
     std::shared_ptr<ReplacementData> instantiateEntry() override;
+
+    // For WEST-style data collection
+    friend class ::gem5::BaseSetAssoc;
 };
 
 } // namespace replacement_policy
