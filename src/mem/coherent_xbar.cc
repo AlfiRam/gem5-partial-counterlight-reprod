@@ -267,7 +267,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     bool respond_directly = false;
     // store the original address as an address mapper could possibly
     // modify the address upon a sendTimingRequest
-    const Addr addr(pkt->getAddr());
+    const Addr addr(pkt->isTranslatedPageSwap() ?
+                    pkt->getOriginalAddr() : pkt->getAddr());
     if (sink_packet) {
         DPRINTF(CoherentXBar, "%s: Not forwarding %s\n", __func__,
                 pkt->print());

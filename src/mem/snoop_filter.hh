@@ -259,6 +259,12 @@ class SnoopFilter : public SimObject
   private:
 
     /**
+     * Get the block address associated with a packet, but use the translated
+     * address if this is a translated packet.
+     */
+    Addr getBlockAddr(const Packet *pkt, unsigned int blk_size);
+
+    /**
      * Removes snoop filter items which have no requestors and no holders.
      */
     void eraseIfNullEntry(SnoopFilterCache::iterator& sf_it);

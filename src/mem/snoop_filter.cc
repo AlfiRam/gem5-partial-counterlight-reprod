@@ -52,6 +52,16 @@ namespace gem5
 
 const int SnoopFilter::SNOOP_MASK_SIZE;
 
+Addr
+SnoopFilter::getBlockAddr(const Packet *pkt, unsigned int blk_size)
+{
+    if (!pkt->isTranslatedPageSwap()) {
+        return pkt->getBlockAddr(blk_size);
+    } else {
+        return pkt->getOriginalAddr() & ~(Addr(blk_size - 1));
+    }
+}
+
 void
 SnoopFilter::eraseIfNullEntry(SnoopFilterCache::iterator& sf_it)
 {
@@ -73,7 +83,7 @@ SnoopFilter::lookupRequest(const Packet* cpkt, const ResponsePort&
     // check if the packet came from a cache
     bool allocate = !cpkt->req->isUncacheable() && cpu_side_port.isSnooping()
         && cpkt->fromCache();
-    Addr line_addr = cpkt->getBlockAddr(linesize);
+    Addr line_addr = getBlockAddr(cpkt, linesize);
     if (cpkt->isSecure()) {
         line_addr |= LineSecure;
     }
@@ -187,7 +197,7 @@ SnoopFilter::lookupSnoop(const Packet* cpkt)
 
     assert(cpkt->isRequest());
 
-    Addr line_addr = cpkt->getBlockAddr(linesize);
+    Addr line_addr = getBlockAddr(cpkt, linesize);
     if (cpkt->isSecure()) {
         line_addr |= LineSecure;
     }
@@ -258,7 +268,7 @@ SnoopFilter::updateSnoopResponse(const Packet* cpkt,
         return;
     }
 
-    Addr line_addr = cpkt->getBlockAddr(linesize);
+    Addr line_addr = getBlockAddr(cpkt, linesize);
     if (cpkt->isSecure()) {
         line_addr |= LineSecure;
     }
@@ -308,7 +318,7 @@ SnoopFilter::updateSnoopForward(const Packet* cpkt,
     assert(cpkt->isResponse());
     assert(cpkt->cacheResponding());
 
-    Addr line_addr = cpkt->getBlockAddr(linesize);
+    Addr line_addr = getBlockAddr(cpkt, linesize);
     if (cpkt->isSecure()) {
         line_addr |= LineSecure;
     }
@@ -350,7 +360,7 @@ SnoopFilter::updateResponse(const Packet* cpkt, const ResponsePort&
         return;
 
     // next check if we actually allocated an entry
-    Addr line_addr = cpkt->getBlockAddr(linesize);
+    Addr line_addr = getBlockAddr(cpkt, linesize);
     if (cpkt->isSecure()) {
         line_addr |= LineSecure;
     }
