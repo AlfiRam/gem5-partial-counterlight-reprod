@@ -26,16 +26,16 @@ class CXLMemory(PciDevice):
         "CXL expander memory range that can be identified as system memory",
     )
 
-    VendorID = 0x8086
-    DeviceID = 0x7890
-    Command = 0x0
-    Status = 0x280
+    VendorID = 0x8086  # Intel
+    DeviceID = 0x7890  # Custom ID
+    Command = 0x0  # https://wiki.osdev.org/PCI#Command_Register
+    Status = 0x280  # https://wiki.osdev.org/PCI#Status_Register
     Revision = 0x0
-    ClassCode = 0x05
-    SubClassCode = 0x00
-    ProgIF = 0x00
+    ClassCode = 0x05  # Memory controller
+    SubClassCode = 0x00  # RAM
+    ProgIF = 0x00  # RAM controller
     InterruptLine = 0x1F
-    InterruptPin = 0x01
+    InterruptPin = 0x01  # Pin A
 
     # Primary
     BAR0 = PciMemBar(size="2GiB")
