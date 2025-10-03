@@ -412,6 +412,12 @@ def handle_max_insts():
     yield True
 
 
+def handle_interrupt():
+    print("Interrupted by user. Stopping.")
+    exit(1)
+    yield True
+
+
 simulator = Simulator(
     board=board,
     on_exit_event={
@@ -419,6 +425,7 @@ simulator = Simulator(
         ExitEvent.WORKBEGIN: handle_workbegin(),
         ExitEvent.WORKEND: handle_workend(),
         ExitEvent.MAX_INSTS: handle_max_insts(),
+        ExitEvent.USER_INTERRUPT: handle_interrupt(),
     },
 )
 
