@@ -245,6 +245,17 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
+        "--cxl-memory-type",
+        type=str,
+        help="Set CXL memory type. For CXL on DRAM mode only.",
+        default="DRAM",
+        choices=[
+            "DRAM",
+            "Flash",
+        ],
+    )
+
+    parser.add_argument(
         "--cxl-latency",
         type=str,
         help="Custom CXL latency (per direction). For CXL on DRAM mode only.",
@@ -495,9 +506,37 @@ def create_board(args):
 
     # CXL memory
     if args.cxl_mode != "Disabled" and toMemorySize(args.cxl_size) > 0:
-        cxl_memory = DIMM_DDR5_4400(
-            size=args.cxl_size, os_size=f"{cxl_os_size}B"
-        )
+        if args.cxl_memory_type == "DRAM":
+            cxl_memory = DIMM_DDR5_4400(
+                size=args.cxl_size, os_size=f"{cxl_os_size}B"
+            )
+        elif args.cxl_memory_type == "Flash":
+            # Flash-like memory (much higher latency than DRAM)
+            # TODO Should test to make sure these numbers make sense
+            # cxl_memory = SingleChannelSimpleMemory(
+            #     latency="100ns", # Base latency time, add the time from delay component to this
+            #     latency_var="0", # No variation in latency needed
+            #     bandwidth="27GiB/s", # CMM-H peak bandwidth from soltaniyeh25
+            #     size=args.cxl_size,
+            #     os_size=f"{cxl_os_size}B"
+            # )
+            # # Reads add 350ns. Divide by 2 to split both ways
+            # cxl_latency_read_req = "175ns"
+            # cxl_latency_read_resp = "175ns"
+            # # Writes add 500ns. Divide by 2 to split both ways
+            # cxl_latency_write_req = "250ns"
+            # cxl_latency_write_resp = "250ns"
+
+            # Broken so trying this for now
+            cxl_memory = DIMM_DDR5_4400(
+                size=args.cxl_size, os_size=f"{cxl_os_size}B"
+            )
+            # Reads add 350ns. Divide by 2 to split both ways
+            cxl_latency_read_req = "175ns"
+            cxl_latency_read_resp = "175ns"
+            # Writes add 500ns. Divide by 2 to split both ways
+            cxl_latency_write_req = "250ns"
+            cxl_latency_write_resp = "250ns"
     else:
         cxl_memory = None
 
