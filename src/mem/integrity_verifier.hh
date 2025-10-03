@@ -331,12 +331,22 @@ class AbstractIntegrityVerifier : public ClockedObject
      */
     std::unordered_set<RequestPtr> responseReady;
 
-    AddrRange dramFullRange;
-    AddrRange dramOsRange;
-    AddrRange dramIntegrityRange;
-    AddrRange cxlFullRange;
-    AddrRange cxlOsRange;
-    AddrRange cxlIntegrityRange;
+    /**
+     * Ranges are expected to be constructed where all ranges in each list are
+     * disjoint, and sorted by starting address.
+     *
+     * Additionally, the "full" ranges and the "OS" ranges must specifically
+     * be constructed such that the full ranges are identical to the OS ranges,
+     * but there may be additional space at the end of the last full range or
+     * additional ranges in the full range list.
+     */
+
+    AddrRangeList dramFullRanges;
+    AddrRangeList dramOsRanges;
+    AddrRangeList dramIntegrityRanges;
+    AddrRangeList cxlFullRanges;
+    AddrRangeList cxlOsRanges;
+    AddrRangeList cxlIntegrityRanges;
 
     enums::IntegrityAllocationMode integrityAllocationMode;
 

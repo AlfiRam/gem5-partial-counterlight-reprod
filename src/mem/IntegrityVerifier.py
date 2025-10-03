@@ -89,18 +89,15 @@ class AbstractIntegrityVerifier(ClockedObject):
     )
     metadata_cache_assoc = Param.Int(8, "Metadata cache associativity")
 
-    dram_full_range = Param.AddrRange(
-        AddrRange(0, size=0), "Full available range of DRAM"
+    # All ranges are assumed to be disjoint and in sorted order.
+    dram_full_ranges = VectorParam.AddrRange(
+        [], "Full available range(s) of DRAM"
     )
-    dram_os_range = Param.AddrRange(
-        AddrRange(0, size=0), "OS-visible range of DRAM"
+    dram_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
+    cxl_full_ranges = VectorParam.AddrRange(
+        [], "Full available range(s) of CXL"
     )
-    cxl_full_range = Param.AddrRange(
-        AddrRange(0, size=0), "Full available range of CXL"
-    )
-    cxl_os_range = Param.AddrRange(
-        AddrRange(0, size=0), "OS-visible range of DRAM"
-    )
+    cxl_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
 
     integrity_allocation_mode = Param.IntegrityAllocationMode(
         "DramOnly",

@@ -37,6 +37,7 @@
 
 #include "mem/integrity_verifier.hh"
 
+#include "base/addr_range_list.hh"
 #include "debug/AbstractIntegrityVerifier.hh"
 #include "debug/AbstractIntegrityVerifierInit.hh"
 #include "debug/AbstractIntegrityVerifierReqs.hh"
@@ -60,30 +61,79 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       reqQueue(*this, requestPort),
       respQueue(*this, responsePort),
       snoopRespQueue(*this, requestPort),
-      dramFullRange(p.dram_full_range),
-      dramOsRange(p.dram_os_range),
-      dramIntegrityRange(AddrRange(dramOsRange.end(), dramFullRange.end())),
-      cxlFullRange(p.cxl_full_range),
-      cxlOsRange(p.cxl_os_range),
-      cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
+      dramFullRanges(p.dram_full_ranges.begin(), p.dram_full_ranges.end()),
+      dramOsRanges(p.dram_os_ranges.begin(), p.dram_os_ranges.end()),
+      cxlFullRanges(p.cxl_full_ranges.begin(), p.cxl_full_ranges.end()),
+      cxlOsRanges(p.cxl_os_ranges.begin(), p.cxl_os_ranges.end()),
       integrityAllocationMode(p.integrity_allocation_mode),
       integrityTreeType(p.integrity_tree_type),
       _requestorId(p.system->getRequestorId(this)),
       integrityHashingLatency(Cycles(p.integrity_hashing_latency)),
       stats(this)
 {
+    // Compute integrity memory ranges.
+    auto dramOsRangeIt = dramOsRanges.begin();
+    for (auto dramFullRangeIt = dramFullRanges.begin();
+        dramFullRangeIt != dramFullRanges.end();
+        dramFullRangeIt++)
+    {
+        if (dramOsRangeIt->end() >= dramFullRangeIt->end()) {
+            // The OS range ends at the end of this range or later.
+            // The integrity range may start at the next range in the list.
+            dramOsRangeIt++;
+            continue;
+        }
+
+        // We can use (at least some of) this range for integrity.
+        if (dramOsRangeIt == dramOsRanges.end()) {
+            // The entire range can be used for integrity.
+            dramIntegrityRanges.emplace_back(
+                AddrRange(dramFullRangeIt->start(), dramFullRangeIt->end()));
+        } else {
+            // This range can be partially used for integrity.
+            dramIntegrityRanges.emplace_back(
+                AddrRange(dramOsRangeIt->end(), dramFullRangeIt->end()));
+            dramOsRangeIt++;
+        }
+    }
+
+    auto cxlOsRangeIt = cxlOsRanges.begin();
+    for (auto cxlFullRangeIt = cxlFullRanges.begin();
+        cxlFullRangeIt != cxlFullRanges.end();
+        cxlFullRangeIt++)
+    {
+        if (cxlOsRangeIt->end() >= cxlFullRangeIt->end()) {
+            // The OS range ends at the end of this range or later.
+            // The integrity range may start at the next range in the list.
+            cxlOsRangeIt++;
+            continue;
+        }
+
+        // We can use (at least some of) this range for integrity.
+        if (cxlOsRangeIt == cxlOsRanges.end()) {
+            // The entire range can be used for integrity.
+            cxlIntegrityRanges.emplace_back(
+                AddrRange(cxlFullRangeIt->start(), cxlFullRangeIt->end()));
+        } else {
+            // This range can be partially used for integrity.
+            cxlIntegrityRanges.emplace_back(
+                AddrRange(cxlOsRangeIt->end(), cxlFullRangeIt->end()));
+            cxlOsRangeIt++;
+        }
+    }
+
     switch (integrityTreeType) {
         case enums::IntegrityTreeType::TimingTree:
         integrityTree = new TimingTree(
             (unsigned int)p.integrity_tree_arity,
-            dramOsRange.size() + cxlOsRange.size()
+            rangeListSize(dramOsRanges) + rangeListSize(cxlOsRanges)
         );
         break;
 
         case enums::IntegrityTreeType::TimingBmt:
         integrityTree = new TimingBmt(
             (unsigned int)p.integrity_tree_arity,
-            dramOsRange.size() + cxlOsRange.size()
+            rangeListSize(dramOsRanges) + rangeListSize(cxlOsRanges)
         );
         break;
 
@@ -117,32 +167,24 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
     }
 
     DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: dramFullRange: %s (%llu:%llu, size %llu)\n",
-        __func__, dramFullRange.to_string(),
-        dramFullRange.start(), dramFullRange.end(), dramFullRange.size());
+        "%s: dramFullRanges: %s\n",
+        __func__, rangeListToString(dramFullRanges));
     DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: dramOsRange: %s (%llu:%llu, size %llu)\n",
-        __func__, dramOsRange.to_string(),
-        dramOsRange.start(), dramOsRange.end(), dramOsRange.size());
+        "%s: dramOsRanges: %s\n",
+        __func__, rangeListToString(dramOsRanges));
     DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: dramIntegrityRange: %s (%llu:%llu, size %llu)\n",
-        __func__, dramIntegrityRange.to_string(),
-        dramIntegrityRange.start(), dramIntegrityRange.end(),
-        dramIntegrityRange.size());
+        "%s: dramIntegrityRanges: %s\n",
+        __func__, rangeListToString(dramIntegrityRanges));
 
     DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: cxlFullRange: %s (%llu:%llu, size %llu)\n",
-        __func__, cxlFullRange.to_string(),
-        cxlFullRange.start(), cxlFullRange.end(), cxlFullRange.size());
+        "%s: cxlFullRanges: %s\n",
+        __func__, rangeListToString(cxlFullRanges));
     DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: cxlOsRange: %s (%llu:%llu, size %llu)\n",
-        __func__, cxlOsRange.to_string(),
-        cxlOsRange.start(), cxlOsRange.end(), cxlOsRange.size());
+        "%s: cxlOsRanges: %s\n",
+        __func__, rangeListToString(cxlOsRanges));
     DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: cxlIntegrityRange: %s (%llu:%llu, size %llu)\n",
-        __func__, cxlIntegrityRange.to_string(),
-        cxlIntegrityRange.start(), cxlIntegrityRange.end(),
-        cxlIntegrityRange.size());
+        "%s: cxlIntegrityRange: %s\n",
+        __func__, rangeListToString(cxlIntegrityRanges));
 }
 
 AbstractIntegrityVerifier::~AbstractIntegrityVerifier()
@@ -170,8 +212,8 @@ AbstractIntegrityVerifier::init()
               "DRAM integrity size: %lld\n"
               "CXL integrity size: %lld\n",
               integrityTree->statStructureSize(),
-              dramIntegrityRange.size(),
-              cxlIntegrityRange.size());
+              rangeListSize(dramIntegrityRanges),
+              rangeListSize(cxlIntegrityRanges));
     }
 }
 
@@ -239,13 +281,33 @@ AbstractIntegrityVerifier::getIntegrityNodeLocation(size_t node)
     if (integrityAllocationMode ==
             enums::IntegrityAllocationMode::DramOnly) {
         // All integrity data should be in DRAM
-        addr = dramIntegrityRange.start() +
-                integrityTree->simulatedBlockOffset(node);
+        auto offset = integrityTree->simulatedBlockOffset(node);
+        for (auto range : dramIntegrityRanges) {
+            if (offset > range.size()) {
+                // This should be in a following range in the list.
+                // We will "eat" the offset amount corresponding to the range
+                // being skipped over.
+                offset -= range.size();
+                continue;
+            }
+            addr = range.start() + offset;
+            break;
+        }
     } else if (integrityAllocationMode ==
             enums::IntegrityAllocationMode::CxlOnly) {
         // All integrity data should be in CXL
-        addr = cxlIntegrityRange.start() +
-                integrityTree->simulatedBlockOffset(node);
+        auto offset = integrityTree->simulatedBlockOffset(node);
+        for (auto range : cxlIntegrityRanges) {
+            if (offset > range.size()) {
+                // This should be in a following range in the list.
+                // We will "eat" the offset amount corresponding to the range
+                // being skipped over.
+                offset -= range.size();
+                continue;
+            }
+            addr = range.start() + offset;
+            break;
+        }
     } else {
         panic("Integrity allocation mode unimplemented.");
     }
@@ -1116,6 +1178,17 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
         assert(packetLookup[pkt->req] == pkt);
     }
 
+    // Verify requests are going to places that make sense.
+    if (pkt->isMetadataRequest()) {
+        // This is integrity metadata.
+        assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
+               rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+    } else if (needsVerification(pkt->getAddr())) {
+        // This is application data.
+        assert(rangeListContains(dramOsRanges, pkt->getAddr()) ||
+               rangeListContains(cxlOsRanges, pkt->getAddr()));
+    }
+
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
         __func__, pkt->print());
     requestPort.schedTimingReq(pkt, curTick() + Cycles(1));
@@ -1178,42 +1251,58 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
     // This request should have been entered prior.
     assert(arrivalTime.find(pkt->req) != arrivalTime.end());
 
-    stats.requestsHandled++;
-    stats.totalRequestingTime += curTick() - arrivalTime[pkt->req];
-    if (pkt->isMetadataRequest()) {
-        stats.metadataReqHandled++;
-        stats.totalMetadataReqTime += curTick() - arrivalTime[pkt->req];
-    } else {
-        stats.dataReqHandled++;
-        stats.totalDataReqTime += curTick() - arrivalTime[pkt->req];
-    }
+    if (needsVerification(pkt->getAddr())) {
+        stats.requestsHandled++;
+        stats.totalRequestingTime += curTick() - arrivalTime[pkt->req];
+        if (pkt->isMetadataRequest()) {
+            // Metadata request
+            stats.metadataReqHandled++;
+            stats.totalMetadataReqTime += curTick() - arrivalTime[pkt->req];
 
-    if (dramFullRange.contains(pkt->getAddr())) {
-        stats.reqHandledDram++;
-        stats.totalReqTimeDram +=
-            curTick() - arrivalTime[pkt->req];
-    } else if (cxlFullRange.contains(pkt->getAddr())) {
-        stats.reqHandledCxl++;
-        stats.totalReqTimeCxl +=
-            curTick() - arrivalTime[pkt->req];
-    }
+            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+                // Integrity data for DRAM
+                stats.reqHandledDramIntegrity++;
+                stats.totalReqTimeDramIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Integrity data for CXL
+                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
 
-    if (dramOsRange.contains(pkt->getAddr())) {
-        stats.reqHandledDramOs++;
-        stats.totalReqTimeDramOs +=
-            curTick() - arrivalTime[pkt->req];
-    } else if (dramIntegrityRange.contains(pkt->getAddr())) {
-        stats.reqHandledDramIntegrity++;
-        stats.totalReqTimeDramIntegrity +=
-            curTick() - arrivalTime[pkt->req];
-    } else if (cxlOsRange.contains(pkt->getAddr())) {
-        stats.reqHandledCxlOs++;
-        stats.totalReqTimeCxlOs +=
-            curTick() - arrivalTime[pkt->req];
-    } else if (cxlIntegrityRange.contains(pkt->getAddr())) {
-        stats.reqHandledCxlIntegrity++;
-        stats.totalReqTimeCxlIntegrity +=
-            curTick() - arrivalTime[pkt->req];
+                stats.reqHandledCxlIntegrity++;
+                stats.totalReqTimeCxlIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        } else {
+            // Non-metadata request.
+            stats.dataReqHandled++;
+            stats.totalDataReqTime += curTick() - arrivalTime[pkt->req];
+
+            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+                // Application data for DRAM
+                stats.reqHandledDramOs++;
+                stats.totalReqTimeDramOs +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Application data for CXL
+                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
+
+                stats.reqHandledCxlOs++;
+                stats.totalReqTimeCxlOs +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        }
+
+        if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+            stats.reqHandledDram++;
+            stats.totalReqTimeDram +=
+                curTick() - arrivalTime[pkt->req];
+        } else if (rangeListContains(cxlFullRanges, pkt->getAddr())) {
+            stats.reqHandledCxl++;
+            stats.totalReqTimeCxl +=
+                curTick() - arrivalTime[pkt->req];
+        }
+        }
+
     }
 
     arrivalTime.erase(pkt->req);
@@ -1816,8 +1905,8 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
 bool
 AbstractIntegrityVerifier::hasValidRanges()
 {
-    bool dramIntegrityRangeValid = dramIntegrityRange.end() != Addr(0);
-    bool cxlIntegrityRangeValid = cxlIntegrityRange.end() != Addr(0);
+    bool dramIntegrityRangeValid = dramIntegrityRanges.size() > 0;
+    bool cxlIntegrityRangeValid = cxlIntegrityRanges.size() > 0;
 
     if (integrityAllocationMode ==
             enums::IntegrityAllocationMode::DramOnly) {
@@ -1843,17 +1932,19 @@ AbstractIntegrityVerifier::treeSizeValid()
                 enums::IntegrityAllocationMode::DramOnly) {
         DPRINTF(AbstractIntegrityVerifier,
             "%s: DRAM size: %lld\n",
-            __func__, dramIntegrityRange.size());
+            __func__, rangeListSize(dramIntegrityRanges));
 
-        return integrityTree->statStructureSize() <= dramIntegrityRange.size();
+        return integrityTree->statStructureSize() <=
+                rangeListSize(dramIntegrityRanges);
     }
     else if (integrityAllocationMode ==
                 enums::IntegrityAllocationMode::CxlOnly) {
         DPRINTF(AbstractIntegrityVerifier,
             "%s: CXL size: %lld\n",
-            __func__, cxlIntegrityRange.size());
+            __func__, rangeListSize(cxlIntegrityRanges));
 
-        return integrityTree->statStructureSize() <= cxlIntegrityRange.size();
+        return integrityTree->statStructureSize() <=
+                rangeListSize(cxlIntegrityRanges);
     }
     else if (integrityAllocationMode ==
                 enums::IntegrityAllocationMode::BasicMix) {
@@ -1869,10 +1960,10 @@ AbstractIntegrityVerifier::needsVerification(Addr addr)
     assert(hasValidRanges());
 
     return (
-        dramOsRange.contains(addr) ||
-        dramIntegrityRange.contains(addr) ||
-        cxlOsRange.contains(addr) ||
-        cxlIntegrityRange.contains(addr)
+        rangeListContains(dramOsRanges, addr) ||
+        rangeListContains(dramIntegrityRanges, addr) ||
+        rangeListContains(cxlOsRanges, addr) ||
+        rangeListContains(cxlIntegrityRanges, addr)
     );
 }
 
