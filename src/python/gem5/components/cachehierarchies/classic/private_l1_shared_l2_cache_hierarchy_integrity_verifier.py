@@ -303,39 +303,49 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             for _, port in board.get_mem_ports():
                 self.membus.mem_side_ports = port
 
+        # Retrieve/compute memory ranges.
+        assert board._main_memory_type == "DRAM"
+
         dram_memory = None
         cxl_memory = None
-        primary_memory = board.get_indexed_memory(0)
-        primary_full_range = AddrRange(
-            start=board.get_starting_memory_addr(0),
-            size=primary_memory.get_size(),
-        )
-        primary_os_range = AddrRange(
-            start=board.get_starting_memory_addr(0),
-            size=primary_memory.get_os_size(),
-        )
+        primary_memory = board.get_memory()
+        primary_full_ranges = [
+            AddrRange(
+                start=board.get_starting_memory_addr(i),
+                size=primary_memory[i].get_size(),
+            )
+            for i in range(len(primary_memory))
+        ]
+        primary_os_ranges = [
+            AddrRange(
+                start=board.get_starting_memory_addr(i),
+                size=primary_memory[i].get_os_size(),
+            )
+            for i in range(len(primary_memory))
+            if primary_memory[i].get_os_size() > 0
+        ]
         match board._main_memory_type:
             case "DRAM":
                 dram_memory = primary_memory
-                dram_full_range = primary_full_range
-                dram_os_range = primary_os_range
+                dram_full_ranges = primary_full_ranges
+                dram_os_ranges = primary_os_ranges
 
             case "CXL":
                 cxl_memory = primary_memory
-                cxl_full_range = primary_full_range
-                cxl_os_range = primary_os_range
+                cxl_full_ranges = primary_full_ranges
+                cxl_os_ranges = primary_os_ranges
 
             case _:
                 pass
 
-        secondary_memory = board.get_indexed_memory(1)
+        secondary_memory = board.get_indexed_memory(len(primary_memory))
         if secondary_memory:
             secondary_full_range = AddrRange(
-                start=board.get_starting_memory_addr(1),
+                start=board.get_starting_memory_addr(len(primary_memory)),
                 size=secondary_memory.get_size(),
             )
             secondary_os_range = AddrRange(
-                start=board.get_starting_memory_addr(1),
+                start=board.get_starting_memory_addr(len(primary_memory)),
                 size=secondary_memory.get_os_size(),
             )
             match board._secondary_memory_type:
@@ -343,35 +353,35 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
                     # The case where there are two DRAMs is not yet handled.
                     assert dram_memory is None
                     dram_memory = secondary_memory
-                    dram_full_range = secondary_full_range
-                    dram_os_range = secondary_os_range
+                    dram_full_ranges = [secondary_full_range]
+                    dram_os_ranges = [secondary_os_range]
 
                 case "CXL":
                     # The case where there are two CXL memories is not yet handled.
                     assert cxl_memory is None
                     cxl_memory = secondary_memory
-                    cxl_full_range = secondary_full_range
-                    cxl_os_range = secondary_os_range
+                    cxl_full_ranges = [secondary_full_range]
+                    cxl_os_ranges = [secondary_os_range]
 
                 case _:
                     pass
 
         # Configure verifier and page swapper (if applicable)
         if dram_memory is not None:
-            self.verifier.dram_full_range = dram_full_range
-            self.verifier.dram_os_range = dram_os_range
+            self.verifier.dram_full_ranges = dram_full_ranges
+            self.verifier.dram_os_ranges = dram_os_ranges
 
             if self._use_page_swapper:
-                self.page_swapper.dram_full_range = dram_full_range
-                self.page_swapper.dram_os_range = dram_os_range
+                self.page_swapper.dram_full_ranges = dram_full_ranges
+                self.page_swapper.dram_os_ranges = dram_os_ranges
 
         if cxl_memory is not None:
-            self.verifier.cxl_full_range = cxl_full_range
-            self.verifier.cxl_os_range = cxl_os_range
+            self.verifier.cxl_full_ranges = cxl_full_ranges
+            self.verifier.cxl_os_ranges = cxl_os_ranges
 
             if self._use_page_swapper:
-                self.page_swapper.cxl_full_range = cxl_full_range
-                self.page_swapper.cxl_os_range = cxl_os_range
+                self.page_swapper.cxl_full_ranges = cxl_full_ranges
+                self.page_swapper.cxl_os_ranges = cxl_os_ranges
 
         if self._integrity_allocation_mode:
             self.verifier.integrity_allocation_mode = (

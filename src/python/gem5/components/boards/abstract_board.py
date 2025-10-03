@@ -82,7 +82,7 @@ class AbstractBoard:
         self,
         clk_freq: str,
         processor: "AbstractProcessor",
-        memory: Optional["AbstractMemorySystem"] = None,
+        memory: Optional[List["AbstractMemorySystem"]] = [],
         cache_hierarchy: Optional["AbstractCacheHierarchy"] = None,
         cxl_mode: Optional[str] = "Disabled",
         cxl_memory: Optional["AbstractMemorySystem"] = None,
@@ -131,7 +131,7 @@ class AbstractBoard:
 
         self._indexed_memory = []
 
-        if memory:
+        if len(memory) > 0:
             self.memory = memory
             self._has_memory = True
         else:
@@ -143,8 +143,8 @@ class AbstractBoard:
         # Set the primary memory type.
         match self._main_memory_type:
             case "DRAM":
-                assert self.memory is not None
-                self._indexed_memory.append(self.memory)
+                assert len(self.memory) > 0
+                self._indexed_memory.extend(self.memory)
             case "CXL":
                 assert self.cxl_memory is not None
                 self._indexed_memory.append(self.cxl_memory)
@@ -159,7 +159,7 @@ class AbstractBoard:
             case "CXL":
                 # DRAM may be secondary memory.
                 if memory:
-                    self._indexed_memory.append(self.memory)
+                    self._indexed_memory.extend(self.memory)
                     self._secondary_memory_type = "DRAM"
 
         self._cache_hierarchy = cache_hierarchy
@@ -199,7 +199,7 @@ class AbstractBoard:
         """
         return self.processor
 
-    def get_memory(self) -> "AbstractMemory":
+    def get_memory(self) -> List["AbstractMemory"]:
         """Get the memory (RAM) connected to the board.
 
         :returns: The memory system.
@@ -250,7 +250,10 @@ class AbstractBoard:
             in ascending order.
         """
         if self.has_memory():
-            return self.get_memory().get_mem_ports()
+            ports = []
+            for m in self.get_memory():
+                ports.extend(m.get_mem_ports())
+            return ports
         else:
             # There are no applicable memory ports if CXL is used as the
             # main form of memory.
@@ -508,7 +511,8 @@ class AbstractBoard:
 
         # Incorporate the memory into the motherboard.
         if self.has_memory():
-            self.get_memory().incorporate_memory(self)
+            for m in self.get_memory():
+                m.incorporate_memory(self)
         if self._cxl_mode == "DRAM":
             self.get_cxl_memory().incorporate_memory(self)
 
@@ -527,7 +531,8 @@ class AbstractBoard:
         if self.get_cache_hierarchy():
             self.get_cache_hierarchy()._post_instantiate()
         if self.has_memory():
-            self.get_memory()._post_instantiate()
+            for m in self.get_memory():
+                m._post_instantiate()
         if self._cxl_mode == "DRAM":
             self.get_cxl_memory()._post_instantiate()
 
@@ -561,7 +566,8 @@ class AbstractBoard:
         # 3. Call any of the components' `_pre_instantiate` functions.
         self.get_processor()._pre_instantiate(root)
         if self.has_memory():
-            self.get_memory()._pre_instantiate(root)
+            for m in self.get_memory():
+                m._pre_instantiate(root)
         if self._cxl_mode == "DRAM":
             self.get_cxl_memory()._pre_instantiate(root)
         if self.get_cache_hierarchy():

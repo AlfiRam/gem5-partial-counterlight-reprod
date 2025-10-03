@@ -92,7 +92,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         clk_freq: str,
         processor: AbstractProcessor,
         cache_hierarchy: AbstractCacheHierarchy,
-        memory: Optional[AbstractMemorySystem] = None,
+        memory: Optional[List[AbstractMemorySystem]] = [],
         cxl_mode: Optional[str] = "Disabled",
         cxl_memory: Optional[AbstractMemorySystem] = None,
         is_asic: Optional[bool] = False,
@@ -136,6 +136,16 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             # 4GB mark (after I/O hole)
             Addr(0x100000000),
         ]
+
+        # Dynamically build the next starting memory address(es) based on
+        # used memory
+        # i = 1
+        last_start = 0x100000000
+        for i in range(1, len(self._indexed_memory) - 1):
+            starts.append(
+                Addr(last_start + self._indexed_memory[i].get_size())
+            )
+            last_start += self._indexed_memory[i].get_size()
 
         return starts[index]
 
@@ -229,7 +239,9 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 if self._main_memory_type == "CXL":
                     cxl_mem_start = self.get_starting_memory_addr(0)
                 else:
-                    cxl_mem_start = self.get_starting_memory_addr(1)
+                    cxl_mem_start = self.get_starting_memory_addr(
+                        len(self.get_memory())
+                    )
 
                 cxl_dram = self.get_cxl_memory()
                 cxl_mem_range = AddrRange(
@@ -455,31 +467,44 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
         # Set up the OS-observable memory
         # Primary memory
-        primary_memory = self.get_indexed_memory(0)
-        primary_mem_full_range = AddrRange(
-            start=self.get_starting_memory_addr(0),
-            size=primary_memory.get_size(),
-        )
-        primary_mem_os_range = AddrRange(
-            start=self.get_starting_memory_addr(0),
-            size=primary_memory.get_os_size(),
-        )
-        print(
-            f"{self._main_memory_type} Memory Range (Full): ({primary_mem_full_range})"
-        )
-        print(
-            f"{self._main_memory_type} Memory Range (OS-observable): ({primary_mem_os_range})"
-        )
+        if self._main_memory_type == "DRAM":
+            primary_memory = self.get_memory()
+            primary_mem_full_ranges = [
+                AddrRange(
+                    start=self.get_starting_memory_addr(i),
+                    size=primary_memory[i].get_size(),
+                )
+                for i in range(len(primary_memory))
+            ]
+            primary_mem_os_ranges = [
+                AddrRange(
+                    start=self.get_starting_memory_addr(i),
+                    size=primary_memory[i].get_os_size(),
+                )
+                for i in range(len(primary_memory))
+            ]
+            for i in range(len(primary_memory)):
+                print(
+                    f"{self._main_memory_type} Memory Range [{i}] (Full): ({primary_mem_full_ranges[i]})"
+                )
+                print(
+                    f"{self._main_memory_type} Memory Range [{i}] (OS-observable): ({primary_mem_os_ranges[i]})"
+                )
+        else:
+            raise Exception(
+                f"Unsupported main memory type '{self._main_memory_type}"
+            )
 
         # Secondary memory
-        secondary_memory = self.get_indexed_memory(1)
+        # NOTE: Currently assumes there is DRAM added as primary memory.
+        secondary_memory = self.get_indexed_memory(len(self.get_memory()))
         if secondary_memory is not None:
             secondary_mem_full_range = AddrRange(
-                start=self.get_starting_memory_addr(1),
+                start=self.get_starting_memory_addr(len(self.get_memory())),
                 size=secondary_memory.get_size(),
             )
             secondary_mem_os_range = AddrRange(
-                start=self.get_starting_memory_addr(1),
+                start=self.get_starting_memory_addr(len(self.get_memory())),
                 size=secondary_memory.get_os_size(),
             )
             print(
@@ -496,7 +521,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         ]
 
         # Add primary memory range
-        if primary_memory.get_size() > toMemorySize("3GiB"):
+        if primary_memory[0].get_size() > toMemorySize("3GiB"):
             raise Exception(
                 "Main memory is provided as more than 3GB, which is "
                 "currently unsupported."
@@ -504,7 +529,7 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         entries.append(
             X86E820Entry(
                 addr=0x100000,
-                size=f"{primary_memory.get_os_size() - 0x100000:d}B",
+                size=f"{primary_memory[0].get_os_size() - 0x100000:d}B",
                 range_type=1,
             ),
         )
@@ -514,11 +539,21 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             X86E820Entry(addr=0xFFFF0000, size="64KiB", range_type=2)
         )
 
+        # Add remaining primary memory, if applicable.
+        for i in range(1, len(self.get_memory())):
+            entries.append(
+                X86E820Entry(
+                    addr=self.get_starting_memory_addr(i),
+                    size=f"{primary_memory[i].get_os_size()}B",
+                    range_type=1,
+                )
+            )
+
         # Add secondary memory if applicable.
         if secondary_memory is not None:
             entries.append(
                 X86E820Entry(
-                    addr=self.get_starting_memory_addr(1),
+                    addr=self.get_starting_memory_addr(len(self.get_memory())),
                     size=f"{secondary_memory.get_os_size()}B",
                     range_type=1,
                 )
@@ -581,23 +616,31 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
 
     @overrides(AbstractSystemBoard)
     def _setup_memory_ranges(self):
+        # Due to supporting multiple DRAM controllers, this assertion
+        # is added at this time.
+        assert self._main_memory_type == "DRAM"
+
         # Associate memory ranges with memory.
-        primary_memory = self.get_indexed_memory(0)
-        primary_range = AddrRange(
-            start=self.get_starting_memory_addr(0),
-            size=primary_memory.get_size(),
-        )
-        primary_memory.set_memory_range([primary_range])
-        if primary_memory.get_size() > toMemorySize("3GiB"):
+        primary_memory = self.get_memory()
+        primary_ranges = [
+            AddrRange(
+                start=self.get_starting_memory_addr(i),
+                size=primary_memory[i].get_size(),
+            )
+            for i in range(len(primary_memory))
+        ]
+        for i, memory in enumerate(primary_memory):
+            memory.set_memory_range([primary_ranges[i]])
+        if primary_memory[0].get_size() > toMemorySize("3GiB"):
             raise Exception(
                 "X86Board currently only supports memory sizes up "
                 "to 3GiB because of the I/O hole."
             )
 
-        secondary_memory = self.get_indexed_memory(1)
+        secondary_memory = self.get_indexed_memory(len(self.get_memory()))
         if secondary_memory:
             secondary_range = AddrRange(
-                start=self.get_starting_memory_addr(1),
+                start=self.get_starting_memory_addr(len(self.get_memory())),
                 size=secondary_memory.get_size(),
             )
             secondary_memory.set_memory_range([secondary_range])
@@ -608,8 +651,13 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             self._main_memory_type == "CXL" and self._cxl_mode == "DRAM"
         ):
             # DRAM is primary memory. Nothing crazy here.
-            for mc in primary_memory.get_memory_controllers():
-                cpu_abstract_mems.append(mc.dram)
+            for memory in primary_memory:
+                for mc in memory.get_memory_controllers():
+                    try:
+                        cpu_abstract_mems.append(mc.dram)
+                    except AttributeError:
+                        # Fallback for simple memory
+                        cpu_abstract_mems.append(mc)
         if secondary_memory and (
             self._secondary_memory_type == "DRAM"
             or (
@@ -618,7 +666,11 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             )
         ):
             for mc in secondary_memory.get_memory_controllers():
-                cpu_abstract_mems.append(mc.dram)
+                try:
+                    cpu_abstract_mems.append(mc.dram)
+                except AttributeError:
+                    # Fallback for simple memory
+                    cpu_abstract_mems.append(mc)
 
         self.memories = cpu_abstract_mems
 
@@ -628,7 +680,8 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         if self._main_memory_type == "DRAM" or (
             self._main_memory_type == "CXL" and self._cxl_mode == "DRAM"
         ):
-            self.mem_ranges.append(primary_range)
+            for r in primary_ranges:
+                self.mem_ranges.append(r)
 
         self.mem_ranges.append(
             AddrRange(0xC0000000, size=0x100000),  # For I/0

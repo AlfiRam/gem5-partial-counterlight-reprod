@@ -5,6 +5,7 @@ from m5.objects import (
     BadAddr,
     SystemXBar,
 )
+from m5.util import warn
 from m5.util.convert import toMemorySize
 
 from gem5.components.boards.x86_board import X86Board
@@ -40,7 +41,7 @@ def add_arguments(parser):
     parser.add_argument(
         "--dram-size",
         type=str,
-        required=False,
+        required=True,
         help="Total size of DRAM.",
         # default="3GiB",
         # default="0B",
@@ -350,11 +351,42 @@ def create_board(args):
 
     # DRAM
     if toMemorySize(args.dram_size) > 0:
-        memory = DIMM_DDR5_4400(
-            size=args.dram_size, os_size=f"{dram_os_size}B"
-        )
+        memory = []
+
+        if toMemorySize(args.dram_size) <= toMemorySize("3GiB"):
+            # Memory can fit within one memory controller.
+            memory.append(
+                DIMM_DDR5_4400(size=args.dram_size, os_size=f"{dram_os_size}B")
+            )
+        else:
+            warn(
+                f"Physical memory size specified is {args.dram_size} which "
+                "is greater than 3GiB. Twice the number of memory "
+                "controllers will be created."
+            )
+            # Create the first 3 GiB
+            if dram_os_size <= toMemorySize("3GiB"):
+                first_dram_os_size = dram_os_size
+                remaining_dram_os_size = 0
+            else:
+                first_dram_os_size = toMemorySize("3GiB")
+                remaining_dram_os_size = dram_os_size - toMemorySize("3GiB")
+            memory.append(
+                DIMM_DDR5_4400(size="3GiB", os_size=f"{first_dram_os_size}B")
+            )
+
+            # Create the remaining space
+            remaining_dram_size = toMemorySize(args.dram_size) - toMemorySize(
+                "3GiB"
+            )
+            memory.append(
+                DIMM_DDR5_4400(
+                    size=f"{remaining_dram_size}B",
+                    os_size=f"{remaining_dram_os_size}B",
+                )
+            )
     else:
-        memory = None
+        memory = []
 
     # CXL memory
     if args.cxl_mode != "Disabled" and toMemorySize(args.cxl_size) > 0:
