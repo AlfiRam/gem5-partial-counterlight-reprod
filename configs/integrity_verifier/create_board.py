@@ -282,6 +282,13 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
+        "--page-swap-epoch",
+        type=int,
+        default=200,
+        help="Number of requests between page swap attempts.",
+    )
+
+    parser.add_argument(
         "--use-ncx",
         action="store_true",
         help="Use noncoherent xbar structure.",
@@ -489,6 +496,7 @@ def create_board(args):
             integrity_tree_type=args.integrity_tree_type,
             integrity_tree_arity=args.integrity_tree_arity,
             use_page_swapper=args.use_page_swapper,
+            page_swap_epoch=args.page_swap_epoch,
         )
     elif args.no_cache:
         cache_hierarchy = NoCache(
