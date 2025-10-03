@@ -378,7 +378,7 @@ class AbstractIntegrityVerifier : public ClockedObject
     bool needsVerification(Addr addr);
 
     /**
-     * The simulated integrity tree. For now, this is a very basic tree.
+     * The simulated integrity tree.
      */
     AbstractIntegrityTree *integrityTree;
 

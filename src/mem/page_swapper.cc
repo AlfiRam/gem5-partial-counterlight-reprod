@@ -381,13 +381,14 @@ AbstractPageSwapper::schedResp(PacketPtr pkt)
 void
 AbstractPageSwapper::sendReqToMem(PacketPtr pkt)
 {
-    // Data requests should already be accounted for.
     if (!pkt->isForPageSwap()) {
+        // Non-page swap requests should already be added to packetLookup.
         assert(packetLookup[pkt->req] == pkt);
         // Make sure we aren't sending off something that's supposed to be on a
         // locked page.
         assert(lockedPages.find(getPageAddr(pkt)) == lockedPages.end());
 
+        // The packet should already have address translation handled.
         if (shouldHandlePacket(pkt)) {
             assert(pkt->isTranslatedPageSwap());
         }
@@ -1488,6 +1489,12 @@ AbstractPageSwapper::translateReq(PacketPtr pkt)
     assert(!pkt->isTranslatedPageSwap());
 
     Addr originalAddr = pkt->getAddr();
+
+    // Sanity check packet is not across page boundaries
+    Addr firstBytePage = getPageAddr(originalAddr);
+    Addr lastByte = pkt->getAddr() + pkt->getSize() - 1;
+    Addr lastBytePage = getPageAddr(lastByte);
+    assert(firstBytePage == lastBytePage);
 
     // Translate from the original address to the potentially modified address.
     Addr translatedAddr = translateAddr(originalAddr, false);

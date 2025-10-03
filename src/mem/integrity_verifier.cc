@@ -1174,7 +1174,7 @@ AbstractIntegrityVerifier::schedResp(PacketPtr pkt)
 void
 AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
 {
-    // Data requests should already be accounted for.
+    // Data requests should already be added to packetLookup.
     if (!pkt->isMetadataRequest()) {
         assert(packetLookup[pkt->req] == pkt);
     }
@@ -1225,7 +1225,7 @@ AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
 {
     assert(pkt->needsResponse());
 
-    // This request should not already have been marked to start.
+    // This request should not already have been marked as sent.
     assert(arrivalTime.find(pkt->req) == arrivalTime.end());
 
     // Take a note of the memory region being used.
