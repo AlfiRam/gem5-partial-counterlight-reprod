@@ -28,7 +28,7 @@ parser = argparse.ArgumentParser(
 add_arguments(parser)
 args = parser.parse_args()
 
-board, processor = create_board(args)
+board, processor, extras = create_board(args)
 
 workload = obtain_resource(
     resource_id="x86-ubuntu-24.04-boot-no-systemd", resource_version="3.0.0"

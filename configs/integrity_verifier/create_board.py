@@ -232,6 +232,10 @@ def create_board(args):
         isa_required=ISA.X86,
     )
 
+    # This is where extra specialized variables can be
+    # passed out from this function to the config being used.
+    extras = {}
+
     # Sanity checking parameters.
     # TODO
     if args.cxl_mode == "Disabled":
@@ -480,4 +484,4 @@ def create_board(args):
         cxl_latency=args.cxl_latency,
     )
 
-    return board, processor
+    return board, processor, extras

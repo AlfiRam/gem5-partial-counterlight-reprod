@@ -118,7 +118,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-board, processor = create_board(args)
+board, processor, extras = create_board(args)
 
 # This is the command to run after the system has booted. The first `m5 exit`
 # written here (which is really the third exit in total from the start of

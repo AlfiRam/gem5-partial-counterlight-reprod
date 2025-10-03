@@ -129,7 +129,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-board, processor = create_board(args)
+board, processor, extras = create_board(args)
 
 additional_command_args = (
     '-p "measurementtype=timeseries" -p "timeseries.granularity=2000"'
