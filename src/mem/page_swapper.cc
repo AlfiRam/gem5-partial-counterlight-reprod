@@ -428,10 +428,196 @@ AbstractPageSwapper::markReqEnd(PacketPtr pkt)
     // This request should have been entered prior.
     assert(arrivalTime.find(pkt->req) != arrivalTime.end());
 
-    stats.requestsHandled++;
-    stats.totalReqTime += curTick() - arrivalTime[pkt->req];
+    if (pkt->isForPageSwap()) {
+        stats.reqHandledPageSwap++;
+        stats.bytesHandledPageSwap += pkt->getSize();
+        stats.totalReqTimePageSwap += curTick() - arrivalTime[pkt->req];
 
-    // TODO Add all the other stats
+    } else {
+        // This should be a response that was translated.
+        assert(pkt->hasBeenTranslated());
+
+        stats.requestsHandled++;
+        stats.bytesHandled += pkt->getSize();
+        stats.totalReqTime += curTick() - arrivalTime[pkt->req];
+
+        // Pre-translation stats
+        Addr preTransAddr = pkt->getOriginalAddr();
+        if (pkt->isMetadataRequest()) {
+            if (rangeListContains(dramFullRanges, preTransAddr)) {
+                // Pre-translation, metadata request for DRAM
+                stats.reqHandledDramIntegrity++;
+                stats.bytesHandledDramIntegrity += pkt->getSize();
+                stats.totalReqTimeDramIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Pre-translation, metadata request for CXL
+                assert(rangeListContains(cxlFullRanges, preTransAddr));
+
+                stats.reqHandledCxlIntegrity++;
+                stats.bytesHandledCxlIntegrity += pkt->getSize();
+                stats.totalReqTimeCxlIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        } else {
+            if (rangeListContains(dramFullRanges, preTransAddr)) {
+                // Pre-translation, application data request for DRAM
+                stats.reqHandledDramOs++;
+                stats.bytesHandledDramOs += pkt->getSize();
+                stats.totalReqTimeDramOs +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Pre-translation, application data request for CXL
+                assert(rangeListContains(cxlFullRanges, preTransAddr));
+
+                stats.reqHandledCxlOs++;
+                stats.bytesHandledCxlOs += pkt->getSize();
+                stats.totalReqTimeCxlOs +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        }
+
+        if (rangeListContains(dramFullRanges, preTransAddr)) {
+            stats.reqHandledDram++;
+            stats.bytesHandledDram += pkt->getSize();
+            stats.totalReqTimeDram +=
+                curTick() - arrivalTime[pkt->req];
+        } else if (rangeListContains(cxlFullRanges, preTransAddr)) {
+            stats.reqHandledCxl++;
+            stats.bytesHandledCxl += pkt->getSize();
+            stats.totalReqTimeCxl +=
+                curTick() - arrivalTime[pkt->req];
+        }
+
+        // Post-translation stats
+        if (pkt->isMetadataRequest()) {
+            // Metadata request
+            stats.metadataReqHandled++;
+            stats.metadataBytesHandled += pkt->getSize();
+            stats.totalMetadataReqTime += curTick() - arrivalTime[pkt->req];
+
+            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+                // Post translation, metadata request for DRAM
+                stats.reqHandledTransDramIntegrity++;
+                stats.bytesHandledTransDramIntegrity += pkt->getSize();
+                stats.totalReqTimeTransDramIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Post translation, metadata request for CXL
+                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
+
+                stats.reqHandledTransCxlIntegrity++;
+                stats.bytesHandledTransCxlIntegrity += pkt->getSize();
+                stats.totalReqTimeTransCxlIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        } else {
+            // Non-metadata request.
+            stats.dataReqHandled++;
+            stats.dataBytesHandled += pkt->getSize();
+            stats.totalDataReqTime += curTick() - arrivalTime[pkt->req];
+
+            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+                // Post translation, application data request for DRAM
+                stats.reqHandledTransDramOs++;
+                stats.bytesHandledTransDramOs += pkt->getSize();
+                stats.totalReqTimeTransDramOs +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Post translation, application data request for CXL
+                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
+
+                stats.reqHandledTransCxlOs++;
+                stats.bytesHandledTransCxlOs += pkt->getSize();
+                stats.totalReqTimeTransCxlOs +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        }
+
+        if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+            stats.reqHandledTransDram++;
+            stats.bytesHandledTransDram += pkt->getSize();
+            stats.totalReqTimeTransDram +=
+                curTick() - arrivalTime[pkt->req];
+        } else if (rangeListContains(cxlFullRanges, pkt->getAddr())) {
+            stats.reqHandledTransCxl++;
+            stats.bytesHandledTransCxl += pkt->getSize();
+            stats.totalReqTimeTransCxl +=
+                curTick() - arrivalTime[pkt->req];
+        }
+
+        // "Improved" access (Page moved CXL -> DRAM)
+        if (rangeListContains(cxlFullRanges, preTransAddr) &&
+            rangeListContains(dramFullRanges, pkt->getAddr())) {
+            stats.accessesImproved++;
+            stats.bytesImproved += pkt->getSize();
+
+            if (!pkt->isMetadataRequest()) {
+                stats.accessesImprovedOs++;
+                stats.bytesImprovedOs += pkt->getSize();
+            } else {
+                stats.accessesImprovedIntegrity++;
+                stats.bytesImprovedIntegrity += pkt->getSize();
+            }
+        }
+
+        // "Worsened" access (Page moved DRAM -> CXL)
+        else if (rangeListContains(dramFullRanges, preTransAddr) &&
+            rangeListContains(cxlFullRanges, pkt->getAddr())) {
+            stats.accessesWorsened++;
+            stats.bytesWorsened += pkt->getSize();
+
+            if (!pkt->isMetadataRequest()) {
+                stats.accessesWorsenedOs++;
+                stats.bytesWorsenedOs += pkt->getSize();
+            } else {
+                stats.accessesWorsenedIntegrity++;
+                stats.bytesWorsenedIntegrity += pkt->getSize();
+            }
+        }
+
+        // "Unaffected" access (Page not moved)
+        else {
+            stats.accessesUnaffected++;
+            stats.bytesUnaffected += pkt->getSize();
+
+            if (!pkt->isMetadataRequest()) {
+                stats.accessesUnaffectedOs++;
+                stats.bytesUnaffectedOs += pkt->getSize();
+            } else {
+                stats.accessesUnaffectedIntegrity++;
+                stats.bytesUnaffectedIntegrity += pkt->getSize();
+            }
+        }
+
+        // Swap page hits and misses
+        if (preTransAddr != pkt->getAddr()) {
+            // This is something swapped
+            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+                // This is something swapped, and it came into DRAM.
+                // DRAM swap page hit.
+                stats.swapPageHitsTransDram++;
+            } else {
+                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
+                // This is something swapped, and it came into CXL.
+                // CXL swap page hit.
+                stats.swapPageHitsTransCxl++;
+            }
+        } else {
+            // This is something that hasn't been swapped.
+            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
+                // This is something not swapped in DRAM.
+                // DRAM swap page miss.
+                stats.swapPageMissesTransDram++;
+            } else {
+                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
+                // This is something not swapped in CXL.
+                // CXL swap page miss.
+                stats.swapPageMissesTransCxl++;
+            }
+        }
+    }
+
 
     arrivalTime.erase(pkt->req);
     DPRINTF(AbstractPageSwapper,
@@ -530,6 +716,13 @@ AbstractPageSwapper::handleReq(PacketPtr pkt)
                 "%s: %s belongs to a locked page 0x%lx; storing in "
                 "pre-address-translation queue.\n",
                 __func__, pkt->print(), pageAddr);
+        stallStartTime.emplace(pkt, curTick());
+        stats.totalStalled++;
+        if (!pkt->isMetadataRequest()) {
+            stats.totalStalledOs++;
+        } else {
+            stats.totalStalledIntegrity++;
+        }
         preTranslationQueue.push(pkt);
         return true;
     } else if (lockedPages.find(pageTable[pageAddr]) != lockedPages.end()) {
@@ -541,6 +734,13 @@ AbstractPageSwapper::handleReq(PacketPtr pkt)
                 "%s: Translation of %s belongs to a locked page 0x%lx; "
                 "storing in pre-address-translation queue.\n",
                 __func__, pkt->print(), pageTable[pageAddr]);
+        stallStartTime.emplace(pkt, curTick());
+        stats.totalStalled++;
+        if (!pkt->isMetadataRequest()) {
+            stats.totalStalledOs++;
+        } else {
+            stats.totalStalledIntegrity++;
+        }
         preTranslationQueue.push(pkt);
         return true;
     }
@@ -732,9 +932,17 @@ AbstractPageSwapper::countPageAccess(PacketPtr pkt)
     // Ensure the packet has not yet been translated coming in.
     assert(pkt->isRequest());
     assert(!pkt->isTranslatedPageSwap());
+    assert(shouldHandlePacket(pkt));
 
     // Get the address representing the beginning of the physical page.
     Addr pageAddr = translateAddr(getPageAddr(pkt), false);
+
+    if (rangeListContains(dramFullRanges, pageAddr)) {
+        stats.accessesTransDram++;
+    } else {
+        assert(rangeListContains(cxlFullRanges, pageAddr));
+        stats.accessesTransCxl++;
+    }
 
     // // Currently, only consider pages for integrity data.
     // if (dramIntegrityRange.contains(pageAddr)) {
@@ -783,6 +991,21 @@ AbstractPageSwapper::performSwap(SwapProcessStage stage, Addr cxlPageKey)
         }
 
         swapStartTick = curTick();
+
+        // Collect stats on what pages are being swapped.
+        // NOTE: Not using an assertion in case there is a region of memory
+        // that is technically unused being swapped.
+        if (rangeListContains(dramOsRanges, dramPage)) {
+            stats.pagesSwappedDramOs++;
+        } else if (rangeListContains(dramIntegrityRanges, dramPage)) {
+            stats.pagesSwappedDramIntegrity++;
+        }
+
+        if (rangeListContains(cxlOsRanges, cxlPage)) {
+            stats.pagesSwappedCxlOs++;
+        } else if (rangeListContains(cxlIntegrityRanges, cxlPage)) {
+            stats.pagesSwappedCxlIntegrity++;
+        }
 
         // Mark what pages (in DRAM and CXL) are being swapped, so that
         // requests for those pages are frozen until the swap is complete.
@@ -1057,6 +1280,7 @@ AbstractPageSwapper::performSwap(SwapProcessStage stage, Addr cxlPageKey)
         lockedPages.erase(cxlPageKey);
         lockedPages.erase(dramPage);
         stats.totalSwapCount++;
+        stats.bytesSwapped += pageBytes;
         stats.totalSwapTime += curTick() - swapStartTick;
 
         // Swap the last access times in tracking.
@@ -1078,6 +1302,17 @@ AbstractPageSwapper::performSwap(SwapProcessStage stage, Addr cxlPageKey)
         // Schedule up any pending requests for the newly-swapped pages.
         while (!preTranslationQueue.empty()) {
             PacketPtr pkt = preTranslationQueue.front();
+
+            // Track statistics of how long the packet was stalled for.
+            stats.totalSwapStallTime += curTick() - stallStartTime[pkt];
+            if (!pkt->isMetadataRequest()) {
+                stats.totalSwapStallTimeOs += curTick() - stallStartTime[pkt];
+            } else {
+                stats.totalSwapStallTimeIntegrity +=
+                    curTick() - stallStartTime[pkt];
+            }
+            stallStartTime.erase(pkt);
+
             if (shouldHandlePacket(pkt)) {
                 translateReq(pkt);
             }
@@ -1228,6 +1463,8 @@ AbstractPageSwapper::translateReq(PacketPtr pkt)
     pkt->setAddr(translatedAddr);
     pkt->req->setPaddr(translatedAddr);
     pkt->setTranslatedPageSwap();
+    pkt->setHasBeenTranslated();
+    pkt->setPageSwapAddr(translatedAddr);
 
     DPRINTF(AbstractPageSwapper, "%s: Translated req 0x%lx -> 0x%lx\n",
             __func__, originalAddr, translatedAddr);
@@ -1238,6 +1475,7 @@ void
 AbstractPageSwapper::translateResp(PacketPtr pkt)
 {
     assert(pkt->isTranslatedPageSwap());
+    assert(pkt->hasBeenTranslated());
 
     Addr addr = pkt->getAddr();
 
@@ -1260,33 +1498,187 @@ AbstractPageSwapper::PageSwapperStats::PageSwapperStats(
 ) : statistics::Group(parent, "page_swapper"),
     ADD_STAT(totalSwapCount, statistics::units::Count::get(),
             "Total number of swaps completed"),
+    ADD_STAT(bytesSwapped, statistics::units::Byte::get(),
+            "Total bytes swapped"),
     ADD_STAT(totalSwapTime, statistics::units::Tick::get(),
             "Total amount of time taken swapping"),
     ADD_STAT(avgSwapTime, statistics::units::Tick::get(),
             "Average time taken for each swap"),
 
+    ADD_STAT(totalStalled, statistics::units::Count::get(),
+            "Number of requests that waited for a swap"),
+    ADD_STAT(totalSwapStallTime, statistics::units::Tick::get(),
+            "Total amount of time spent waiting for swap"),
+    ADD_STAT(avgSwapStallTime, statistics::units::Tick::get(),
+            "Average time spent waiting for a swap"),
+    ADD_STAT(totalStalledOs, statistics::units::Count::get(),
+            "Number of application requests that waited for a swap"),
+    ADD_STAT(totalSwapStallTimeOs, statistics::units::Tick::get(),
+            "Total amount of time spent waiting for swap, "
+            "for application requests"),
+    ADD_STAT(avgSwapStallTimeOs, statistics::units::Tick::get(),
+            "Average time spent waiting for a swap, "
+            "for application requests"),
+    ADD_STAT(totalStalledIntegrity, statistics::units::Count::get(),
+            "Number of integrity requests that waited for a swap"),
+    ADD_STAT(totalSwapStallTimeIntegrity, statistics::units::Tick::get(),
+            "Total amount of time spent waiting for swap, "
+            "for integrity requests"),
+    ADD_STAT(avgSwapStallTimeIntegrity, statistics::units::Tick::get(),
+            "Average time spent waiting for a swap, "
+            "for integrity requests"),
+
+    ADD_STAT(pagesSwappedDramOs, statistics::units::Count::get(),
+            "Number of DRAM application pages swapped"),
+    ADD_STAT(pagesSwappedDramIntegrity, statistics::units::Count::get(),
+            "Number of DRAM integrity pages swapped"),
+    ADD_STAT(pagesSwappedCxlOs, statistics::units::Count::get(),
+            "Number of CXL application pages swapped"),
+    ADD_STAT(pagesSwappedCxlIntegrity, statistics::units::Count::get(),
+            "Number of CXL integrity pages swapped"),
+
+    ADD_STAT(accessesTransDram, statistics::units::Count::get(),
+            "Number of accesses to DRAM (post-translation)"),
+    ADD_STAT(accessesTransCxl, statistics::units::Count::get(),
+            "Number of accesses to CXL (post-translation)"),
+
+    ADD_STAT(accessesImproved, statistics::units::Count::get(),
+            "Number of accesses improved by swapping"),
+    ADD_STAT(bytesImproved, statistics::units::Byte::get(),
+            "Bytes of accesses improved by swapping"),
+    ADD_STAT(accessesImprovedOs, statistics::units::Count::get(),
+            "Number of application accesses improved by swapping"),
+    ADD_STAT(bytesImprovedOs, statistics::units::Byte::get(),
+            "Bytes of accesses improved by swapping"),
+    ADD_STAT(accessesImprovedIntegrity, statistics::units::Count::get(),
+            "Number of integrity accesses improved by swapping"),
+    ADD_STAT(bytesImprovedIntegrity, statistics::units::Byte::get(),
+            "Bytes of accesses improved by swapping"),
+    ADD_STAT(accessesUnaffected, statistics::units::Count::get(),
+            "Number of accesses unaffected by swapping"),
+    ADD_STAT(bytesUnaffected, statistics::units::Byte::get(),
+            "Bytes of accesses unaffected by swapping"),
+    ADD_STAT(accessesUnaffectedOs, statistics::units::Count::get(),
+            "Number of application accesses unaffected by swapping"),
+    ADD_STAT(bytesUnaffectedOs, statistics::units::Byte::get(),
+            "Bytes of accesses unaffected by swapping"),
+    ADD_STAT(accessesUnaffectedIntegrity, statistics::units::Count::get(),
+            "Number of integrity accesses unaffected by swapping"),
+    ADD_STAT(bytesUnaffectedIntegrity, statistics::units::Byte::get(),
+            "Bytes of accesses unaffected by swapping"),
+    ADD_STAT(accessesWorsened, statistics::units::Count::get(),
+            "Number of accesses worsened by swapping"),
+    ADD_STAT(bytesWorsened, statistics::units::Byte::get(),
+            "Bytes of accesses worsened by swapping"),
+    ADD_STAT(accessesWorsenedOs, statistics::units::Count::get(),
+            "Number of application accesses worsened by swapping"),
+    ADD_STAT(bytesWorsenedOs, statistics::units::Byte::get(),
+            "Bytes of accesses worsened by swapping"),
+    ADD_STAT(accessesWorsenedIntegrity, statistics::units::Count::get(),
+            "Number of integrity accesses worsened by swapping"),
+    ADD_STAT(bytesWorsenedIntegrity, statistics::units::Byte::get(),
+            "Bytes of accesses worsened by swapping"),
+
+    ADD_STAT(swapPageHitsTransDram, statistics::units::Count::get(),
+            "Number of DRAM swap page hits"),
+    ADD_STAT(swapPageMissesTransDram, statistics::units::Count::get(),
+            "Number of DRAM swap page misses"),
+    ADD_STAT(swapPageHitRateTransDram, statistics::units::Ratio::get(),
+            "DRAM swap page hit rate"),
+    ADD_STAT(swapPageHitsTransCxl, statistics::units::Count::get(),
+            "Number of CXL swap page hits"),
+    ADD_STAT(swapPageMissesTransCxl, statistics::units::Count::get(),
+            "Number of CXL swap page misses"),
+    ADD_STAT(swapPageHitRateTransCxl, statistics::units::Ratio::get(),
+            "CXL swap page hit rate"),
+
     ADD_STAT(requestsHandled, statistics::units::Count::get(),
             "Total number of requests handled"),
+    ADD_STAT(bytesHandled, statistics::units::Byte::get(),
+            "Total number of bytes handled for requests"),
     ADD_STAT(metadataReqHandled, statistics::units::Count::get(),
             "Total number of metadata requests handled"),
+    ADD_STAT(metadataBytesHandled, statistics::units::Byte::get(),
+            "Total number of bytes handled for metadata requests"),
     ADD_STAT(dataReqHandled, statistics::units::Count::get(),
             "Total number of data requests handled"),
+    ADD_STAT(dataBytesHandled, statistics::units::Byte::get(),
+            "Total number of bytes handled for data requests"),
 
+    ADD_STAT(reqHandledPageSwap, statistics::units::Count::get(),
+            "Total number of requests for page swapping"),
     ADD_STAT(reqHandledDram, statistics::units::Count::get(),
-            "Total number of requests to memory in DRAM (post-translation)"),
+            "Total number of requests to memory in DRAM (pre-translation)"),
     ADD_STAT(reqHandledDramOs, statistics::units::Count::get(),
-            "Total number of requests to (non-integrity) memory in DRAM "
-            "(post-translation)"),
+            "Total number of (non-integrity) requests to memory in DRAM "
+            "(pre-translation)"),
     ADD_STAT(reqHandledDramIntegrity, statistics::units::Count::get(),
-            "Total number of requests to integrity memory in DRAM "
-            "(post-translation)"),
+            "Total number of integrity requests to memory in DRAM "
+            "(pre-translation)"),
     ADD_STAT(reqHandledCxl, statistics::units::Count::get(),
-            "Total number of requests to memory in CXL (post-translation)"),
+            "Total number of requests to memory in CXL (pre-translation)"),
     ADD_STAT(reqHandledCxlOs, statistics::units::Count::get(),
-            "Total number of requests to (non-integrity) memory in CXL "
-            "(post-translation)"),
+            "Total number of (non-integrity) requests to memory in CXL "
+            "(pre-translation)"),
     ADD_STAT(reqHandledCxlIntegrity, statistics::units::Count::get(),
-            "Total number of requests to integrity memory in CXL "
+            "Total number of integrity requests to memory in CXL "
+            "(pre-translation)"),
+
+    ADD_STAT(bytesHandledPageSwap, statistics::units::Byte::get(),
+            "Total number of bytes to memory for page swapping"),
+    ADD_STAT(bytesHandledDram, statistics::units::Byte::get(),
+            "Total number of bytes to memory in DRAM "
+            "(pre-translation)"),
+    ADD_STAT(bytesHandledDramOs, statistics::units::Byte::get(),
+            "Total number of (non-integrity) bytes to memory in DRAM "
+            "(pre-translation)"),
+    ADD_STAT(bytesHandledDramIntegrity, statistics::units::Byte::get(),
+            "Total number of integrity bytes to memory in DRAM "
+            "(pre-translation)"),
+    ADD_STAT(bytesHandledCxl, statistics::units::Byte::get(),
+            "Total number of bytes to memory in CXL "
+            "(pre-translation)"),
+    ADD_STAT(bytesHandledCxlOs, statistics::units::Byte::get(),
+            "Total number of (non-integrity) bytes to memory in CXL "
+            "(pre-translation)"),
+    ADD_STAT(bytesHandledCxlIntegrity, statistics::units::Byte::get(),
+            "Total number of integrity bytes to memory in CXL "
+            "(pre-translation)"),
+
+    ADD_STAT(reqHandledTransDram, statistics::units::Count::get(),
+            "Total number of requests to memory in DRAM (post-translation)"),
+    ADD_STAT(reqHandledTransDramOs, statistics::units::Count::get(),
+            "Total number of (non-integrity) requests to memory in DRAM "
+            "(post-translation)"),
+    ADD_STAT(reqHandledTransDramIntegrity, statistics::units::Count::get(),
+            "Total number of integrity requests to memory in DRAM "
+            "(post-translation)"),
+    ADD_STAT(reqHandledTransCxl, statistics::units::Count::get(),
+            "Total number of requests to memory in CXL (post-translation)"),
+    ADD_STAT(reqHandledTransCxlOs, statistics::units::Count::get(),
+            "Total number of (non-integrity) requests to memory in CXL "
+            "(post-translation)"),
+    ADD_STAT(reqHandledTransCxlIntegrity, statistics::units::Count::get(),
+            "Total number of integrity requests to memory in CXL "
+            "(post-translation)"),
+
+    ADD_STAT(bytesHandledTransDram, statistics::units::Byte::get(),
+            "Total number of bytes to memory in DRAM "
+            "(post-translation)"),
+    ADD_STAT(bytesHandledTransDramOs, statistics::units::Byte::get(),
+            "Total number of (non-integrity) bytes to memory in DRAM "
+            "(post-translation)"),
+    ADD_STAT(bytesHandledTransDramIntegrity, statistics::units::Byte::get(),
+            "Total number of integrity bytes to memory in DRAM "
+            "(post-translation)"),
+    ADD_STAT(bytesHandledTransCxl, statistics::units::Byte::get(),
+            "Total number of bytes to memory in CXL "
+            "(post-translation)"),
+    ADD_STAT(bytesHandledTransCxlOs, statistics::units::Byte::get(),
+            "Total number of (non-integrity) bytes to memory in CXL "
+            "(post-translation)"),
+    ADD_STAT(bytesHandledTransCxlIntegrity, statistics::units::Byte::get(),
+            "Total number of integrity bytes to memory in CXL "
             "(post-translation)"),
 
     ADD_STAT(totalReqTime, statistics::units::Tick::get(),
@@ -1296,64 +1688,124 @@ AbstractPageSwapper::PageSwapperStats::PageSwapperStats(
     ADD_STAT(totalDataReqTime, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in"),
 
+    ADD_STAT(totalReqTimePageSwap, statistics::units::Tick::get(),
+            "Total amount of time where a data request is out then in, "
+            "for requests for page swapping"),
     ADD_STAT(totalReqTimeDram, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in, "
-            "for memory in DRAM (post-translation)"),
+            "for memory in DRAM (pre-translation)"),
     ADD_STAT(totalReqTimeDramOs, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for (non-integrity) memory in DRAM (post-translation)"),
+            "Total amount of time where a (non-integrity) request is out then "
+            "in, for memory in DRAM (pre-translation)"),
     ADD_STAT(totalReqTimeDramIntegrity, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for integrity memory in DRAM (post-translation)"),
+            "Total amount of time where an integrity request is out then in, "
+            "for memory in DRAM (pre-translation)"),
     ADD_STAT(totalReqTimeCxl, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in, "
-            "for memory in CXL (post-translation)"),
+            "for memory in CXL (pre-translation)"),
     ADD_STAT(totalReqTimeCxlOs, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for (non-integrity) memory in CXL (post-translation)"),
+            "Total amount of time where a (non-integrity) request is out then "
+            "in, for memory in CXL (pre-translation)"),
     ADD_STAT(totalReqTimeCxlIntegrity, statistics::units::Tick::get(),
+            "Total amount of time where an integrity request is out then in, "
+            "for memory in CXL (pre-translation)"),
+
+    ADD_STAT(totalReqTimeTransDram, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in, "
-            "for integrity memory in CXL (post-translation)"),
+            "for memory in DRAM (post-translation)"),
+    ADD_STAT(totalReqTimeTransDramOs, statistics::units::Tick::get(),
+            "Total amount of time where a (non-integrity) request is out then "
+            "in, for memory in DRAM (post-translation)"),
+    ADD_STAT(totalReqTimeTransDramIntegrity, statistics::units::Tick::get(),
+            "Total amount of time where an integrity request is out then in, "
+            "for memory in DRAM (post-translation)"),
+    ADD_STAT(totalReqTimeTransCxl, statistics::units::Tick::get(),
+            "Total amount of time where a data request is out then in, "
+            "for memory in CXL (post-translation)"),
+    ADD_STAT(totalReqTimeTransCxlOs, statistics::units::Tick::get(),
+            "Total amount of time where a (non-integrity) request is out then "
+            "in, for memory in CXL (post-translation)"),
+    ADD_STAT(totalReqTimeTransCxlIntegrity, statistics::units::Tick::get(),
+            "Total amount of time where an integrity request is out then in, "
+            "for memory in CXL (post-translation)"),
 
     ADD_STAT(avgReqLatency, statistics::units::Tick::get(),
             "Average request latency from leaving to entering "
             "PageSwapper"),
     ADD_STAT(avgMetadataReqLatency, statistics::units::Tick::get(),
             "Average metadata request latency from leaving to entering "
-            "IntegrityVerifier"),
+            "PageSwapper"),
     ADD_STAT(avgDataReqLatency, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
-            "IntegrityVerifier"),
+            "PageSwapper"),
 
+    ADD_STAT(avgReqTimePageSwap, statistics::units::Tick::get(),
+            "Average data request latency from leaving to entering "
+            "PageSwapper, for page swap requests"),
     ADD_STAT(avgReqTimeDram, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for memory in DRAM (post-translation)"),
+            "PageSwapper, for memory in DRAM (pre-translation)"),
     ADD_STAT(avgReqTimeDramOs, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for (non-integrity) memory in DRAM "
-            "(post-translation)"),
+            "Average (non-integrity) request latency from leaving to entering "
+            "PageSwapper, for memory in DRAM "
+            "(pre-translation)"),
     ADD_STAT(avgReqTimeDramIntegrity, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for integrity memory in DRAM "
-            "(post-translation)"),
+            "Average integrity request latency from leaving to entering "
+            "PageSwapper, for memory in DRAM "
+            "(pre-translation)"),
     ADD_STAT(avgReqTimeCxl, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for memory in CXL (post-translation)"),
+            "PageSwapper, for memory in CXL (pre-translation)"),
     ADD_STAT(avgReqTimeCxlOs, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for (non-integrity) memory in CXL "
-            "(post-translation)"),
+            "Average (non-integrity) request latency from leaving to entering "
+            "PageSwapper, for memory in CXL "
+            "(pre-translation)"),
     ADD_STAT(avgReqTimeCxlIntegrity, statistics::units::Tick::get(),
+            "Average integrity request latency from leaving to entering "
+            "PageSwapper, for memory in CXL "
+            "(pre-translation)"),
+
+    ADD_STAT(avgReqTimeTransDram, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for integrity memory in CXL "
+            "PageSwapper, for memory in DRAM (post-translation)"),
+    ADD_STAT(avgReqTimeTransDramOs, statistics::units::Tick::get(),
+            "Average (non-integrity) request latency from leaving to entering "
+            "PageSwapper, for memory in DRAM "
+            "(post-translation)"),
+    ADD_STAT(avgReqTimeTransDramIntegrity, statistics::units::Tick::get(),
+            "Average integrity request latency from leaving to entering "
+            "PageSwapper, for memory in DRAM "
+            "(post-translation)"),
+    ADD_STAT(avgReqTimeTransCxl, statistics::units::Tick::get(),
+            "Average data request latency from leaving to entering "
+            "PageSwapper, for memory in CXL (post-translation)"),
+    ADD_STAT(avgReqTimeTransCxlOs, statistics::units::Tick::get(),
+            "Average (non-integrity) request latency from leaving to entering "
+            "PageSwapper, for memory in CXL "
+            "(post-translation)"),
+    ADD_STAT(avgReqTimeTransCxlIntegrity, statistics::units::Tick::get(),
+            "Average integrity request latency from leaving to entering "
+            "PageSwapper, for memory in CXL "
             "(post-translation)")
 {
     avgSwapTime = totalSwapTime / totalSwapCount;
+
+    avgSwapStallTime = totalSwapStallTime / totalStalled;
+    avgSwapStallTimeOs = totalSwapStallTimeOs / totalStalledOs;
+    avgSwapStallTimeIntegrity = totalSwapStallTimeIntegrity /
+        totalStalledIntegrity;
+
+    swapPageHitRateTransDram =
+        swapPageHitsTransDram /
+        (swapPageHitsTransDram + swapPageMissesTransDram);
+    swapPageHitRateTransCxl =
+        swapPageHitsTransCxl / (swapPageHitsTransCxl + swapPageMissesTransCxl);
 
     avgReqLatency = totalReqTime / requestsHandled;
     avgMetadataReqLatency = totalMetadataReqTime / metadataReqHandled;
     avgDataReqLatency = totalDataReqTime / dataReqHandled;
 
+    avgReqTimePageSwap = totalReqTimePageSwap / reqHandledPageSwap;
     avgReqTimeDram = totalReqTimeDram / reqHandledDram;
     avgReqTimeDramOs = totalReqTimeDramOs / reqHandledDramOs;
     avgReqTimeDramIntegrity =
@@ -1361,6 +1813,15 @@ AbstractPageSwapper::PageSwapperStats::PageSwapperStats(
     avgReqTimeCxl = totalReqTimeCxl / reqHandledCxl;
     avgReqTimeCxlOs = totalReqTimeCxlOs / reqHandledCxlOs;
     avgReqTimeCxlIntegrity = totalReqTimeCxlIntegrity / reqHandledCxlIntegrity;
+
+    avgReqTimeTransDram = totalReqTimeTransDram / reqHandledTransDram;
+    avgReqTimeTransDramOs = totalReqTimeTransDramOs / reqHandledTransDramOs;
+    avgReqTimeTransDramIntegrity =
+        totalReqTimeTransDramIntegrity / reqHandledTransDramIntegrity;
+    avgReqTimeTransCxl = totalReqTimeTransCxl / reqHandledTransCxl;
+    avgReqTimeTransCxlOs = totalReqTimeTransCxlOs / reqHandledTransCxlOs;
+    avgReqTimeTransCxlIntegrity =
+        totalReqTimeTransCxlIntegrity / reqHandledTransCxlIntegrity;
 }
 
 

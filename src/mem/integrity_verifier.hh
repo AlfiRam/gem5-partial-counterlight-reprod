@@ -683,8 +683,11 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Scalar dataUsedIntegrity;
 
       statistics::Scalar requestsHandled;
+      statistics::Scalar bytesHandled;
       statistics::Scalar metadataReqHandled;
+      statistics::Scalar metadataBytesHandled;
       statistics::Scalar dataReqHandled;
+      statistics::Scalar dataBytesHandled;
 
       statistics::Scalar reqHandledDram;
       statistics::Scalar reqHandledDramOs;
@@ -692,6 +695,27 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Scalar reqHandledCxl;
       statistics::Scalar reqHandledCxlOs;
       statistics::Scalar reqHandledCxlIntegrity;
+
+      statistics::Scalar reqHandledTransDram;
+      statistics::Scalar reqHandledTransDramOs;
+      statistics::Scalar reqHandledTransDramIntegrity;
+      statistics::Scalar reqHandledTransCxl;
+      statistics::Scalar reqHandledTransCxlOs;
+      statistics::Scalar reqHandledTransCxlIntegrity;
+
+      statistics::Scalar bytesHandledDram;
+      statistics::Scalar bytesHandledDramOs;
+      statistics::Scalar bytesHandledDramIntegrity;
+      statistics::Scalar bytesHandledCxl;
+      statistics::Scalar bytesHandledCxlOs;
+      statistics::Scalar bytesHandledCxlIntegrity;
+
+      statistics::Scalar bytesHandledTransDram;
+      statistics::Scalar bytesHandledTransDramOs;
+      statistics::Scalar bytesHandledTransDramIntegrity;
+      statistics::Scalar bytesHandledTransCxl;
+      statistics::Scalar bytesHandledTransCxlOs;
+      statistics::Scalar bytesHandledTransCxlIntegrity;
 
       statistics::Scalar metadataCacheAccesses;
       statistics::Vector metadataCacheAccessesTypes;
@@ -716,6 +740,13 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Scalar totalReqTimeCxlOs;
       statistics::Scalar totalReqTimeCxlIntegrity;
 
+      statistics::Scalar totalReqTimeTransDram;
+      statistics::Scalar totalReqTimeTransDramOs;
+      statistics::Scalar totalReqTimeTransDramIntegrity;
+      statistics::Scalar totalReqTimeTransCxl;
+      statistics::Scalar totalReqTimeTransCxlOs;
+      statistics::Scalar totalReqTimeTransCxlIntegrity;
+
       statistics::Formula avgReqLatency;
       statistics::Formula avgMetadataReqLatency;
       statistics::Formula avgDataReqLatency;
@@ -726,6 +757,13 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Formula avgReqTimeCxl;
       statistics::Formula avgReqTimeCxlOs;
       statistics::Formula avgReqTimeCxlIntegrity;
+
+      statistics::Formula avgReqTimeTransDram;
+      statistics::Formula avgReqTimeTransDramOs;
+      statistics::Formula avgReqTimeTransDramIntegrity;
+      statistics::Formula avgReqTimeTransCxl;
+      statistics::Formula avgReqTimeTransCxlOs;
+      statistics::Formula avgReqTimeTransCxlIntegrity;
     } stats;
 
 };

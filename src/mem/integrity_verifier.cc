@@ -1265,15 +1265,18 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
 
     if (needsVerification(pkt->getAddr())) {
         stats.requestsHandled++;
+        stats.bytesHandled += pkt->getSize();
         stats.totalRequestingTime += curTick() - arrivalTime[pkt->req];
         if (pkt->isMetadataRequest()) {
             // Metadata request
             stats.metadataReqHandled++;
+            stats.metadataBytesHandled += pkt->getSize();
             stats.totalMetadataReqTime += curTick() - arrivalTime[pkt->req];
 
             if (rangeListContains(dramFullRanges, pkt->getAddr())) {
                 // Integrity data for DRAM
                 stats.reqHandledDramIntegrity++;
+                stats.bytesHandledDramIntegrity += pkt->getSize();
                 stats.totalReqTimeDramIntegrity +=
                     curTick() - arrivalTime[pkt->req];
             } else {
@@ -1281,17 +1284,20 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
                 assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
 
                 stats.reqHandledCxlIntegrity++;
+                stats.bytesHandledCxlIntegrity += pkt->getSize();
                 stats.totalReqTimeCxlIntegrity +=
                     curTick() - arrivalTime[pkt->req];
             }
         } else {
             // Non-metadata request.
             stats.dataReqHandled++;
+            stats.dataBytesHandled += pkt->getSize();
             stats.totalDataReqTime += curTick() - arrivalTime[pkt->req];
 
             if (rangeListContains(dramFullRanges, pkt->getAddr())) {
                 // Application data for DRAM
                 stats.reqHandledDramOs++;
+                stats.bytesHandledDramOs += pkt->getSize();
                 stats.totalReqTimeDramOs +=
                     curTick() - arrivalTime[pkt->req];
             } else {
@@ -1299,6 +1305,7 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
                 assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
 
                 stats.reqHandledCxlOs++;
+                stats.bytesHandledCxlOs += pkt->getSize();
                 stats.totalReqTimeCxlOs +=
                     curTick() - arrivalTime[pkt->req];
             }
@@ -1306,13 +1313,71 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
 
         if (rangeListContains(dramFullRanges, pkt->getAddr())) {
             stats.reqHandledDram++;
+            stats.bytesHandledDram += pkt->getSize();
             stats.totalReqTimeDram +=
                 curTick() - arrivalTime[pkt->req];
         } else if (rangeListContains(cxlFullRanges, pkt->getAddr())) {
             stats.reqHandledCxl++;
+            stats.bytesHandledCxl += pkt->getSize();
             stats.totalReqTimeCxl +=
                 curTick() - arrivalTime[pkt->req];
         }
+
+        // Stats for translated address.
+        Addr translatedAddr;
+        if (pkt->hasBeenTranslated()) {
+            translatedAddr = pkt->getPageSwapAddr();
+        } else {
+            // Use the original address as the "translated" address.
+            translatedAddr = pkt->getAddr();
+        }
+
+        if (pkt->isMetadataRequest()) {
+            if (rangeListContains(dramFullRanges, translatedAddr)) {
+                // Post translation, metadata request for DRAM
+                stats.reqHandledTransDramIntegrity++;
+                stats.bytesHandledTransDramIntegrity += pkt->getSize();
+                stats.totalReqTimeTransDramIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Post translation, metadata request for CXL
+                assert(rangeListContains(cxlFullRanges, translatedAddr));
+
+                stats.reqHandledTransCxlIntegrity++;
+                stats.bytesHandledTransCxlIntegrity += pkt->getSize();
+                stats.totalReqTimeTransCxlIntegrity +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        } else {
+            // Non-metadata request
+
+            if (rangeListContains(dramFullRanges, translatedAddr)) {
+                // Post translation, application data request for DRAM
+                stats.reqHandledTransDramOs++;
+                stats.bytesHandledTransDramOs += pkt->getSize();
+                stats.totalReqTimeTransDramOs +=
+                    curTick() - arrivalTime[pkt->req];
+            } else {
+                // Post translation, application data request for CXL
+                assert(rangeListContains(cxlFullRanges, translatedAddr));
+
+                stats.reqHandledTransCxlOs++;
+                stats.bytesHandledTransCxlOs += pkt->getSize();
+                stats.totalReqTimeTransCxlOs +=
+                    curTick() - arrivalTime[pkt->req];
+            }
+        }
+
+        if (rangeListContains(dramFullRanges, translatedAddr)) {
+            stats.reqHandledTransDram++;
+            stats.bytesHandledTransDram += pkt->getSize();
+            stats.totalReqTimeTransDram +=
+                curTick() - arrivalTime[pkt->req];
+        } else if (rangeListContains(cxlFullRanges, translatedAddr)) {
+            stats.reqHandledTransCxl++;
+            stats.bytesHandledTransCxl += pkt->getSize();
+            stats.totalReqTimeTransCxl +=
+                curTick() - arrivalTime[pkt->req];
         }
 
     }
@@ -1802,10 +1867,16 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
 
     ADD_STAT(requestsHandled, statistics::units::Count::get(),
             "Total number of requests handled"),
+    ADD_STAT(bytesHandled, statistics::units::Byte::get(),
+            "Total number of bytes handled for requests"),
     ADD_STAT(metadataReqHandled, statistics::units::Count::get(),
             "Total number of metadata requests handled"),
+    ADD_STAT(metadataBytesHandled, statistics::units::Byte::get(),
+            "Total number of bytes handled for metadata requests"),
     ADD_STAT(dataReqHandled, statistics::units::Count::get(),
             "Total number of data requests handled"),
+    ADD_STAT(dataBytesHandled, statistics::units::Byte::get(),
+            "Total number of bytes handled for data requests"),
 
     ADD_STAT(reqHandledDram, statistics::units::Count::get(),
             "Total number of requests to memory in DRAM"),
@@ -1819,6 +1890,57 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Total number of requests to (non-integrity) memory in CXL"),
     ADD_STAT(reqHandledCxlIntegrity, statistics::units::Count::get(),
             "Total number of requests to integrity memory in CXL"),
+
+    ADD_STAT(reqHandledTransDram, statistics::units::Count::get(),
+            "Total number of requests to memory in DRAM (location "
+            "post-translation)"),
+    ADD_STAT(reqHandledTransDramOs, statistics::units::Count::get(),
+            "Total number of (non-integrity) requests to memory in DRAM "
+            "(location post-translation)"),
+    ADD_STAT(reqHandledTransDramIntegrity, statistics::units::Count::get(),
+            "Total number of integrity requests to memory in DRAM "
+            "(location post-translation)"),
+    ADD_STAT(reqHandledTransCxl, statistics::units::Count::get(),
+            "Total number of requests to memory in CXL (location "
+            "post-translation)"),
+    ADD_STAT(reqHandledTransCxlOs, statistics::units::Count::get(),
+            "Total number of (non-integrity) requests to memory in CXL "
+            "(location post-translation)"),
+    ADD_STAT(reqHandledTransCxlIntegrity, statistics::units::Count::get(),
+            "Total number of integrity requests to memory in CXL "
+            "(location post-translation)"),
+
+    ADD_STAT(bytesHandledDram, statistics::units::Byte::get(),
+            "Total number of bytes to memory in DRAM"),
+    ADD_STAT(bytesHandledDramOs, statistics::units::Byte::get(),
+            "Total number of bytes to (non-integrity) memory in DRAM"),
+    ADD_STAT(bytesHandledDramIntegrity, statistics::units::Byte::get(),
+            "Total number of bytes to integrity memory in DRAM"),
+    ADD_STAT(bytesHandledCxl, statistics::units::Byte::get(),
+            "Total number of bytes to memory in CXL"),
+    ADD_STAT(bytesHandledCxlOs, statistics::units::Byte::get(),
+            "Total number of bytes to (non-integrity) memory in CXL"),
+    ADD_STAT(bytesHandledCxlIntegrity, statistics::units::Byte::get(),
+            "Total number of bytes to integrity memory in CXL"),
+
+    ADD_STAT(bytesHandledTransDram, statistics::units::Byte::get(),
+            "Total number of bytes to memory in DRAM (location "
+            "post-translation)"),
+    ADD_STAT(bytesHandledTransDramOs, statistics::units::Byte::get(),
+            "Total number of (non-integrity) bytes to memory in DRAM "
+            "(location post-translation)"),
+    ADD_STAT(bytesHandledTransDramIntegrity, statistics::units::Byte::get(),
+            "Total number of integrity bytes to memory in DRAM (location "
+            "post-translation)"),
+    ADD_STAT(bytesHandledTransCxl, statistics::units::Byte::get(),
+            "Total number of bytes to memory in CXL (location "
+            "post-translation)"),
+    ADD_STAT(bytesHandledTransCxlOs, statistics::units::Byte::get(),
+            "Total number of (non-integrity) bytes to memory in CXL "
+            "(location post-translation)"),
+    ADD_STAT(bytesHandledTransCxlIntegrity, statistics::units::Byte::get(),
+            "Total number of integrity bytes to memory in CXL "
+            "(location post-translation)"),
 
     ADD_STAT(metadataCacheAccesses, statistics::units::Count::get(),
             "Total number of metadata cache accesses"),
@@ -1868,6 +1990,25 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Total amount of time where a data request is out then in, "
             "for integrity memory in CXL"),
 
+    ADD_STAT(totalReqTimeTransDram, statistics::units::Tick::get(),
+            "Total amount of time where a data request is out then in, "
+            "for data in DRAM (location post-translation)"),
+    ADD_STAT(totalReqTimeTransDramOs, statistics::units::Tick::get(),
+            "Total amount of time where a (non-integrity) request is out then "
+            "in, for data in DRAM (location post-translation)"),
+    ADD_STAT(totalReqTimeTransDramIntegrity, statistics::units::Tick::get(),
+            "Total amount of time where an integrity request is out then in, "
+            "for data in DRAM (location post-translation)"),
+    ADD_STAT(totalReqTimeTransCxl, statistics::units::Tick::get(),
+            "Total amount of time where a data request is out then in, "
+            "for data in CXL (location post-translation)"),
+    ADD_STAT(totalReqTimeTransCxlOs, statistics::units::Tick::get(),
+            "Total amount of time where a (non-integrity) request is out then "
+            "in, for data in CXL (location post-translation)"),
+    ADD_STAT(totalReqTimeTransCxlIntegrity, statistics::units::Tick::get(),
+            "Total amount of time where an integrity request is out then in, "
+            "for data in CXL (location post-translation)"),
+
     ADD_STAT(avgReqLatency, statistics::units::Tick::get(),
             "Average request latency from leaving to entering "
             "IntegrityVerifier"),
@@ -1895,7 +2036,32 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "IntegrityVerifier, for (non-integrity) memory in CXL"),
     ADD_STAT(avgReqTimeCxlIntegrity, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for integrity memory in CXL")
+            "IntegrityVerifier, for integrity memory in CXL"),
+
+    ADD_STAT(avgReqTimeTransDram, statistics::units::Tick::get(),
+            "Average data request latency from leaving to entering "
+            "IntegrityVerifier, for data in DRAM "
+            "(location post-translation)"),
+    ADD_STAT(avgReqTimeTransDramOs, statistics::units::Tick::get(),
+            "Average (non-integrity) request latency from leaving to entering "
+            "IntegrityVerifier, for data in DRAM "
+            "(location post-translation)"),
+    ADD_STAT(avgReqTimeTransDramIntegrity, statistics::units::Tick::get(),
+            "Average integrity request latency from leaving to entering "
+            "IntegrityVerifier, for data in DRAM "
+            "(location post-translation)"),
+    ADD_STAT(avgReqTimeTransCxl, statistics::units::Tick::get(),
+            "Average data request latency from leaving to entering "
+            "IntegrityVerifier, for data in CXL "
+            "(location post-translation)"),
+    ADD_STAT(avgReqTimeTransCxlOs, statistics::units::Tick::get(),
+            "Average (non-integrity) request latency from leaving to entering "
+            "IntegrityVerifier, for data in CXL "
+            "(location post-translation)"),
+    ADD_STAT(avgReqTimeTransCxlIntegrity, statistics::units::Tick::get(),
+            "Average integrity request latency from leaving to entering "
+            "IntegrityVerifier, for data in CXL "
+            "(location post-translation)")
 {
     metadataCacheAccessesTypes.init(
         AbstractIntegrityTree::TREE_NODE_TYPE_COUNT);
@@ -1933,6 +2099,16 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
     avgReqTimeCxl = totalReqTimeCxl / reqHandledCxl;
     avgReqTimeCxlOs = totalReqTimeCxlOs / reqHandledCxlOs;
     avgReqTimeCxlIntegrity = totalReqTimeCxlIntegrity / reqHandledCxlIntegrity;
+
+    avgReqTimeTransDram = totalReqTimeTransDram / reqHandledTransDram;
+    avgReqTimeTransDramOs = totalReqTimeTransDramOs / reqHandledTransDramOs;
+    avgReqTimeTransDramIntegrity =
+        totalReqTimeTransDramIntegrity / reqHandledTransDramIntegrity;
+    avgReqTimeTransCxl = totalReqTimeTransCxl / reqHandledTransCxl;
+    avgReqTimeTransCxlOs = totalReqTimeTransCxlOs / reqHandledTransCxlOs;
+    avgReqTimeTransCxlIntegrity =
+        totalReqTimeTransCxlIntegrity / reqHandledTransCxlIntegrity;
+}
 
 void
 AbstractIntegrityVerifier::IntegrityVerifierStats::preDumpStats()

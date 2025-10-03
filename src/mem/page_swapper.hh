@@ -164,6 +164,12 @@ class AbstractPageSwapper : public ClockedObject
     std::queue<PacketPtr> preTranslationQueue;
 
     /**
+     * Track when a packet arrived to the pre-address-translation queue,
+     * to find out how long it was there.
+     */
+    std::unordered_map<PacketPtr, Tick> stallStartTime;
+
+    /**
      * Contains the last tick that each page was accessed. If an entry does not
      * exist, it has not (yet) been accessed before.
      *
@@ -464,13 +470,85 @@ class AbstractPageSwapper : public ClockedObject
       PageSwapperStats(statistics::Group *parent);
 
       statistics::Scalar totalSwapCount;
+      statistics::Scalar bytesSwapped;
       statistics::Scalar totalSwapTime;
       statistics::Formula avgSwapTime;
 
-      statistics::Scalar requestsHandled;
-      statistics::Scalar metadataReqHandled;
-      statistics::Scalar dataReqHandled;
+      // Measuring how long requests sit in a pre-translation-queue, because
+      // they were requested during a page swap.
 
+      statistics::Scalar totalStalled;
+      statistics::Scalar totalSwapStallTime;
+      statistics::Formula avgSwapStallTime;
+      statistics::Scalar totalStalledOs;
+      statistics::Scalar totalSwapStallTimeOs;
+      statistics::Formula avgSwapStallTimeOs;
+      statistics::Scalar totalStalledIntegrity;
+      statistics::Scalar totalSwapStallTimeIntegrity;
+      statistics::Formula avgSwapStallTimeIntegrity;
+
+      // Number of pages swapped, given the original region label.
+
+      statistics::Scalar pagesSwappedDramOs;
+      statistics::Scalar pagesSwappedDramIntegrity;
+      statistics::Scalar pagesSwappedCxlOs;
+      statistics::Scalar pagesSwappedCxlIntegrity;
+
+      // Number of accesses post-translation.
+
+      statistics::Scalar accessesTransDram;
+      statistics::Scalar accessesTransCxl;
+
+      // Amount of requests or data that have been "improved" or "worsened"
+      // by swaps.
+      // "Improved" means a request for CXL is now coming from DRAM.
+      // "Worsened" means a request for DRAM is now coming from CXL.
+      // Then there are also subsets for these for just integrity data or
+      // just application data.
+
+      statistics::Scalar accessesImproved;
+      statistics::Scalar bytesImproved;
+      statistics::Scalar accessesImprovedOs;
+      statistics::Scalar bytesImprovedOs;
+      statistics::Scalar accessesImprovedIntegrity;
+      statistics::Scalar bytesImprovedIntegrity;
+      statistics::Scalar accessesUnaffected;
+      statistics::Scalar bytesUnaffected;
+      statistics::Scalar accessesUnaffectedOs;
+      statistics::Scalar bytesUnaffectedOs;
+      statistics::Scalar accessesUnaffectedIntegrity;
+      statistics::Scalar bytesUnaffectedIntegrity;
+      statistics::Scalar accessesWorsened;
+      statistics::Scalar bytesWorsened;
+      statistics::Scalar accessesWorsenedOs;
+      statistics::Scalar bytesWorsenedOs;
+      statistics::Scalar accessesWorsenedIntegrity;
+      statistics::Scalar bytesWorsenedIntegrity;
+
+      // DRAM swap page hit  = Page that was swapped into DRAM was accessed.
+      // DRAM swap page miss = Page in DRAM (not swapped; in original place)
+      //                       was accessed.
+      // DRAM swap page hit rate = Rate of DRAM accesses that are a swapped
+      //                           page.
+      // These metrics use the post-translation address.
+      //
+      // Same for CXL; replace DRAM with CXL.
+
+      statistics::Scalar swapPageHitsTransDram;
+      statistics::Scalar swapPageMissesTransDram;
+      statistics::Formula swapPageHitRateTransDram;
+      statistics::Scalar swapPageHitsTransCxl;
+      statistics::Scalar swapPageMissesTransCxl;
+      statistics::Formula swapPageHitRateTransCxl;
+
+      statistics::Scalar requestsHandled;
+      statistics::Scalar bytesHandled;
+      statistics::Scalar metadataReqHandled;
+      statistics::Scalar metadataBytesHandled;
+      statistics::Scalar dataReqHandled;
+      statistics::Scalar dataBytesHandled;
+
+      statistics::Scalar reqHandledPageSwap;
       statistics::Scalar reqHandledDram;
       statistics::Scalar reqHandledDramOs;
       statistics::Scalar reqHandledDramIntegrity;
@@ -478,10 +556,33 @@ class AbstractPageSwapper : public ClockedObject
       statistics::Scalar reqHandledCxlOs;
       statistics::Scalar reqHandledCxlIntegrity;
 
+      statistics::Scalar bytesHandledPageSwap;
+      statistics::Scalar bytesHandledDram;
+      statistics::Scalar bytesHandledDramOs;
+      statistics::Scalar bytesHandledDramIntegrity;
+      statistics::Scalar bytesHandledCxl;
+      statistics::Scalar bytesHandledCxlOs;
+      statistics::Scalar bytesHandledCxlIntegrity;
+
+      statistics::Scalar reqHandledTransDram;
+      statistics::Scalar reqHandledTransDramOs;
+      statistics::Scalar reqHandledTransDramIntegrity;
+      statistics::Scalar reqHandledTransCxl;
+      statistics::Scalar reqHandledTransCxlOs;
+      statistics::Scalar reqHandledTransCxlIntegrity;
+
+      statistics::Scalar bytesHandledTransDram;
+      statistics::Scalar bytesHandledTransDramOs;
+      statistics::Scalar bytesHandledTransDramIntegrity;
+      statistics::Scalar bytesHandledTransCxl;
+      statistics::Scalar bytesHandledTransCxlOs;
+      statistics::Scalar bytesHandledTransCxlIntegrity;
+
       statistics::Scalar totalReqTime;
       statistics::Scalar totalMetadataReqTime;
       statistics::Scalar totalDataReqTime;
 
+      statistics::Scalar totalReqTimePageSwap;
       statistics::Scalar totalReqTimeDram;
       statistics::Scalar totalReqTimeDramOs;
       statistics::Scalar totalReqTimeDramIntegrity;
@@ -489,16 +590,31 @@ class AbstractPageSwapper : public ClockedObject
       statistics::Scalar totalReqTimeCxlOs;
       statistics::Scalar totalReqTimeCxlIntegrity;
 
+      statistics::Scalar totalReqTimeTransDram;
+      statistics::Scalar totalReqTimeTransDramOs;
+      statistics::Scalar totalReqTimeTransDramIntegrity;
+      statistics::Scalar totalReqTimeTransCxl;
+      statistics::Scalar totalReqTimeTransCxlOs;
+      statistics::Scalar totalReqTimeTransCxlIntegrity;
+
       statistics::Formula avgReqLatency;
       statistics::Formula avgMetadataReqLatency;
       statistics::Formula avgDataReqLatency;
 
+      statistics::Formula avgReqTimePageSwap;
       statistics::Formula avgReqTimeDram;
       statistics::Formula avgReqTimeDramOs;
       statistics::Formula avgReqTimeDramIntegrity;
       statistics::Formula avgReqTimeCxl;
       statistics::Formula avgReqTimeCxlOs;
       statistics::Formula avgReqTimeCxlIntegrity;
+
+      statistics::Formula avgReqTimeTransDram;
+      statistics::Formula avgReqTimeTransDramOs;
+      statistics::Formula avgReqTimeTransDramIntegrity;
+      statistics::Formula avgReqTimeTransCxl;
+      statistics::Formula avgReqTimeTransCxlOs;
+      statistics::Formula avgReqTimeTransCxlIntegrity;
     } stats;
 };
 

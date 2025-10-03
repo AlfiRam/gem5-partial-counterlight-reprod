@@ -646,15 +646,28 @@ class Packet : public Printable, public Extensible<Packet>
     bool isForPageSwap() const       { return req->getForPageSwap(); }
     void setForPageSwap()            { req->setForPageSwap(true); }
 
+    // Returns if the packet is currently translated.
     bool isTranslatedPageSwap() const  { return req->getTranslatedPageSwap(); }
     void setTranslatedPageSwap()       { req->setTranslatedPageSwap(true); }
     void unsetTranslatedPageSwap()      { req->setTranslatedPageSwap(false); }
+
+    // Returns if the packet has been translated at some point, but no longer
+    // has to be now.
+    bool hasBeenTranslated() const     { return req->getHasBeenTranslated(); }
+    void setHasBeenTranslated()        { req->setHasBeenTranslated(true); }
 
     Addr getOriginalAddr() const {
         assert(isTranslatedPageSwap());
         return req->getOriginalAddr();
     }
     void setOriginalAddr(Addr addr)  { req->setOriginalAddr(addr); }
+
+    // Get a copy of the translated address during page swapping.
+    Addr getPageSwapAddr() const {
+        assert(hasBeenTranslated());
+        return req->getPageSwapAddr();
+    }
+    void setPageSwapAddr(Addr addr)  { req->setPageSwapAddr(addr); }
 
     bool isWholeLineWrite(unsigned blk_size)
     {

@@ -485,6 +485,10 @@ class Request : public Extensible<Request>
 
     Addr _originalAddr;
 
+    bool _hasBeenTranslated;
+
+    Addr _pageSwapAddr;
+
   public:
 
     /**
@@ -498,6 +502,8 @@ class Request : public Extensible<Request>
         _isForPageSwap = false;
         _isTranslatedPageSwap = false;
         _originalAddr = Addr(0);
+        _hasBeenTranslated = false;
+        _pageSwapAddr = Addr(0);
     }
 
     /**
@@ -517,6 +523,8 @@ class Request : public Extensible<Request>
         _isForPageSwap = false;
         _isTranslatedPageSwap = false;
         _originalAddr = Addr(0);
+        _hasBeenTranslated = false;
+        _pageSwapAddr = Addr(0);
     }
 
     Request(Addr vaddr, unsigned size, Flags flags,
@@ -532,6 +540,8 @@ class Request : public Extensible<Request>
         _isForPageSwap = false;
         _isTranslatedPageSwap = false;
         _originalAddr = Addr(0);
+        _hasBeenTranslated = false;
+        _pageSwapAddr = Addr(0);
     }
 
     Request(const Request& other)
@@ -552,6 +562,8 @@ class Request : public Extensible<Request>
           _isForPageSwap(other._isForPageSwap),
           _isTranslatedPageSwap(other._isTranslatedPageSwap),
           _originalAddr(other._originalAddr),
+          _hasBeenTranslated(other._hasBeenTranslated),
+          _pageSwapAddr(other._pageSwapAddr),
           translateDelta(other.translateDelta),
           accessDelta(other.accessDelta), depth(other.depth)
     {
@@ -1221,6 +1233,26 @@ class Request : public Extensible<Request>
     Addr
     getOriginalAddr() {
         return _originalAddr;
+    }
+
+    void
+    setHasBeenTranslated(bool flag) {
+        _hasBeenTranslated = flag;
+    }
+
+    bool
+    getHasBeenTranslated() {
+        return _hasBeenTranslated;
+    }
+
+    Addr
+    getPageSwapAddr() {
+        return _pageSwapAddr;
+    }
+
+    void
+    setPageSwapAddr(Addr addr) {
+        _pageSwapAddr = addr;
     }
 };
 
