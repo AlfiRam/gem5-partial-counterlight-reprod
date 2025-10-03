@@ -13,6 +13,7 @@ from m5.util import warn
 from m5.util.convert import toMemorySize
 
 from gem5.components.boards.x86_board import X86Board
+from gem5.components.cachehierarchies.classic.no_cache import NoCache
 from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy import (
     PrivateL1SharedL2CacheHierarchy,
 )
@@ -62,6 +63,13 @@ def add_arguments(parser):
         required="--inst-tracking" in sys.argv,
         help="Specify number of instructions to execute. This may have issues if the workload is shorter than the number of instructions specified. Only applies if --inst-tracking is used.",
         default=500_000_000,
+    )
+
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        required=False,
+        help="Use no cache.",
     )
 
     # Memory sizes
@@ -457,6 +465,10 @@ def create_board(args):
             integrity_tree_type=args.integrity_tree_type,
             integrity_tree_arity=args.integrity_tree_arity,
             use_page_swapper=args.use_page_swapper,
+        )
+    elif args.no_cache:
+        cache_hierarchy = NoCache(
+            membus=membus,
         )
     else:
         cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
