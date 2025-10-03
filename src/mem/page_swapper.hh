@@ -3,6 +3,7 @@
 
 #include <queue>
 
+#include "base/priority_queue_handled.hh"
 #include "mem/qport.hh"
 #include "params/AbstractPageSwapper.hh"
 #include "params/PageSwapper.hh"
@@ -105,12 +106,12 @@ class AbstractPageSwapper : public ClockedObject
      */
     RequestorID _requestorId;
 
-    AddrRange dramFullRange;
-    AddrRange dramOsRange;
-    AddrRange dramIntegrityRange;
-    AddrRange cxlFullRange;
-    AddrRange cxlOsRange;
-    AddrRange cxlIntegrityRange;
+    AddrRangeList dramFullRanges;
+    AddrRangeList dramOsRanges;
+    AddrRangeList dramIntegrityRanges;
+    AddrRangeList cxlFullRanges;
+    AddrRangeList cxlOsRanges;
+    AddrRangeList cxlIntegrityRanges;
 
     /**
      * The time a swap started.

@@ -1,5 +1,6 @@
 #include "mem/page_swapper.hh"
 
+#include "base/addr_range_list.hh"
 #include "debug/AbstractPageSwapper.hh"
 #include "debug/AbstractPageSwapperInit.hh"
 #include "debug/AbstractPageSwapperTest.hh"
@@ -19,41 +20,82 @@ AbstractPageSwapper::AbstractPageSwapper(const AbstractPageSwapperParams &p)
       respQueue(*this, responsePort),
       snoopRespQueue(*this, requestPort),
       _requestorId(p.system->getRequestorId(this)),
-      dramFullRange(p.dram_full_range),
-      dramOsRange(p.dram_os_range),
-      dramIntegrityRange(AddrRange(dramOsRange.end(), dramFullRange.end())),
-      cxlFullRange(p.cxl_full_range),
-      cxlOsRange(p.cxl_os_range),
-      cxlIntegrityRange(AddrRange(cxlOsRange.end(), cxlFullRange.end())),
+      dramFullRanges(p.dram_full_ranges.begin(), p.dram_full_ranges.end()),
+      dramOsRanges(p.dram_os_ranges.begin(), p.dram_os_ranges.end()),
+      cxlFullRanges(p.cxl_full_ranges.begin(), p.cxl_full_ranges.end()),
+      cxlOsRanges(p.cxl_os_ranges.begin(), p.cxl_os_ranges.end()),
       stats(this)
 {
-    DPRINTF(AbstractPageSwapperInit,
-        "%s: dramFullRange: %s (%llu:%llu, size %llu)\n",
-        __func__, dramFullRange.to_string(),
-        dramFullRange.start(), dramFullRange.end(), dramFullRange.size());
-    DPRINTF(AbstractPageSwapperInit,
-        "%s: dramOsRange: %s (%llu:%llu, size %llu)\n",
-        __func__, dramOsRange.to_string(),
-        dramOsRange.start(), dramOsRange.end(), dramOsRange.size());
-    DPRINTF(AbstractPageSwapperInit,
-        "%s: dramIntegrityRange: %s (%llu:%llu, size %llu)\n",
-        __func__, dramIntegrityRange.to_string(),
-        dramIntegrityRange.start(), dramIntegrityRange.end(),
-        dramIntegrityRange.size());
+
+    // Compute integrity memory ranges.
+    auto dramOsRangeIt = dramOsRanges.begin();
+    for (auto dramFullRangeIt = dramFullRanges.begin();
+        dramFullRangeIt != dramFullRanges.end();
+        dramFullRangeIt++)
+    {
+        if (dramOsRangeIt->end() >= dramFullRangeIt->end()) {
+            // The OS range ends at the end of this range or later.
+            // The integrity range may start at the next range in the list.
+            dramOsRangeIt++;
+            continue;
+        }
+
+        // We can use (at least some of) this range for integrity.
+        if (dramOsRangeIt == dramOsRanges.end()) {
+            // The entire range can be used for integrity.
+            dramIntegrityRanges.emplace_back(
+                AddrRange(dramFullRangeIt->start(), dramFullRangeIt->end()));
+        } else {
+            // This range can be partially used for integrity.
+            dramIntegrityRanges.emplace_back(
+                AddrRange(dramOsRangeIt->end(), dramFullRangeIt->end()));
+            dramOsRangeIt++;
+        }
+    }
+
+    auto cxlOsRangeIt = cxlOsRanges.begin();
+    for (auto cxlFullRangeIt = cxlFullRanges.begin();
+        cxlFullRangeIt != cxlFullRanges.end();
+        cxlFullRangeIt++) {
+        if (cxlOsRangeIt->end() >= cxlFullRangeIt->end()) {
+            // The OS range ends at the end of this range or later.
+            // The integrity range may start at the next range in the list.
+            cxlOsRangeIt++;
+            continue;
+        }
+
+        // We can use (at least some of) this range for integrity.
+        if (cxlOsRangeIt == cxlOsRanges.end()) {
+            // The entire range can be used for integrity.
+            cxlIntegrityRanges.emplace_back(
+                AddrRange(cxlFullRangeIt->start(), cxlFullRangeIt->end()));
+        } else {
+            // This range can be partially used for integrity.
+            cxlIntegrityRanges.emplace_back(
+                AddrRange(cxlOsRangeIt->end(), cxlFullRangeIt->end()));
+            cxlOsRangeIt++;
+        }
+    }
 
     DPRINTF(AbstractPageSwapperInit,
-        "%s: cxlFullRange: %s (%llu:%llu, size %llu)\n",
-        __func__, cxlFullRange.to_string(),
-        cxlFullRange.start(), cxlFullRange.end(), cxlFullRange.size());
+        "%s: dramFullRanges: %s\n",
+        __func__, rangeListToString(dramFullRanges));
     DPRINTF(AbstractPageSwapperInit,
-        "%s: cxlOsRange: %s (%llu:%llu, size %llu)\n",
-        __func__, cxlOsRange.to_string(),
-        cxlOsRange.start(), cxlOsRange.end(), cxlOsRange.size());
+        "%s: dramOsRanges: %s\n",
+        __func__, rangeListToString(dramOsRanges));
     DPRINTF(AbstractPageSwapperInit,
-        "%s: cxlIntegrityRange: %s (%llu:%llu, size %llu)\n",
-        __func__, cxlIntegrityRange.to_string(),
-        cxlIntegrityRange.start(), cxlIntegrityRange.end(),
-        cxlIntegrityRange.size());
+        "%s: dramIntegrityRanges: %s\n",
+        __func__, rangeListToString(dramIntegrityRanges));
+
+    DPRINTF(AbstractPageSwapperInit,
+        "%s: cxlFullRanges: %s\n",
+        __func__, rangeListToString(cxlFullRanges));
+    DPRINTF(AbstractPageSwapperInit,
+        "%s: cxlOsRanges: %s\n",
+        __func__, rangeListToString(cxlOsRanges));
+    DPRINTF(AbstractPageSwapperInit,
+        "%s: cxlIntegrityRanges: %s\n",
+        __func__, rangeListToString(cxlIntegrityRanges));
 }
 
 void
@@ -181,12 +223,12 @@ AbstractPageSwapper::hasValidRanges()
 {
     // TODO Function not being used.
     return (
-        dramFullRange.end() != Addr(0) &&
-        dramOsRange.end() != Addr(0) &&
-        dramIntegrityRange.end() != Addr(0) &&
-        cxlFullRange.end() != Addr(0) &&
-        cxlOsRange.end() != Addr(0) &&
-        cxlIntegrityRange.end() != Addr(0)
+        dramFullRanges.size() != 0 &&
+        dramOsRanges.size() != 0 &&
+        dramIntegrityRanges.size() != 0 &&
+        cxlFullRanges.size() != 0 &&
+        cxlOsRanges.size() != 0 &&
+        cxlIntegrityRanges.size() != 0
     );
 }
 
@@ -209,15 +251,16 @@ AbstractPageSwapper::getPageAddr(PacketPtr pkt)
 Addr
 AbstractPageSwapper::getCxlPageAddr(PacketPtr pkt)
 {
-    if (cxlFullRange.contains(pkt->getAddr())) {
+    if (rangeListContains(cxlFullRanges, pkt->getAddr())) {
         // This is a CXL address already and we can get the page as-is.
         return getPageAddr(pkt);
     } else {
-        assert(dramFullRange.contains(pkt->getAddr()));
+        assert(rangeListContains(dramFullRanges, pkt->getAddr()));
         // Check the already swapped pages first for a matching page, and if
         // not here, check the pages that are in-progress swapping.
         if (pageTable.find(getPageAddr(pkt)) != pageTable.end()) {
-            assert(cxlFullRange.contains(pageTable[getPageAddr(pkt)]));
+            assert(rangeListContains(cxlFullRanges,
+                                    pageTable[getPageAddr(pkt)]));
             return pageTable[getPageAddr(pkt)];
         } else {
             panic("Unable to find paired CXL page for pkt %s", pkt->print());
@@ -561,13 +604,13 @@ AbstractPageSwapper::handleResp(PacketPtr pkt)
                 // Find the CXL page address associated with the swap as the
                 // key.
                 Addr cxlPageKey;
-                if (dramFullRange.contains(pkt->getAddr())) {
+                if (rangeListContains(dramFullRanges, pkt->getAddr())) {
                     // Translate DRAM address to CXL address.
                     cxlPageKey = dramToCxlSwaps[getPageAddr(pkt)];
                 } else {
                     // This is already a CXL address, get the address of the
                     // page.
-                    assert(cxlFullRange.contains(pkt->getAddr()));
+                    assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
                     cxlPageKey = getPageAddr(pkt);
                 }
 
@@ -595,13 +638,13 @@ AbstractPageSwapper::handleResp(PacketPtr pkt)
                 // Find the CXL page address associated with the swap as the
                 // key.
                 Addr cxlPageKey;
-                if (dramFullRange.contains(pkt->getAddr())) {
+                if (rangeListContains(dramFullRanges, pkt->getAddr())) {
                     // Translate DRAM address to CXL address.
                     cxlPageKey = dramToCxlSwaps[getPageAddr(pkt)];
                 } else {
                     // This is already a CXL address, get the address of the
                     // page.
-                    assert(cxlFullRange.contains(pkt->getAddr()));
+                    assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
                     cxlPageKey = getPageAddr(pkt);
                 }
 
@@ -705,8 +748,8 @@ AbstractPageSwapper::countPageAccess(PacketPtr pkt)
     // }
 
     // TODO TEST: Swap anything.
-    pageLastAccessed[pageAddr] = curTick();
-    if (dramFullRange.contains(pageAddr) || cxlFullRange.contains(pageAddr)) {
+    if (rangeListContains(dramFullRanges, pageAddr) ||
+        rangeListContains(cxlFullRanges, pageAddr)) {
         reqsSinceLastSwap++;
     }
 }
@@ -1062,13 +1105,13 @@ AbstractPageSwapper::determineSwappedPages()
     Addr dramPage = Addr(0);
     for (auto it : pageLastAccessed) {
         // Look for the most-recently used CXL page.
-        if (cxlFullRange.contains(it.first) &&
+        if (rangeListContains(cxlFullRanges, it.first) &&
                 it.second > mostRecentCxlTime) {
             mostRecentCxlTime = it.second;
             cxlPage = it.first;
         }
         // Look for the least-recently used DRAM page.
-        else if (dramFullRange.contains(it.first) &&
+        else if (rangeListContains(dramFullRanges, it.first) &&
                 it.second < leastRecentDramTime) {
             leastRecentDramTime = it.second;
             dramPage = it.first;
@@ -1093,8 +1136,8 @@ AbstractPageSwapper::determineSwappedPages()
     // TODO TESTING
     // assert(dramIntegrityRange.contains(dramPage));
     // assert(cxlIntegrityRange.contains(cxlPage));
-    assert(dramFullRange.contains(dramPage));
-    assert(cxlFullRange.contains(cxlPage));
+    assert(rangeListContains(dramFullRanges, dramPage));
+    assert(rangeListContains(cxlFullRanges, cxlPage));
 
     if (mostRecentCxlTime <= leastRecentDramTime) {
         // If no CXL page has been accessed more recently than DRAM, do not
@@ -1325,8 +1368,8 @@ bool
 AbstractPageSwapper::shouldHandlePacket(PacketPtr pkt)
 {
     return (
-        (dramFullRange.contains(pkt->getAddr()) ||
-            cxlFullRange.contains(pkt->getAddr())) &&
+        (rangeListContains(dramFullRanges, pkt->getAddr()) ||
+            rangeListContains(cxlFullRanges, pkt->getAddr())) &&
         (pkt->isRead() || pkt->isWrite())
     );
 }

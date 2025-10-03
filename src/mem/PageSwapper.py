@@ -24,18 +24,14 @@ class AbstractPageSwapper(ClockedObject):
         200, "Number of requests between page swap attempts."
     )
 
-    dram_full_range = Param.AddrRange(
-        AddrRange(0, size=0), "Full available range of DRAM"
+    dram_full_ranges = VectorParam.AddrRange(
+        [], "Full available range(s) of DRAM"
     )
-    dram_os_range = Param.AddrRange(
-        AddrRange(0, size=0), "OS-visible range of DRAM"
+    dram_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
+    cxl_full_ranges = VectorParam.AddrRange(
+        [], "Full available range(s) of CXL"
     )
-    cxl_full_range = Param.AddrRange(
-        AddrRange(0, size=0), "Full available range of CXL"
-    )
-    cxl_os_range = Param.AddrRange(
-        AddrRange(0, size=0), "OS-visible range of DRAM"
-    )
+    cxl_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
 
 
 class PageSwapper(AbstractPageSwapper):
