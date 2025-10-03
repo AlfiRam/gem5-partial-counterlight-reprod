@@ -69,7 +69,7 @@ parser.add_argument(
     type=str,
     required=False,
     help="The database to be used for the workload.",
-    default="redis",
+    default="memcached",
     choices=[
         "memcached",
         "redis",
@@ -134,6 +134,8 @@ board, processor, extras = create_board(args)
 additional_command_args = (
     '-p "measurementtype=timeseries" -p "timeseries.granularity=2000"'
 )
+# Redis is having issues for now.
+assert args.database_type == "memcached"
 match args.database_type:
     case "memcached":
         additional_command_args += ' -p "memcached.hosts=127.0.0.1"'
@@ -150,6 +152,9 @@ match args.database_type:
 command = (
     "m5 exit;\n"  # Third exit event
     + f"cd ycsb-{args.database_type};\n"
+    # Restart memcached with more memory (512MB). Default is 64MB.
+    + 'echo "12345" | sudo -S systemctl stop memcached;'
+    + "memcached -d -m 512;"
     # + "bash;"
     # + 'echo "12345" | sudo -S modprobe dummy;\n'
     # + "sleep 10;"
@@ -166,6 +171,9 @@ command = (
     + f'./bin/ycsb load {args.database_type} -s -P workloads/{args.workload} {additional_command_args} -p "recordcount={args.record_count}";'
     + "sleep 10;"
     + f'./bin/ycsb run {args.database_type} -s -P workloads/{args.workload} {additional_command_args} -p "recordcount={args.record_count}" -p "operationcount={args.operation_count}";'
+    # + f'./bin/ycsb run {args.database_type} -s -P workloads/{args.workload} {additional_command_args} -p "recordcount={args.record_count}" -p "operationcount={args.operation_count}" -p "memcached.opTimeoutMillis=120000" -p "memcached.failureMode = Retry" -p "memcached.readBufferSize = 6000000";'
+    # + "free -h;"
+    # + "bash;"
     # The end of ROI hook will stop the simulation from here.
     + "sleep 5;"  # This delay is to allow any print statements to finish before the simulation abruptly stops.
     + "m5 exit;"
