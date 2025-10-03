@@ -124,6 +124,19 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--app-on-device",
+    type=str,
+    required=False,
+    help="Select which memory device the application should exist on. Requires special kernel support.",
+    default="Auto",
+    choices=[
+        "DRAM",
+        "CXL",
+        "Auto",  # Use usual OS memory allocation
+    ],
+)
+
+parser.add_argument(
     "--no-stop-after-roi",
     action="store_true",
     help="Stop the simulation after all commands are completely finished, not just at the end of the ROI. Helpful for debugging or getting extra output.",
@@ -173,6 +186,15 @@ else:
     all_trackers = None
 
 
+match args.app_on_device:
+    case "DRAM":
+        numa_cmd = "numactl --membind=0 --cpunodebind=0 "
+    case "CXL":
+        numa_cmd = "numactl --membind=1 --cpunodebind=0 "
+    case _:
+        numa_cmd = ""
+
+
 # This is the command to run after the system has booted. The first `m5 exit`
 # written here (which is really the third exit in total from the start of
 # boot) will signal that we have finished booting. During the simulation or
@@ -182,7 +204,8 @@ command = (
     "m5 exit;"  # Third exit event
     + "cd spec2017;"
     + "source shrc;"
-    + f'runcpu --size test --iterations 1 --config myconfig.x86.cfg --define gcc_dir="/usr" --noreportable --nobuild {args.benchmark};'
+    + "numactl -H;"
+    + f'{numa_cmd}runcpu --size {args.size} --iterations 1 --config myconfig.x86.cfg --define gcc_dir="/usr" --noreportable --nobuild {args.benchmark};'
     # The end of ROI hook will stop the simulation from here.
     + "sleep 5;"  # This delay is to allow any print statements to finish before the simulation abruptly stops.
     + "m5 exit;"
