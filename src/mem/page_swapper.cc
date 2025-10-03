@@ -103,6 +103,32 @@ AbstractPageSwapper::init()
 {
     if (!responsePort.isConnected() || !requestPort.isConnected())
         fatal("Page swapper is not connected on both sides.\n");
+
+    // Initialize page reuse tracking and page table.
+    DPRINTF(AbstractPageSwapperInit,
+        "%s: Initializing page reuse tracking.\n", __func__);
+    for (auto range : dramFullRanges) {
+        for (Addr pageAddr = range.start();
+                pageAddr < range.end();
+                pageAddr += pageBytes) {
+            dramPageLastAccessed.push(pageAddr, 0);
+            pageTable[pageAddr] = pageAddr;
+            pageTableReverse[pageAddr] = pageAddr;
+        }
+    }
+
+    for (auto range : cxlFullRanges) {
+        for (Addr pageAddr = range.start();
+                pageAddr < range.end();
+                pageAddr += pageBytes) {
+            cxlPageLastAccessed.push(pageAddr, 0);
+            pageTable[pageAddr] = pageAddr;
+            pageTableReverse[pageAddr] = pageAddr;
+        }
+    }
+
+    DPRINTF(AbstractPageSwapperInit,
+        "%s: Finished initializing page reuse tracking.\n", __func__);
 }
 
 
@@ -956,6 +982,18 @@ AbstractPageSwapper::countPageAccess(PacketPtr pkt)
     // }
 
     // TODO TEST: Swap anything.
+    if (rangeListContains(dramFullRanges, pageAddr)) {
+        dramPageLastAccessed.modify(pageAddr, curTick());
+    } else {
+        assert(rangeListContains(cxlFullRanges, pageAddr));
+        cxlPageLastAccessed.modify(pageAddr, curTick());
+    }
+    DPRINTF(AbstractPageSwapperTest,
+        "%s:%d: dramPageLastAccessed: %s\n",
+        __func__, __LINE__, printDramPageHeap());
+    DPRINTF(AbstractPageSwapperTest,
+        "%s:%d: cxlPageLastAccessed: %s\n",
+        __func__, __LINE__, printCxlPageHeap());
     if (rangeListContains(dramFullRanges, pageAddr) ||
         rangeListContains(cxlFullRanges, pageAddr)) {
         reqsSinceLastSwap++;
@@ -1284,10 +1322,16 @@ AbstractPageSwapper::performSwap(SwapProcessStage stage, Addr cxlPageKey)
         stats.totalSwapTime += curTick() - swapStartTick;
 
         // Swap the last access times in tracking.
-        Tick dramPageTime = pageLastAccessed[dramPage];
-        Tick cxlPageTime = pageLastAccessed[cxlPageKey];
-        pageLastAccessed[cxlPageKey] = dramPageTime;
-        pageLastAccessed[dramPage] = cxlPageTime;
+        Tick dramPageTime = dramPageLastAccessed.getByHandle(dramPage).value;
+        Tick cxlPageTime = cxlPageLastAccessed.getByHandle(cxlPageKey).value;
+        cxlPageLastAccessed.modify(cxlPageKey, dramPageTime);
+        dramPageLastAccessed.modify(dramPage, cxlPageTime);
+        DPRINTF(AbstractPageSwapperTest,
+            "%s:%d: dramPageLastAccessed: %s\n",
+            __func__, __LINE__, printDramPageHeap());
+        DPRINTF(AbstractPageSwapperTest,
+            "%s:%d: cxlPageLastAccessed: %s\n",
+            __func__, __LINE__, printCxlPageHeap());
 
         DPRINTF(AbstractPageSwapper,
                 "%s: Swap complete for DRAM (0x%lx) <-> CXL (0x%lx)\n",
@@ -1327,31 +1371,20 @@ std::pair<Addr, Addr>
 AbstractPageSwapper::determineSwappedPages()
 {
     // If there isn't enough data to know what to swap, don't swap.
-    if (pageLastAccessed.size() < 2) {
+    if (cxlPageLastAccessed.size() < 1 || dramPageLastAccessed.size() < 1) {
         DPRINTF(AbstractPageSwapper,
             "%s: Not enough data to swap anything. Aborting.\n",
             __func__);
         return std::pair<Addr, Addr>(0, 0);
     }
 
-    Tick mostRecentCxlTime = 0;
-    Addr cxlPage = Addr(0);
-    Tick leastRecentDramTime = curTick() + 1;
-    Addr dramPage = Addr(0);
-    for (auto it : pageLastAccessed) {
-        // Look for the most-recently used CXL page.
-        if (rangeListContains(cxlFullRanges, it.first) &&
-                it.second > mostRecentCxlTime) {
-            mostRecentCxlTime = it.second;
-            cxlPage = it.first;
-        }
-        // Look for the least-recently used DRAM page.
-        else if (rangeListContains(dramFullRanges, it.first) &&
-                it.second < leastRecentDramTime) {
-            leastRecentDramTime = it.second;
-            dramPage = it.first;
-        }
-    }
+    auto mostRecentCxl = cxlPageLastAccessed.top();
+    Tick mostRecentCxlTime = mostRecentCxl.value;
+    Addr cxlPage = mostRecentCxl.handle;
+
+    auto leastRecentDram = dramPageLastAccessed.top();
+    Tick leastRecentDramTime = leastRecentDram.value;
+    Addr dramPage = leastRecentDram.handle;
 
     if (mostRecentCxlTime == 0 || leastRecentDramTime == curTick() + 1) {
         DPRINTF(AbstractPageSwapper,
@@ -1863,6 +1896,75 @@ AbstractPageSwapper::printPageTable()
     return str.str();
 }
 
+std::string
+AbstractPageSwapper::printDramPageHeap(size_t max)
+{
+    std::ostringstream str;
+
+    auto pages = dramPageLastAccessed;
+
+    size_t level = 1;
+    size_t items_on_level = 1;
+    size_t item = 0;
+    size_t entries_to_print = max == 0 ?
+        pages.size() :
+        (pages.size() < max ? pages.size() : max);
+    for (size_t i = 0; i < entries_to_print; i++) {
+        if (item == 0) {
+            ccprintf(str, "Level %llu: [", level);
+        }
+
+        ccprintf(str, "(0x%lx - %lu)\n",
+            pages.getByIndex(i).handle, pages.getByIndex(i).value);
+
+        item++;
+        if (item == items_on_level) {
+            ccprintf(str, "]\n");
+
+            // Move to the next level
+            level++;
+            item = 0;
+            items_on_level = items_on_level << 1;
+        }
+    }
+
+    return str.str();
+}
+
+std::string
+AbstractPageSwapper::printCxlPageHeap(size_t max)
+{
+    std::ostringstream str;
+
+    auto pages = cxlPageLastAccessed;
+
+    size_t level = 1;
+    size_t items_on_level = 1;
+    size_t item = 0;
+    size_t entries_to_print = max == 0 ?
+        pages.size() :
+        (pages.size() < max ? pages.size() : max);
+    for (size_t i = 0; i < entries_to_print; i++) {
+        if (item == 0) {
+            ccprintf(str, "Level %llu: [", level);
+        }
+
+        ccprintf(str, "(0x%lx - %lu)\n",
+            pages.getByIndex(i).handle, pages.getByIndex(i).value);
+
+        item++;
+        if (item == items_on_level) {
+            ccprintf(str, "]\n");
+
+            // Move to the next level
+            level++;
+            item = 0;
+            items_on_level = items_on_level << 1;
+        }
+    }
+
+    return str.str();
+}
 
 
 PageSwapper::PageSwapper(const PageSwapperParams &p)

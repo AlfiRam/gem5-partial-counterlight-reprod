@@ -175,10 +175,10 @@ class AbstractPageSwapper : public ClockedObject
      *
      * Note this is tracking the last access times of *translated* addresses.
      */
-    std::unordered_map<Addr, Tick> pageLastAccessed;
-
-    // std::unordered_map<Addr, Tick> dramPageLastAccessed;
-    // std::unordered_map<Addr, Tick> cxlPageLastAccessed;
+    // Max heap
+    HandledPriorityQueue<Addr, Tick, std::less<Tick>> cxlPageLastAccessed;
+    // Min heap
+    HandledPriorityQueue<Addr, Tick, std::greater<Tick>> dramPageLastAccessed;
 
     /**
      * List of requests that must be fulfilled before we are permitted to swap.
@@ -202,6 +202,9 @@ class AbstractPageSwapper : public ClockedObject
     std::unordered_map<Addr, Addr> pageTableReverse;
 
     std::string printPageTable();
+
+    std::string printDramPageHeap(size_t max = 16);
+    std::string printCxlPageHeap(size_t max = 16);
 
     /**
      * Contains any mappings from DRAM to CXL memory.
