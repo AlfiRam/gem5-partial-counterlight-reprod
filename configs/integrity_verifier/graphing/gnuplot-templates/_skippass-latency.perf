@@ -1,0 +1,64 @@
+#set terminal pngcairo  transparent enhanced font "arial,10" fontscale 1.0 size 600, 400
+set terminal pngcairo  enhanced font "sf pro,10" fontscale 4.0 size 2400, 1600
+# set terminal dumb
+# set output 'histograms.8.png'
+set border 3 front lt black linewidth 3.000 dashtype solid
+set boxwidth 0.5 relative
+set style fill   solid 1.00 noborder
+set grid nopolar
+set grid noxtics nomxtics ytics nomytics noztics nomztics nortics nomrtics \
+ nox2tics nomx2tics noy2tics nomy2tics nocbtics nomcbtics
+set grid layerdefault   lt 0 linecolor 0 linewidth 0.300,  lt 0 linecolor 0 linewidth 0.300
+set key bmargin center horizontal Left reverse noenhanced autotitle columnhead nobox
+#set style histogram rowstacked title textcolor lt -1 offset character 2, 0.25
+set style histogram rowstacked title textcolor lt -1 offset character 0, 0.25
+set style fill solid  border -1
+#set style fill pattern  border -1
+set datafile missing '-'
+set style data histograms
+set xtics border in scale 0,0 nomirror rotate by -45  autojustify
+set xtics  norangelimit  font ",8"
+set xtics   ()
+set ytics border in scale 0,0 nomirror norotate  autojustify
+set ytics  norangelimit autofreq  font ",8"
+set ztics border in scale 0,0 nomirror norotate  autojustify
+set cbtics border in scale 0,0 mirror norotate  autojustify
+set rtics border in scale 0,0 nomirror norotate  autojustify
+set title "LLC Cache miss latency"
+set trange [ * : * ] noreverse nowriteback
+set urange [ * : * ] noreverse nowriteback
+set vrange [ * : * ] noreverse nowriteback
+set xlabel "Configuration"
+set xlabel  offset character 0, 2, 0 font "" textcolor lt -1 norotate
+#set xlabel  offset character 0, -2, 0 font "" textcolor lt -1 norotate
+set xrange [ * : * ] noreverse writeback
+set x2range [ * : * ] noreverse writeback
+set ylabel "Latency (ps)"
+#set yrange [ 0.00000 : 900000. ] noreverse writeback
+set y2range [ * : * ] noreverse writeback
+set zrange [ * : * ] noreverse writeback
+set cbrange [ * : * ] noreverse writeback
+set rrange [ * : * ] noreverse writeback
+set colorbox vertical origin screen 0.9, 0.2 size screen 0.05, 0.6 front  noinvert bdefault
+#set key outside
+set key autotitle columnhead
+
+# Define consistent styles
+set style line 1 lc rgb "#4987b3"  lw 3 # DA
+set style line 2 lc rgb "#15405f"  lw 3 # DI
+set style line 3 lc rgb "#fc5e5e"  lw 3 # CA
+set style line 4 lc rgb "#7c1c1c"  lw 3 # CI
+
+
+VERSION = "gnuplot version 6.0.3"
+NO_ANIMATION = 1
+## Last datafile plotted: "immigration.dat"
+plot \
+  newhistogram "No Page Swapping", \
+    'output/testsuite7/skippass-latency_PageSwapNo.dat' using 2:xtic(1) t "fromLLC" ls 1, \
+    '' u 3 t "fromVerifier" ls 2, \
+    '' u 4 t "fromPageSwapper" ls 3, \
+  newhistogram "Page Swapping", \
+    'output/testsuite7/skippass-latency_PageSwapYes.dat' u 2:xtic(1) notitle ls 1, \
+    '' u 3 notitle ls 2, \
+    '' u 4 notitle ls 3
