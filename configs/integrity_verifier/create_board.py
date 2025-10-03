@@ -79,6 +79,22 @@ def add_arguments(parser):
         help="Use a unified I/D L1 cache.",
     )
 
+    parser.add_argument(
+        "--l2-size",
+        type=str,
+        required=False,
+        help="Size of L2 cache.",
+        default="2MiB",
+    )
+
+    parser.add_argument(
+        "--l2-assoc",
+        type=int,
+        required=False,
+        help="Associativity of L2 cache.",
+        default=16,
+    )
+
     # Memory sizes
     parser.add_argument(
         "--dram-size",
@@ -459,6 +475,8 @@ def create_board(args):
             l1d_assoc=8,
             l1i_size="32KiB",
             l1i_assoc=8,
+            l2_size=args.l2_size,
+            l2_assoc=args.l2_assoc,
             unified_l1_cache=args.unified_l1_cache,
             membus=membus,
             metadata_cache_type=args.metadata_cache_type,
@@ -482,6 +500,8 @@ def create_board(args):
             l1d_assoc=8,
             l1i_size="32KiB",
             l1i_assoc=8,
+            l2_size=args.l2_size,
+            l2_assoc=args.l2_assoc,
             unified_l1_cache=args.unified_l1_cache,
             membus=membus,
         )
