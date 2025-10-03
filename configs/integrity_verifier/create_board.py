@@ -247,8 +247,33 @@ def add_arguments(parser):
     parser.add_argument(
         "--cxl-latency",
         type=str,
-        help="Custom CXL latency. For CXL on DRAM mode only.",
-        default="35ns",
+        help="Custom CXL latency (per direction). For CXL on DRAM mode only.",
+        # default="35ns"
+        default="55ns",
+    )
+
+    parser.add_argument(
+        "--cxl-latency-read-req",
+        type=str,
+        help="Custom CXL latency (read requests). For CXL on DRAM mode only. Overrides CXL latency.",
+    )
+
+    parser.add_argument(
+        "--cxl-latency-read-resp",
+        type=str,
+        help="Custom CXL latency (read responses). For CXL on DRAM mode only. Overrides CXL latency.",
+    )
+
+    parser.add_argument(
+        "--cxl-latency-write-req",
+        type=str,
+        help="Custom CXL latency (write requests). For CXL on DRAM mode only. Overrides CXL latency.",
+    )
+
+    parser.add_argument(
+        "--cxl-latency-write-resp",
+        type=str,
+        help="Custom CXL latency (write responses). For CXL on DRAM mode only. Overrides CXL latency.",
     )
 
     parser.add_argument(
@@ -463,6 +488,11 @@ def create_board(args):
     else:
         memory = []
 
+    cxl_latency_read_req = args.cxl_latency_read_req
+    cxl_latency_read_resp = args.cxl_latency_read_resp
+    cxl_latency_write_req = args.cxl_latency_write_req
+    cxl_latency_write_resp = args.cxl_latency_write_resp
+
     # CXL memory
     if args.cxl_mode != "Disabled" and toMemorySize(args.cxl_size) > 0:
         cxl_memory = DIMM_DDR5_4400(
@@ -601,6 +631,10 @@ def create_board(args):
         main_memory_type=args.main_memory_type,
         use_ncx=args.use_ncx,
         cxl_latency=args.cxl_latency,
+        cxl_latency_read_req=cxl_latency_read_req,
+        cxl_latency_read_resp=cxl_latency_read_resp,
+        cxl_latency_write_req=cxl_latency_write_req,
+        cxl_latency_write_resp=cxl_latency_write_resp,
     )
 
     return board, processor, extras
