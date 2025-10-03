@@ -243,8 +243,9 @@ def handle_exit_event():
 def handle_workbegin():
     print("Resetting stats at the start of ROI.")
     m5.stats.reset()
-    print("Switching KVM cores to Timing cores.")
-    processor.switch()
+    if not args.kvm_only:
+        print("Switching KVM cores to Timing cores.")
+        processor.switch()
     yield False
 
 

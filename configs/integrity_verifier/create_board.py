@@ -1,8 +1,12 @@
 # Generate a common board configuration across workloads. This also provides
 # some additional relevant arguments.
 
+import sys
+
 from m5.objects import (
     BadAddr,
+    GlobalInstTracker,
+    LocalInstTracker,
     SystemXBar,
 )
 from m5.util import warn
@@ -35,6 +39,29 @@ def add_arguments(parser):
         required=False,
         help="Number of CPU cores to simulate.",
         default=2,
+    )
+
+    parser.add_argument(
+        "--inst-tracking",
+        action="store_true",
+        required=False,
+        help="Add instruction tracking functionality.",
+    )
+
+    parser.add_argument(
+        "--ff-insts",
+        type=int,
+        required="--inst-tracking" in sys.argv,
+        help="Specify number of instructions to fast-forward. This may have issues if the workload is shorter than the number of instructions specified. Only applies if --inst-tracking is used.",
+        default=1_000_000_000,
+    )
+
+    parser.add_argument(
+        "--exec-insts",
+        type=int,
+        required="--inst-tracking" in sys.argv,
+        help="Specify number of instructions to execute. This may have issues if the workload is shorter than the number of instructions specified. Only applies if --inst-tracking is used.",
+        default=500_000_000,
     )
 
     # Memory sizes
@@ -100,6 +127,12 @@ def add_arguments(parser):
         type=int,
         required=False,
         default=8,
+    )
+
+    parser.add_argument(
+        "--kvm-only",
+        action="store_true",
+        help="Use KVM cores exclusively.",
     )
 
     # Simulation modeling
@@ -227,7 +260,7 @@ def add_arguments(parser):
 
 
 def create_board(args):
-    # This simulation requires using KVM with gem5 compiled for X86 simulation
+    # This simulation requires X86 simulation
     requires(
         isa_required=ISA.X86,
     )
@@ -441,6 +474,10 @@ def create_board(args):
         processor = SimpleProcessor(
             cpu_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=args.cores
         )
+        if args.inst_tracking:
+            print(
+                "Note: Instruction tracking is enabled, but this does nothing in this configuration."
+            )
     elif args.atomic_from_start:
         # Processor that starts in atomic, then goes to timing.
         processor = SimpleSwitchableProcessor(
@@ -449,6 +486,10 @@ def create_board(args):
             isa=ISA.X86,
             num_cores=args.cores,
         )
+        if args.inst_tracking:
+            print(
+                "Note: Instruction tracking is enabled, but this does nothing in this configuration."
+            )
     else:
         # This is a switchable CPU. We first boot Ubuntu using KVM, then the guest
         # will exit the simulation by calling "m5 exit" (see the `command` variable
@@ -465,10 +506,43 @@ def create_board(args):
             isa=ISA.X86,
             num_cores=args.cores,
         )
+        if args.inst_tracking:
+            global_inst_tracker = GlobalInstTracker(
+                # a list of thresholds to trigger the event
+                # inst_thresholds=[1_000_000],
+                inst_thresholds=[],
+                # Hack to allow this to work with KVM and
+                # SimpleSwitchableProcessor
+                use_approximate_exit=True,
+            )
+            extras["global_inst_tracker"] = global_inst_tracker
 
-        # Here we tell the KVM CPU (the starting CPU) not to use perf.
-        for proc in processor.start:
-            proc.core.usePerf = False
+            all_trackers = []
+            for core in processor._switchable_cores[processor._switch_key]:
+                tracker = LocalInstTracker(
+                    # We pass in the global instruction tracker to the local one
+                    global_inst_tracker=global_inst_tracker,
+                    # This parameter tells the tracker to start listening to
+                    # instructions from the beginning of the simulation. If
+                    # set to False, the tracker will not start listening to
+                    # instructions until startListening() is called.
+                    start_listening=False,
+                )
+                all_trackers.append(tracker)
+                # we attach the tracker to the core
+                core.core.probeListener = tracker
+            extras["all_trackers"] = all_trackers
+
+        # Here we tell the KVM CPU (the starting CPU) not to use perf,
+        # if this is unneeded.
+        if not args.inst_tracking:
+            print("Disabling perf for KVM cores.")
+            for proc in processor.start:
+                proc.core.usePerf = False
+        else:
+            print(
+                "Note: Instruction tracking with KVM cores requires perf to be set up. Assuming perf is working as expected."
+            )
 
     # Here we setup the board. The X86Board allows for Full-System X86 simulations.
     board = X86Board(
