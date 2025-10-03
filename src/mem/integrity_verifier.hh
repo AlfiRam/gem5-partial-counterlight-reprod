@@ -353,6 +353,13 @@ class AbstractIntegrityVerifier : public ClockedObject
     enums::IntegrityTreeType integrityTreeType;
 
     /**
+     * Set of all cache lines accessed.
+     *
+     * Useful for seeing the memory footprint.
+     */
+    std::unordered_set<Addr> accessedCacheLines;
+
+    /**
      * Return if this integrity verifier has valid DRAM and CXL ranges stored,
      * based on the integrity allocation mode.
      */
@@ -655,7 +662,25 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     struct IntegrityVerifierStats : public statistics::Group
     {
-      IntegrityVerifierStats(statistics::Group *parent);
+      IntegrityVerifierStats(AbstractIntegrityVerifier *parent);
+
+      void preDumpStats() override;
+
+      std::string name() const {
+        return parent->name() + ".stats";
+      }
+
+      AbstractIntegrityVerifier *parent;
+
+      statistics::Scalar memoryFootprint;
+      statistics::Scalar dataUsedDram;
+      statistics::Scalar dataUsedDramOs;
+      statistics::Scalar dataUsedDramIntegrity;
+      statistics::Scalar dataUsedCxl;
+      statistics::Scalar dataUsedCxlOs;
+      statistics::Scalar dataUsedCxlIntegrity;
+      statistics::Scalar dataUsedOs;
+      statistics::Scalar dataUsedIntegrity;
 
       statistics::Scalar requestsHandled;
       statistics::Scalar metadataReqHandled;

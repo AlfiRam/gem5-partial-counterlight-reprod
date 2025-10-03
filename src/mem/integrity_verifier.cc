@@ -38,6 +38,7 @@
 #include "mem/integrity_verifier.hh"
 
 #include "base/addr_range_list.hh"
+#include "cpu/utils.hh"
 #include "debug/AbstractIntegrityVerifier.hh"
 #include "debug/AbstractIntegrityVerifierInit.hh"
 #include "debug/AbstractIntegrityVerifierReqs.hh"
@@ -1227,6 +1228,17 @@ AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
     // This request should not already have been marked to start.
     assert(arrivalTime.find(pkt->req) == arrivalTime.end());
 
+    // Take a note of the memory region being used.
+    if (needsVerification(pkt->getAddr())) {
+        // NOTE: Uses hard-coded cache line size.
+        for (Addr addr = pkt->getAddr();
+            addr < pkt->getAddr() + pkt->getSize();
+            addr += 64)
+        {
+            accessedCacheLines.emplace(addrBlockAlign(addr, 64));
+        }
+    }
+
     arrivalTime[pkt->req] = curTick();
 
     DPRINTF(AbstractIntegrityVerifier,
@@ -1765,8 +1777,29 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
 
 
 AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
-    statistics::Group *parent
+    AbstractIntegrityVerifier *parent
 ) : statistics::Group(parent, "integrity_verifier"),
+    parent(parent),
+
+    ADD_STAT(memoryFootprint, statistics::units::Byte::get(),
+            "Sum of data regions accessed"),
+    ADD_STAT(dataUsedDram, statistics::units::Byte::get(),
+            "Sum of DRAM data regions accessed"),
+    ADD_STAT(dataUsedDramOs, statistics::units::Byte::get(),
+            "Sum of DRAM application data regions accessed"),
+    ADD_STAT(dataUsedDramIntegrity, statistics::units::Byte::get(),
+            "Sum of DRAM integrity data regions accessed"),
+    ADD_STAT(dataUsedCxl, statistics::units::Byte::get(),
+            "Sum of CXL data regions accessed"),
+    ADD_STAT(dataUsedCxlOs, statistics::units::Byte::get(),
+            "Sum of CXL application data regions accessed"),
+    ADD_STAT(dataUsedCxlIntegrity, statistics::units::Byte::get(),
+            "Sum of CXL integrity data regions accessed"),
+    ADD_STAT(dataUsedOs, statistics::units::Byte::get(),
+            "Sum of application data regions accessed"),
+    ADD_STAT(dataUsedIntegrity, statistics::units::Byte::get(),
+            "Sum of integrity data regions accessed"),
+
     ADD_STAT(requestsHandled, statistics::units::Count::get(),
             "Total number of requests handled"),
     ADD_STAT(metadataReqHandled, statistics::units::Count::get(),
@@ -1900,6 +1933,58 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
     avgReqTimeCxl = totalReqTimeCxl / reqHandledCxl;
     avgReqTimeCxlOs = totalReqTimeCxlOs / reqHandledCxlOs;
     avgReqTimeCxlIntegrity = totalReqTimeCxlIntegrity / reqHandledCxlIntegrity;
+
+void
+AbstractIntegrityVerifier::IntegrityVerifierStats::preDumpStats()
+{
+    DPRINTF(AbstractIntegrityVerifier,
+        "Computing stats due to a dump callback\n");
+
+    statistics::Group::preDumpStats();
+
+    // TODO Hardcoded cache line size
+    Addr cacheLineSize = 64;
+
+    memoryFootprint = parent->accessedCacheLines.size() * cacheLineSize;
+
+    // Compute total amount of data used in all memory regions.
+
+    dataUsedDram = 0;
+    dataUsedDramOs = 0;
+    dataUsedDramIntegrity = 0;
+    dataUsedCxl = 0;
+    dataUsedCxlOs = 0;
+    dataUsedCxlIntegrity = 0;
+    dataUsedOs = 0;
+    dataUsedIntegrity = 0;
+
+    for (auto line : parent->accessedCacheLines) {
+        if (rangeListContains(parent->dramFullRanges, line)) {
+            dataUsedDram += cacheLineSize;
+
+            if (rangeListContains(parent->dramOsRanges, line)) {
+                dataUsedDramOs += cacheLineSize;
+                dataUsedOs += cacheLineSize;
+            } else {
+                assert(rangeListContains(parent->dramIntegrityRanges, line));
+                dataUsedDramIntegrity += cacheLineSize;
+                dataUsedIntegrity += cacheLineSize;
+            }
+        } else {
+            assert(rangeListContains(parent->cxlFullRanges, line));
+
+            dataUsedCxl += cacheLineSize;
+
+            if (rangeListContains(parent->cxlOsRanges, line)) {
+                dataUsedCxlOs += cacheLineSize;
+                dataUsedOs += cacheLineSize;
+            } else {
+                assert(rangeListContains(parent->cxlIntegrityRanges, line));
+                dataUsedCxlIntegrity += cacheLineSize;
+                dataUsedIntegrity += cacheLineSize;
+            }
+        }
+    }
 }
 
 bool
