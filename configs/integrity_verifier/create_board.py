@@ -228,7 +228,7 @@ def add_arguments(parser):
         type=int,
         required=False,
         help="Associativity of metadata cache.",
-        default=8,
+        default=16,
     )
 
     # CXL configuration
