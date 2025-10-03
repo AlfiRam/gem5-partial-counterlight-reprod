@@ -72,6 +72,13 @@ def add_arguments(parser):
         help="Use no cache.",
     )
 
+    parser.add_argument(
+        "--unified-l1-cache",
+        action="store_true",
+        required=False,
+        help="Use a unified I/D L1 cache.",
+    )
+
     # Memory sizes
     parser.add_argument(
         "--dram-size",
@@ -452,8 +459,7 @@ def create_board(args):
             l1d_assoc=8,
             l1i_size="32KiB",
             l1i_assoc=8,
-            l2_size="512KiB",
-            l2_assoc=16,
+            unified_l1_cache=args.unified_l1_cache,
             membus=membus,
             metadata_cache_type=args.metadata_cache_type,
             metadata_cache_size=args.metadata_cache_size,
@@ -476,8 +482,7 @@ def create_board(args):
             l1d_assoc=8,
             l1i_size="32KiB",
             l1i_assoc=8,
-            l2_size="512KiB",
-            l2_assoc=16,
+            unified_l1_cache=args.unified_l1_cache,
             membus=membus,
         )
 
