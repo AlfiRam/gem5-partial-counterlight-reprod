@@ -63,31 +63,20 @@ class AbstractIntegrityVerifier(ClockedObject):
         "This port receives requests and sends responses"
     )
 
+    metadata_req_port = RequestPort(
+        "This port sends metadata requests and receives responses"
+    )
+    metadata_resp_port = ResponsePort(
+        "This port receives metadata requests and sends responses"
+    )
+
     system = Param.System(Parent.any, "System that the object belongs to.")
 
     integrity_hashing_latency = Param.Cycles(
         40, "Time in cycles to encrypt or decrypt using an encryption engine."
     )
 
-    metadata_cache_type = Param.MetadataCacheType(
-        "MetadataCache", "Class of metadata cache."
-    )
-    metadata_cache_size = Param.Int(
-        6144, "Metadata cache size (Non-partitioned only)"
-    )
-    metadata_cache_size_tree_nodes = Param.Int(
-        2048,
-        "Number of tree nodes to store in metadata cache (Partitioned only)",
-    )
-    metadata_cache_size_counter_nodes = Param.Int(
-        2048,
-        "Number of counter nodes to store in metadata cache (Partitioned only)",
-    )
-    metadata_cache_size_mac_nodes = Param.Int(
-        2048,
-        "Number of MAC nodes to store in metadata cache (Partitioned only)",
-    )
-    metadata_cache_assoc = Param.Int(8, "Metadata cache associativity")
+    xor_latency = Param.Cycles(2, "Time in cycles to complete an XOR.")
 
     # All ranges are assumed to be disjoint and in sorted order.
     dram_full_ranges = VectorParam.AddrRange(

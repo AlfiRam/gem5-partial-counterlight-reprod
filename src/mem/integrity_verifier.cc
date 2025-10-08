@@ -51,25 +51,29 @@ namespace gem5
 {
 
 AbstractIntegrityVerifier::AbstractIntegrityVerifier(
-    const AbstractIntegrityVerifierParams &p
+    const Params &p
 )
     : ClockedObject(p),
+      integrityTreeType(p.integrity_tree_type),
+      integrityAllocationMode(p.integrity_allocation_mode),
+      _requestorId(p.system->getRequestorId(this)),
+      integrityHashingLatency(Cycles(p.integrity_hashing_latency)),
+      xorLatency(Cycles(p.xor_latency)),
       system(p.system),
-      metadataCacheSize(p.metadata_cache_size),
-      metadataCacheAssoc(p.metadata_cache_assoc),
-      requestPort(name() + "-mem_side_port", *this),
-      responsePort(name() + "-cpu_side_port", *this),
-      reqQueue(*this, requestPort),
-      respQueue(*this, responsePort),
-      snoopRespQueue(*this, requestPort),
       dramFullRanges(p.dram_full_ranges.begin(), p.dram_full_ranges.end()),
       dramOsRanges(p.dram_os_ranges.begin(), p.dram_os_ranges.end()),
       cxlFullRanges(p.cxl_full_ranges.begin(), p.cxl_full_ranges.end()),
       cxlOsRanges(p.cxl_os_ranges.begin(), p.cxl_os_ranges.end()),
-      integrityAllocationMode(p.integrity_allocation_mode),
-      integrityTreeType(p.integrity_tree_type),
-      _requestorId(p.system->getRequestorId(this)),
-      integrityHashingLatency(Cycles(p.integrity_hashing_latency)),
+      requestPort(name() + "-mem_side_port", *this),
+      responsePort(name() + "-cpu_side_port", *this),
+      metadataRequestPort(name() + "-metadata_req_port", *this),
+      metadataResponsePort(name() + "-metadata_resp_port", *this),
+      reqQueue(*this, requestPort),
+      respQueue(*this, responsePort),
+      snoopRespQueue(*this, requestPort),
+      metadataReqQueue(*this, metadataRequestPort),
+      metadataRespQueue(*this, metadataResponsePort),
+      metadataSnoopRespQueue(*this, metadataRequestPort),
       stats(this)
 {
     // Compute integrity memory ranges.
@@ -142,31 +146,6 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         panic("Invalid integrity tree type.");
     }
 
-    switch (p.metadata_cache_type) {
-        case enums::MetadataCacheType::MetadataCache:
-        metadataCache = new MetadataCache(
-            (size_t)metadataCacheSize,
-            (unsigned int)p.metadata_cache_assoc,
-            integrityTree,
-            AbstractMetadataCache::ReplacementPolicy::LRU
-        );
-        break;
-
-        case enums::MetadataCacheType::PartitionedMetadataCache:
-        metadataCache = new PartitionedMetadataCache(
-            (size_t)p.metadata_cache_size_tree_nodes,
-            (size_t)p.metadata_cache_size_counter_nodes,
-            (size_t)p.metadata_cache_size_mac_nodes,
-            (unsigned int)p.metadata_cache_assoc,
-            integrityTree,
-            AbstractMetadataCache::ReplacementPolicy::LRU
-        );
-        break;
-
-        default:
-        panic("Invalid metadata cache type.");
-    }
-
     DPRINTF(AbstractIntegrityVerifierInit,
         "%s: dramFullRanges: %s\n",
         __func__, rangeListToString(dramFullRanges));
@@ -191,7 +170,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
 AbstractIntegrityVerifier::~AbstractIntegrityVerifier()
 {
     delete integrityTree;
-    delete metadataCache;
+    // delete metadataCache;
 }
 
 void
@@ -199,6 +178,10 @@ AbstractIntegrityVerifier::init()
 {
     if (!responsePort.isConnected() || !requestPort.isConnected())
         fatal("Integrity verifier is not connected on both sides.\n");
+
+    if (!metadataResponsePort.isConnected() ||
+        !metadataRequestPort.isConnected())
+        fatal("Metadata cache is not connected to integrity verifier.\n");
 
     if (!hasValidRanges()) {
         fatal("The integrity verifier has not been provided a valid "
@@ -219,6 +202,73 @@ AbstractIntegrityVerifier::init()
 }
 
 
+bool
+AbstractIntegrityVerifier::hasValidRanges()
+{
+    bool dramIntegrityRangeValid = dramIntegrityRanges.size() > 0;
+    bool cxlIntegrityRangeValid = cxlIntegrityRanges.size() > 0;
+
+    if (integrityAllocationMode ==
+            enums::IntegrityAllocationMode::DramOnly) {
+        return dramIntegrityRangeValid;
+    } else if (integrityAllocationMode ==
+            enums::IntegrityAllocationMode::CxlOnly) {
+        return cxlIntegrityRangeValid;
+    } else if (integrityAllocationMode ==
+            enums::IntegrityAllocationMode::BasicMix) {
+        return dramIntegrityRangeValid && cxlIntegrityRangeValid;
+    }
+    panic("%s: Integrity allocation mode unimplemented.\n", __func__);
+    return false;
+}
+
+bool
+AbstractIntegrityVerifier::treeSizeValid()
+{
+    DPRINTF(AbstractIntegrityVerifier, "%s: Integrity structure size: %lld\n",
+        __func__, integrityTree->statStructureSize());
+
+    if (integrityAllocationMode ==
+                enums::IntegrityAllocationMode::DramOnly) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: DRAM size: %lld\n",
+            __func__, rangeListSize(dramIntegrityRanges));
+
+        return integrityTree->statStructureSize() <=
+                rangeListSize(dramIntegrityRanges);
+    }
+    else if (integrityAllocationMode ==
+                enums::IntegrityAllocationMode::CxlOnly) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CXL size: %lld\n",
+            __func__, rangeListSize(cxlIntegrityRanges));
+
+        return integrityTree->statStructureSize() <=
+                rangeListSize(cxlIntegrityRanges);
+    }
+    else if (integrityAllocationMode ==
+                enums::IntegrityAllocationMode::BasicMix) {
+        panic("%s: Basic mix integrity allocation mode not (yet) supported.",
+            __func__);
+    }
+    return false;
+}
+
+bool
+AbstractIntegrityVerifier::needsVerification(Addr addr)
+{
+    assert(hasValidRanges());
+
+    return (
+        rangeListContains(dramOsRanges, addr) ||
+        rangeListContains(dramIntegrityRanges, addr) ||
+        rangeListContains(cxlOsRanges, addr) ||
+        rangeListContains(cxlIntegrityRanges, addr)
+    );
+}
+
+
+
 Port &
 AbstractIntegrityVerifier::getPort(const std::string &if_name, PortID idx)
 {
@@ -226,6 +276,10 @@ AbstractIntegrityVerifier::getPort(const std::string &if_name, PortID idx)
         return requestPort;
     } else if (if_name == "cpu_side_port") {
         return responsePort;
+    } else if (if_name == "metadata_req_port") {
+        return metadataRequestPort;
+    } else if (if_name == "metadata_resp_port") {
+        return metadataResponsePort;
     } else {
         return ClockedObject::getPort(if_name, idx);
     }
@@ -238,6 +292,90 @@ AbstractIntegrityVerifier::trySatisfyFunctional(PacketPtr pkt)
         requestPort.trySatisfyFunctional(pkt);
 }
 
+
+
+
+AbstractIntegrityVerifier::ResponsePort::
+ResponsePort(const std::string &_name, AbstractIntegrityVerifier &_parent)
+    : QueuedResponsePort(_name, _parent.respQueue),
+      parent(_parent)
+{
+}
+
+Tick
+AbstractIntegrityVerifier::ResponsePort::recvAtomic(PacketPtr pkt)
+{
+    const Tick delay = parent.delayReq(pkt) + parent.delayResp(pkt);
+
+    return delay + parent.requestPort.sendAtomic(pkt);
+}
+
+bool
+AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
+{
+    return parent.processReq(pkt);
+}
+
+void
+AbstractIntegrityVerifier::ResponsePort::recvFunctional(PacketPtr pkt)
+{
+    if (parent.trySatisfyFunctional(pkt)) {
+        pkt->makeResponse();
+    } else {
+        parent.requestPort.sendFunctional(pkt);
+    }
+}
+
+bool
+AbstractIntegrityVerifier::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
+{
+    const Tick when = curTick() + parent.delaySnoopResp(pkt);
+
+    parent.requestPort.schedTimingSnoopResp(pkt, when);
+
+    return true;
+}
+
+bool
+AbstractIntegrityVerifier::processReq(PacketPtr pkt)
+{
+    // Under no means should we be getting a metadata request.
+    // They are only sent from here.
+    assert(!pkt->isMetadataRequest());
+
+    DPRINTF(AbstractIntegrityVerifierReqs,
+        "%s: Recv req %s (pkt addr %p, req addr %p)\n",
+        __func__, pkt->print(), pkt, pkt->req);
+
+    // We want to just bypass immediately if this is an express snoop.
+    if (pkt->isExpressSnoop()) {
+        return requestPort.sendTimingReq(pkt);
+    }
+
+    markReqReceived(pkt);
+
+    sanityCheckPacketLookup();
+
+    // Don't do anything special for memory requests that are not actually
+    // for memory.
+    if (needsVerification(pkt->getAddr()) && pkt->isWrite()) {
+        // Writebacks must be verified first before they can be forwarded to
+        // memory. This will be handled now.
+        return handlePacket(pkt);
+    }
+
+    // If this is a read request, we will handle verification for this once it
+    // becomes a response. For now, it can simply be forwarded to memory.
+    // If this is something else (e.g., CleanEvict), we will similarly forward
+    // this to memory.
+
+    schedReq(pkt);
+
+    return true;
+}
+
+
+
 AbstractIntegrityVerifier::RequestPort::RequestPort(
     const std::string &_name, AbstractIntegrityVerifier &_parent)
     : QueuedRequestPort(_name, _parent.reqQueue, _parent.snoopRespQueue),
@@ -249,9 +387,39 @@ AbstractIntegrityVerifier::RequestPort::RequestPort(
 bool
 AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
 {
-    parent.markRespReceived(pkt);
+    return parent.processResp(pkt);
+}
 
-    parent.sanityCheckPacketLookup();
+void
+AbstractIntegrityVerifier::RequestPort::recvFunctionalSnoop(PacketPtr pkt)
+{
+    if (parent.trySatisfyFunctional(pkt)) {
+        pkt->makeResponse();
+    } else {
+        parent.responsePort.sendFunctionalSnoop(pkt);
+    }
+}
+
+Tick
+AbstractIntegrityVerifier::RequestPort::recvAtomicSnoop(PacketPtr pkt)
+{
+    const Tick delay = parent.delaySnoopResp(pkt);
+
+    return delay + parent.responsePort.sendAtomicSnoop(pkt);
+}
+
+void
+AbstractIntegrityVerifier::RequestPort::recvTimingSnoopReq(PacketPtr pkt)
+{
+    parent.responsePort.sendTimingSnoopReq(pkt);
+}
+
+bool
+AbstractIntegrityVerifier::processResp(PacketPtr pkt)
+{
+    markRespReceived(pkt);
+
+    sanityCheckPacketLookup();
 
     DPRINTF(AbstractIntegrityVerifierResps,
         "%s: Recv resp %s (pkt addr %p, req addr %p)\n",
@@ -259,20 +427,179 @@ AbstractIntegrityVerifier::RequestPort::recvTimingResp(PacketPtr pkt)
 
     // Don't do anything special for memory requests that are not actually
     // for memory.
-    if (parent.needsVerification(pkt->getAddr())) {
+    if (needsVerification(pkt->getAddr())) {
         // Read responses must be verified first before they can be used.
         if (pkt->isRead()) {
-            return parent.handlePacket(pkt);
+            return handlePacket(pkt);
         }
 
         // If this is a write response or something else (e.g., UpgradeResp),
         // drop to the default behavior below.
     }
 
-    parent.schedResp(pkt);
+    // This packet should not be for integrity data.
+    assert(!rangeListContains(dramIntegrityRanges, pkt->getAddr()) &&
+           !rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+
+    schedResp(pkt);
 
     return true;
 }
+
+
+
+
+
+
+AbstractIntegrityVerifier::MetadataResponsePort::MetadataResponsePort(
+    const std::string &_name, AbstractIntegrityVerifier &_parent)
+        : QueuedResponsePort(_name, _parent.metadataRespQueue),
+        parent(_parent)
+{
+}
+
+bool
+AbstractIntegrityVerifier::MetadataResponsePort::recvTimingReq(PacketPtr pkt)
+{
+    return parent.processMetadataReq(pkt);
+}
+
+bool
+AbstractIntegrityVerifier::processMetadataReq(PacketPtr pkt)
+{
+    DPRINTF(AbstractIntegrityVerifierReqs,
+        "%s: Recv metadata req %s (pkt addr %p, req addr %p)\n",
+        __func__, pkt->print(), pkt, pkt->req);
+
+    if (!pkt->isMetadataRequest()) {
+        // Bypass usual checks. This is a request from the cache itself.
+        // (i.e., a writeback or eviction)
+        // We should note a pending metadata eviction here if needed.
+        // pendingMetadataEvictions.insert(...
+        //     compute the tree node associated with this packet's address)
+        DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
+            __func__, pkt->print());
+        requestPort.schedTimingReq(pkt, clockEdge(Cycles(1)));
+        return true;
+    }
+
+    // We are expecting a request from the metadata cache here for integrity
+    // data.
+
+    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
+           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+
+    updatePacketLookup(pkt);
+
+    // Pass the request to memory.
+    schedReq(pkt);
+
+    return true;
+}
+
+
+
+
+
+AbstractIntegrityVerifier::MetadataRequestPort::MetadataRequestPort(
+    const std::string &_name, AbstractIntegrityVerifier &_parent)
+        : QueuedRequestPort(
+            _name,
+            _parent.metadataReqQueue,
+            _parent.metadataSnoopRespQueue
+        ),
+        parent(_parent)
+{
+}
+
+bool
+AbstractIntegrityVerifier::MetadataRequestPort::recvTimingResp(PacketPtr pkt)
+{
+    return parent.processMetadataResp(pkt);
+}
+
+bool
+AbstractIntegrityVerifier::processMetadataResp(PacketPtr pkt)
+{
+    // We are expecting a response from the metadata cache for metadata.
+    // The data has already been verified (before even being inserted into
+    // the cache).
+
+    assert(pkt->isMetadataRequest());
+    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
+           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+    assert(outstandingMetadataRequests.find(pkt->getMetadataNode()) !=
+           outstandingMetadataRequests.end());
+
+    DPRINTF(AbstractIntegrityVerifierResps,
+        "%s: Recv metadata resp %s (pkt addr %p, req addr %p)\n",
+        __func__, pkt->print(), pkt, pkt->req);
+
+    updatePacketLookup(pkt);
+
+    // For every packet that was waiting for this node, notify them that their
+    // parent node is verified and here.
+    auto range = outstandingMetadataRequests.equal_range(
+        pkt->getMetadataNode());
+    std::vector<PacketPtr> waitingPkts;
+    // Find the packet(s) that is/are associated with this request.
+    for (auto it = range.first; it != range.second; ++it) {
+        assert(it->second != nullptr);
+        PacketPtr packet = packetLookup.find(it->second)->second;
+        waitingPkts.push_back(packet);
+    }
+
+    for (auto waitingPkt : waitingPkts) {
+        notifyParentReceived(waitingPkt, pkt->getMetadataNode());
+    }
+
+    removeFromPacketLookup(pkt);
+
+    delete pkt;
+
+    return true;
+}
+
+
+
+
+
+
+
+size_t
+AbstractIntegrityVerifier::getParentNode(PacketPtr pkt)
+{
+    if (pkt->isMetadataRequest()) {
+        // This function should not be called if this is already the root
+        // metadata node.
+        assert(pkt->getMetadataNode() != 0);
+
+        return integrityTree->parentBlockIndex(pkt->getMetadataNode());
+    } else {
+        return integrityTree->addressToBlockIndex(pkt->getAddr());
+    }
+}
+
+
+bool
+AbstractIntegrityVerifier::parentNodeIsSecureRoot(PacketPtr pkt)
+{
+    return (pkt->isMetadataRequest() && pkt->getMetadataNode() == 0);
+}
+
+
+bool
+AbstractIntegrityVerifier::parentNodeIsPendingEviction(PacketPtr pkt)
+{
+    if (parentNodeIsSecureRoot(pkt)) {
+        return false;
+    }
+
+    auto parentNode = getParentNode(pkt);
+    return (pendingMetadataEvictions.find(parentNode) !=
+            pendingMetadataEvictions.end());
+}
+
 
 Addr
 AbstractIntegrityVerifier::getIntegrityNodeLocation(size_t node)
@@ -309,6 +636,35 @@ AbstractIntegrityVerifier::getIntegrityNodeLocation(size_t node)
             addr = range.start() + offset;
             break;
         }
+    } else if (integrityAllocationMode ==
+        enums::IntegrityAllocationMode::BasicMix) {
+        // Basic mixture. DRAM data is protected with data in DRAM, CXL data is
+        // protected with data in CXL.
+        panic("Basic mix not implemented.");  // TODO
+
+        /////////////// For leaves
+        // if (dramOsRange.contains(pkt->getAddr())) {
+        //     // This request is for data in DRAM. Thus, the leaf should also
+        //     // be in DRAM.
+        //     reqAddr = dramIntegrityRange.start() +
+        //                 integrityTree.simulatedBlockOffset(parentNode);
+        // } else if (cxlOsRange.contains(pkt->getAddr())) {
+        //     // This request is for data in CXL memory. Thus, the leaf should
+        //     // also be in CXL memory.
+        //     reqAddr = cxlIntegrityRange.start() +
+        //                 integrityTree.simulatedBlockOffset(parentNode,
+        //                                                 cxlOsRange.start());
+        // } else {
+        //     panic("Packet %s is expected in neither DRAM or CXL.",
+        //             pkt->print());
+        // }
+        //
+        //////////////// For non-leaves
+        // Todo For now, assume that all non-leaf nodes are in DRAM.
+        // assert(!integrityTree.isLeaf(node));
+        //
+        // reqAddr = dramIntegrityRange.start() +
+        //                 integrityTree.simulatedBlockOffset(node);
     } else {
         panic("Integrity allocation mode unimplemented.");
     }
@@ -325,29 +681,7 @@ AbstractIntegrityVerifier::generateMetadataRequest(PacketPtr pkt)
 {
     size_t parentNode = getParentNode(pkt);
 
-    // The simulated address for the request.
-    uint64_t reqAddr;
-    assert(hasValidRanges());
-    reqAddr = getIntegrityNodeLocation(parentNode);
-
-    // Create the metadata request and packet.
-    RequestPtr req = std::make_shared<Request>(
-        reqAddr,
-        64, // Size
-        0, // No flags
-        _requestorId
-    );
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Allocated request %p\n",
-        __func__, req);
-    PacketPtr metadataRequestPkt = Packet::createRead(req);
-    // Set the flag that this is a metadata request.
-    metadataRequestPkt->setMetadataRequest();
-
-    // Indicate the integrity tree node that will be accessed.
-    metadataRequestPkt->setMetadataNode(parentNode);
-
-    return metadataRequestPkt;
+    return generateMetadataRequest(parentNode);
 }
 
 PacketPtr
@@ -368,6 +702,8 @@ AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
         "%s: Allocated request %p\n",
         __func__, req);
     PacketPtr metadataRequestPkt = Packet::createRead(req);
+    uint8_t* pkt_data = new uint8_t[req->getSize()];
+    metadataRequestPkt->dataDynamic(pkt_data);
     // Set the flag that this is a metadata request.
     metadataRequestPkt->setMetadataRequest();
 
@@ -380,13 +716,13 @@ AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
 void
 AbstractIntegrityVerifier::saveRetryVerify(PacketPtr pkt)
 {
-    schedule(new RetryVerifyEvent(this, pkt), curTick() + Cycles(40));
+    schedule(new RetryVerifyEvent(this, pkt), clockEdge(Cycles(10)));
 }
 
 void
 AbstractIntegrityVerifier::saveRetryReq(PacketPtr pkt)
 {
-    schedule(new RetryReqEvent(this, pkt), curTick() + Cycles(40));
+    schedule(new RetryReqEvent(this, pkt), clockEdge(Cycles(10)));
 }
 
 bool
@@ -395,6 +731,16 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
             "%s: Handling verification of packet %s\n",
             __func__, pkt->print());
+
+    // TODO May need to adjust this
+    if (outstandingIntegrityVerification.size() > maxEncQueueSize) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Rejecting %s due to encryption queue full. Retrying "
+            "later.\n",
+            __func__, pkt->print());
+
+        return false;
+    }
 
     // We aren't ready for this packet. Don't accept it until the parent node
     // is fully evicted.
@@ -425,17 +771,9 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     // sent to the CPU (for read responses) or to be written to memory (for
     // write requests).
 
-    // TODO This will start with just basic integrity. No encryption. Just
-    // integrity/cryptographic hashing. The data is thus already decrypted.
-    // We just need to verify that this data is what we expect it to be.
-
     // Kick off hashing. Add to a pending hashing list. Schedule an event
     // when the hashing completes. Keep in mind we are essentially holding
     // hostage the memory packet until all verification is complete.
-    // TODO For now, we will assume there will be unlimited space in the
-    // pending hashing list. A packet should never bounce back and clog up for
-    // now. However, in the future, there should be a capacity check here and
-    // ask packets to try again later.
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling hash for pkt %s\n",
         __func__, pkt->print());
     schedule(
@@ -459,54 +797,15 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Parent metadata node for pkt %s is %llu\n",
             __func__, pkt->print(), parentNode);
-
-        stats.metadataCacheAccesses++;
-        stats.metadataCacheAccessesTypes[
-            integrityTree->getNodeType(parentNode)]++;
-        if (metadataCache->contains(parentNode)) {
-            // Cache hit!
-            stats.metadataCacheHits++;
-            stats.metadataCacheHitsTypes[
-                integrityTree->getNodeType(parentNode)]++;
-        } else {
-            // Cache miss.
-            stats.metadataCacheMisses++;
-            stats.metadataCacheMissesTypes[
-                integrityTree->getNodeType(parentNode)]++;
-        }
     } else {
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Parent metadata node for pkt %s is secure root\n",
             __func__, pkt->print());
-    }
-
-    if (parentNodeAvailable(pkt)) {
-        // If the parent is the secure root, or the parent node exists in
-        // the metadata cache, we are just waiting for the hashing to
-        // complete. We are done here.
-
-        // Account for the request being complete.
-        DPRINTF(AbstractIntegrityVerifier, "%s: pkt %s has parent available\n",
-            __func__, pkt->print());
-        if (!parentNodeIsSecureRoot(pkt)) {
-            // Handle locking just in case we have trouble inserting to the
-            // metadata cache right away.
-            if (pkt->isMetadataRequest()) {
-                addToPendingToUnlock(parentNode, pkt->getMetadataNode());
-            } else {
-                addToPendingToUnlock(parentNode, 0);
-            }
-            metadataCache->lockDupeOkay(parentNode);
-        }
-        completeIntegrityVerification(pkt);
-
+        // No need to make a metadata request. Consider it instantly fulfilled.
         return true;
     }
 
-    DPRINTF(AbstractIntegrityVerifier, "%s: pkt %s is missing parent %llu\n",
-            __func__, pkt->print(), parentNode);
-
-    // If there is already an outstanding request for this parent node, we will
+    // If there is already an outstanding request for this parent node, we can
     // batch this with the existing request.
     bool needsRequest = outstandingMetadataRequests.find(parentNode) ==
                         outstandingMetadataRequests.end();
@@ -515,9 +814,18 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     if (needsRequest) {
         // A request has not yet been sent. We will craft a request packet for
         // metadata to memory to get the parent node. Then we schedule the
-        // request to the memory controller.
+        // metadata request.
+        DPRINTF(AbstractIntegrityVerifier,
+                "%s: pkt %s will generate a metadata request for parent "
+                "%llu\n",
+                __func__, pkt->print(), parentNode);
         PacketPtr metadataRequestPkt = generateMetadataRequest(pkt);
-        schedReq(metadataRequestPkt);
+        schedMetadataReq(metadataRequestPkt);
+    } else {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: pkt %s does not need to create a metadata request. Parent "
+            "%llu is already requested. Batching.",
+            __func__, pkt->print(), parentNode);
     }
 
     // We will hold on to the original packet until the time comes to forward
@@ -540,64 +848,30 @@ AbstractIntegrityVerifier::completeIntegrityHash(PacketPtr pkt)
     // Attempt verification (we will call a separate function since
     // we don't know if the hashing or potential parent node retrieval will
     // complete first)
-    completeIntegrityVerification(pkt);
+    attemptXor(pkt);
 }
 
 
-size_t
-AbstractIntegrityVerifier::getParentNode(PacketPtr pkt)
-{
-    if (pkt->isMetadataRequest()) {
-        // This function should not be called if this is already the root
-        // metadata node.
-        assert(pkt->getMetadataNode() != 0);
 
-        return integrityTree->parentBlockIndex(pkt->getMetadataNode());
-    } else {
-        return integrityTree->addressToBlockIndex(pkt->getAddr());
-    }
+void
+AbstractIntegrityVerifier::notifyParentReceived(
+    PacketPtr pkt,
+    uint64_t node_completed
+)
+{
+    assert(hasOutstandingMetadataRequest(node_completed, pkt));
+    removeFromOutstandingMetadataRequests(node_completed, pkt);
+    DPRINTF(AbstractIntegrityVerifier, "%s: Got parent %llu of pkt %s\n",
+        __func__, node_completed, pkt->print());
+
+    // The parent of the node requested by `pkt` is received and verified.
+    // We are now able to attempt verification.
+    attemptXor(pkt);
 }
 
 
 bool
-AbstractIntegrityVerifier::parentNodeIsSecureRoot(PacketPtr pkt)
-{
-    return (pkt->isMetadataRequest() && pkt->getMetadataNode() == 0);
-}
-
-
-bool
-AbstractIntegrityVerifier::parentNodeIsPendingEviction(PacketPtr pkt)
-{
-    if (parentNodeIsSecureRoot(pkt)) {
-        return false;
-    }
-
-    auto parentNode = getParentNode(pkt);
-    if (!metadataCache->containsPendingOkay(parentNode)) {
-        return false;
-    }
-    auto search = metadataCache->find(parentNode);
-
-    return (search.second.pending_eviction);
-}
-
-
-bool
-AbstractIntegrityVerifier::parentNodeAvailable(PacketPtr pkt)
-{
-    if (parentNodeIsSecureRoot(pkt)) {
-        // The parent of this node is the secure root.
-        return true;
-    }
-
-    auto parentNode = getParentNode(pkt);
-    return (metadataCache->contains(parentNode));
-}
-
-
-bool
-AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
+AbstractIntegrityVerifier::attemptXor(PacketPtr pkt)
 {
     // Check if both the hash generation is finished and the corresponding
     // parent node is available. If not, keep waiting. This function will
@@ -609,7 +883,7 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
             "hash incomplete\n",
             __func__, pkt->print());
         return false;
-    } else if (!parentNodeAvailable(pkt)) {
+    } else if (hasOutstandingMetadataRequest(pkt)) {
         // The parent node is not yet available. We are not ready to verify.
         DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
             "parent unavailable\n",
@@ -617,27 +891,66 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         return false;
     }
 
-    // We are now ready to verify.
-    // Assume that the verification was successful, and effectively instant.
-    if (!parentNodeIsSecureRoot(pkt)) {
-        // Consider the metadata cache accessed for tracking purposes.
-        metadataCache->access(getParentNode(pkt));
-    }
+    // We are ready.
+    DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling XOR for pkt %s\n",
+        __func__, pkt->print());
+    schedule(
+        new XorCompletionEvent(this, pkt),
+        clockEdge(xorLatency)
+    );
+    assert(outstandingXors.find(pkt->req) ==
+           outstandingXors.end());
+    outstandingXors.insert(pkt->req);
 
-    // Metadata requests have more logic involved so this is handled
-    // separately.
+    return true;
+}
+
+
+
+void
+AbstractIntegrityVerifier::completeXor(PacketPtr pkt)
+{
+    // Take this request off the pending XOR list.
+    assert(outstandingXors.find(pkt->req) !=
+           outstandingXors.end());
+    outstandingXors.erase(pkt->req);
+
+    // We now assume that the decryption/encryption needed for this packet is
+    // complete, and it can move on to its destination.
+    completeIntegrityVerification(pkt);
+}
+
+
+
+void
+AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
+{
+    outstandingIntegrityVerification.erase(pkt);
+    DPRINTF(AbstractIntegrityVerifier,
+            "%s: Verified pkt %s\n", __func__, pkt->print());
+
     if (pkt->isMetadataRequest()) {
-        return handleMetadataAddition(pkt);
+        if (pkt->isRead()) {
+            assert(pkt->isResponse());
+            // Forward the packet to the metadata cache to store, which
+            // notifies the requests that were waiting for this.
+            schedMetadataResp(pkt);
+        } else {
+            // This is probably a dirty writeback.
+            fatal("Unimplemented metadata writes");
+            assert(pkt->isWrite());
+            assert(pkt->isRequest());
+            // TODO Update the parent in metadata cache...
+
+            // Forward the packet to memory
+
+            schedReq(pkt);
+        }
+        return;
     }
 
     // The rest of this is for handling data packets.
     assert(!pkt->isMetadataRequest());
-
-    // Officially consider this verified.
-    outstandingIntegrityVerification.erase(pkt);
-    unlockIfPossible(getParentNode(pkt), 0);
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Verified pkt %s\n", __func__, pkt->print());
 
     if (pkt->isRead()) {
         // Handling finishing integrity verification for read responses.
@@ -649,405 +962,16 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
         // This means we can now update the metadata cache and forward the data
         // to memory for storage.
         auto parentNode = getParentNode(pkt);
-        metadataCache->modify(parentNode);
+        // TODO Create write request for parent node in cache
+        // metadataCache->modify(parentNode);
         DPRINTF(AbstractIntegrityVerifier,
             "%s: Modifying cache line %lu in metadata cache\n",
             __func__, parentNode);
         // This packet can now be properly forwarded to memory to complete.
         schedReq(pkt);
     }
-
-    return true;
 }
 
-
-bool
-AbstractIntegrityVerifier::handleMetadataAddition(PacketPtr pkt)
-{
-    // Attempt to add the metadata to the cache.
-    bool inserted = metadataCache->insert(pkt->getMetadataNode());
-    if (!inserted) {
-        // We must evict something to make room for more.
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: %s could not be inserted into the cache. "
-            "Conducting eviction.\n",
-            __func__, pkt->print());
-
-        std::unordered_set<AbstractMetadataCache::EntryKey> ignoredData;
-        for (auto it : outstandingMetadataRequests) {
-            ignoredData.insert(it.first);
-        }
-        ignoredData.insert(0);
-        auto evictedData = metadataCache->evict(ignoredData,
-                                                pkt->getMetadataNode());
-        if (evictedData.second.pending_eviction) {
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s: %lld was selected to evict but is dirty.\n",
-                __func__, evictedData.first);
-            // If this line is marked as pending eviction, we must first
-            // make sure its parent is available in the metadata cache.
-            auto evictParent = integrityTree->parentBlockIndex(
-                                                evictedData.first);
-            if (!metadataCache->contains(evictParent)) {
-                DPRINTF(AbstractIntegrityVerifier,
-                    "%s: The parent of %lld, %lld, is not cached.\n",
-                    __func__, evictedData.first, evictParent);
-                // The parent of the cache line being evicted is not
-                // cached. We will request this first and come back to
-                // evicting once the parent is in the cache.
-
-                sanityCheckEvictionVictim(evictedData.first,
-                                          pkt->getMetadataNode());
-
-                bool requestNeeded =
-                    outstandingMetadataRequests.find(evictParent) ==
-                    outstandingMetadataRequests.end();
-
-                // If there is already an outstanding request for this
-                // parent node, we will batch this with the existing
-                // request.
-                if (requestNeeded) {
-                    // Request does not already exist. Create and send out.
-                    PacketPtr metadataReq = generateMetadataRequest(
-                                        evictParent);
-                    schedReq(metadataReq);
-                }
-
-                addToOutstandingMetadataRequests(evictParent, nullptr);
-                outstandingMetadataEvictions.insert(
-                    {evictParent, {evictedData.first, pkt->req}});
-                DPRINTF(AbstractIntegrityVerifier,
-                    "%s: outstandingMetadataEvictions increased. size: %d\n",
-                    __func__, outstandingMetadataEvictions.size());
-
-                // Stop here, and we will call this function again later once
-                // the eviction is complete and we have a new free space.
-                return false;
-            }
-            DPRINTF(AbstractIntegrityVerifier,
-                "%s: The parent of %lld is cached. Evicting %lld.\n",
-                __func__, evictParent, evictedData.first);
-            // The parent is in the cache, so we can safely evict (writeback).
-            metadataCache->finishEvict(evictedData.first);
-            // TODO Create writeback packet
-        }
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Evicted %lu from metadata cache.\n",
-            __func__, evictedData.first);
-        inserted = metadataCache->insert(pkt->getMetadataNode());
-    }
-    assert(inserted);
-
-    if (outstandingMetadataRequests.find(pkt->getMetadataNode()) !=
-        outstandingMetadataRequests.end()) {
-        // If there are metadata requests that were waiting for this node,
-        // we will temporarily lock it from being evicted.
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Locking cache line %llu for outstanding "
-            "metadata request(s)\n",
-            __func__, pkt->getMetadataNode());
-        metadataCache->lock(pkt->getMetadataNode());
-        copyOMRtoPTU(pkt->getMetadataNode());
-    }
-
-    // Now that this node has been cached, see if the parent node is now safe
-    // to evict.
-    if (!parentNodeIsSecureRoot(pkt)) {
-        unlockIfPossible(
-            getParentNode(pkt),
-            pkt->getMetadataNode());
-    }
-
-    // Now that the data is cached, we can officially call this verified and
-    // done.
-    outstandingIntegrityVerification.erase(pkt);
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Verified pkt %s\n", __func__, pkt->print());
-
-    // Update stats for miss time.
-    assert(metadataMissTime.find(pkt->req) != metadataMissTime.end());
-    stats.metadataCacheMissLatencyTotal +=
-            curTick() - metadataMissTime[pkt->req];
-    metadataMissTime.erase(pkt->req);
-
-    // Check to see if there were evictions that were waiting for this (parent)
-    // metadata.
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Triggering evictions that were waiting for %s to verify\n",
-        __func__, pkt->print());
-    auto evictions = outstandingMetadataEvictions.equal_range(
-                                                pkt->getMetadataNode());
-    std::vector<std::pair<uint64_t, PacketPtr>> toEvict;
-    for (auto it = evictions.first; it != evictions.second; ++it) {
-        uint64_t evicted_node_id = it->second.first;
-        PacketPtr original_req = packetLookup.find(it->second.second)->second;
-        toEvict.push_back({evicted_node_id, original_req});
-    }
-
-    for (auto e : toEvict) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: %s is verified. %llu can now be evicted for %s.\n",
-            __func__, pkt->print(), e.first, e.second->print());
-
-        metadataCache->finishEvict(e.first);
-        bool successful = completeIntegrityVerification(e.second);
-
-        // If insertion wasn't successful immediately after eviction,
-        // something is very wrong. This would imply that the replacement to
-        // the eviction victim was never really ready to insert the first
-        // time it tried to be inserted into the metadata cache.
-        assert(successful);
-    }
-    outstandingMetadataEvictions.erase(pkt->getMetadataNode());
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: outstandingMetadataEvictions decreased. size: %d\n",
-        __func__, outstandingMetadataEvictions.size());
-
-
-    // We must handle here that if a metadata request is verified, we can
-    // trigger to verify the node(s) below this one that are still waiting.
-    // Attempt to verify any applicable outstanding verifications.
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Triggering requests that were waiting for %s to verify\n",
-        __func__, pkt->print());
-    auto range = outstandingMetadataRequests.equal_range(
-                                                pkt->getMetadataNode());
-    std::vector<PacketPtr> toVerify;
-    for (auto it = range.first; it != range.second; ++it) {
-        // Find the packet that is associated with this request.
-        if (it->second == pkt->req || it->second == nullptr) {
-            // Skip the request we're already in the middle of doing,
-            // or placeholders (not to be handled here).
-            continue;
-        }
-        PacketPtr packet = packetLookup.find(it->second)->second;
-        toVerify.push_back(packet);
-    }
-
-    for (auto packet : toVerify) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: %s is verified. %s is now ready for verification.\n",
-            __func__, pkt->print(), packet->print());
-        completeIntegrityVerification(packet);
-
-        // If this doesn't succeed, we couldn't complete all the verifications
-        // that relied upon the addition of this node right away.
-        // - If this was a metadata request, this is usually if the cache is
-        // full and the eviction victim isn't ready to evict yet. This is
-        // already accounted for in the outstandingMetadataEviction list.
-        // - If this was a data request, this is usually if the parent node
-        // was made available before the hash finished. This is already
-        // accounted for by continuing to keep the parent locked in the
-        // pendingToUnlock list, and the function will be called again once
-        // the hash is finished.
-    }
-
-    // Consider this metadata request now received.
-    // Any requests that aren't yet fulfilled will keep this line locked.
-    outstandingMetadataRequests.erase(pkt->getMetadataNode());
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: outstandingMetadataRequests decreased. size: %d\n",
-        __func__, outstandingMetadataRequests.size());
-
-    // If there are no nodes that are depending on this anymore, unlock
-    // the cache line now.
-    if (pendingToUnlock.find(pkt->getMetadataNode()) ==
-        pendingToUnlock.end()) {
-        metadataCache->unlockDupeOkay(pkt->getMetadataNode());
-    }
-
-    removeFromPacketLookup(pkt);
-
-    delete pkt;
-
-    return true;
-}
-
-void
-AbstractIntegrityVerifier::unlockIfPossible(
-    uint64_t node,
-    uint64_t newly_verified
-) {
-    // First, remove the newly-verified entry from the pending unlock list.
-    bool pendingListModified = false;
-    bool vectorEmptied = false;
-    for (auto it = pendingToUnlock.begin(); it != pendingToUnlock.end();) {
-        if (it->first == node) {
-            auto depending_on_locked = &(it->second);
-            auto itt = depending_on_locked->begin();
-            while (itt != depending_on_locked->end()) {
-                if (*itt == newly_verified) {
-                    // This node has been verified and is no longer holding up
-                    // its parent.
-                    itt = depending_on_locked->erase(itt);
-                    pendingListModified = true;
-                    if (depending_on_locked->size() == 0) {
-                        vectorEmptied = true;
-                    }
-                    break;
-                } else {
-                    itt++;
-                }
-            }
-
-            if (pendingListModified) break;
-        } else {
-            it++;
-        }
-    }
-
-    if (!pendingListModified) {
-        // The pending to unlock list was not modified, so unlocking this cache
-        // line should be done elsewhere.
-        return;
-    }
-
-    if (newly_verified != 0) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Removed relationship between %llu and the node "
-            "depending on it, %llu\n",
-            __func__, node, newly_verified);
-    } else {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Removed relationship between %llu and a data request that "
-            "depended on it\n",
-            __func__, node);
-    }
-
-    // If the vector now has 0 elements, remove this key entirely from the map.
-    if (vectorEmptied) {
-        pendingToUnlock.erase(node);
-    }
-
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s:%d: %s",
-        __func__, __LINE__, printPendingToUnlock());
-
-    // Then check the list if it can be unlocked.
-    if (pendingToUnlock.find(node) == pendingToUnlock.end()) {
-        // This node can be unlocked. Three are no more dependencies.
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Unlocking cache line %llu\n",
-            __func__, node);
-        metadataCache->unlock(node);
-    }
-}
-
-
-void
-AbstractIntegrityVerifier::RequestPort::recvFunctionalSnoop(PacketPtr pkt)
-{
-    if (parent.trySatisfyFunctional(pkt)) {
-        pkt->makeResponse();
-    } else {
-        parent.responsePort.sendFunctionalSnoop(pkt);
-    }
-}
-
-Tick
-AbstractIntegrityVerifier::RequestPort::recvAtomicSnoop(PacketPtr pkt)
-{
-    const Tick delay = parent.delaySnoopResp(pkt);
-
-    return delay + parent.responsePort.sendAtomicSnoop(pkt);
-}
-
-void
-AbstractIntegrityVerifier::RequestPort::recvTimingSnoopReq(PacketPtr pkt)
-{
-    parent.responsePort.sendTimingSnoopReq(pkt);
-}
-
-
-AbstractIntegrityVerifier::ResponsePort::
-ResponsePort(const std::string &_name, AbstractIntegrityVerifier &_parent)
-    : QueuedResponsePort(_name, _parent.respQueue),
-      parent(_parent)
-{
-}
-
-Tick
-AbstractIntegrityVerifier::ResponsePort::recvAtomic(PacketPtr pkt)
-{
-    const Tick delay = parent.delayReq(pkt) + parent.delayResp(pkt);
-
-    return delay + parent.requestPort.sendAtomic(pkt);
-}
-
-bool
-AbstractIntegrityVerifier::ResponsePort::recvTimingReq(PacketPtr pkt)
-{
-    // Under no means should we be getting a metadata request.
-    // They are only sent from here.
-    assert(!pkt->isMetadataRequest());
-
-    DPRINTF(AbstractIntegrityVerifierReqs,
-        "%s: Recv req %s (pkt addr %p, req addr %p)\n",
-        __func__, pkt->print(), pkt, pkt->req);
-
-    // We want to just bypass immediately if this is an express snoop.
-    if (pkt->isExpressSnoop()) {
-        return parent.requestPort.sendTimingReq(pkt);
-    }
-
-    parent.markReqReceived(pkt);
-
-    parent.sanityCheckPacketLookup();
-
-    return parent.processReq(pkt);
-}
-
-
-bool
-AbstractIntegrityVerifier::processReq(PacketPtr pkt)
-{
-    // Don't do anything special for memory requests that are not actually
-    // for memory.
-    if (needsVerification(pkt->getAddr())) {
-        // Writebacks must be verified first before they can be forwarded to
-        // memory. This will be handled now.
-        if (pkt->isWrite()) {
-            return handlePacket(pkt);
-        }
-
-        else if (pkt->isRead()) {
-            if (!pkt->isMetadataRequest() &&
-                pkt->isRequest() &&
-                addrInOIV(pkt->getAddr()))
-            {
-                // While this is a read request and doesn't need to be
-                // processed now, a packet with this same address is being
-                // processed, so we don't want to "leapfrog" a packet out of
-                // order when this is at the same address.
-                //
-                // For example, a WritebackDirty could be being processed, but
-                // to the eyes of the LLC, it is safe to simply request the
-                // data back right away, so a read request could "skip" past
-                // the WritebackDirty and the ReadReq will get stale memory
-                // data. This is prevented by stalling the ReadReq until the
-                // WritebackDirty is finished.
-                DPRINTF(AbstractIntegrityVerifier,
-                    "%s: Rejecting %s due to prior request with the same "
-                    "address being served. Retrying later.\n",
-                    __func__, pkt->print());
-                saveRetryReq(pkt);
-                return true;
-            }
-
-            // This is a read request. We will handle verification for this
-            // once it becomes a response. For now, it can simply be forwarded
-            // to memory.
-            schedReq(pkt);
-            return true;
-        }
-        // If this is something else (e.g., CleanEvict), drop to the default
-        // behavior below.
-    }
-
-    schedReq(pkt);
-
-    return true;
-}
 
 void
 AbstractIntegrityVerifier::markReqReceived(PacketPtr pkt)
@@ -1172,12 +1096,25 @@ AbstractIntegrityVerifier::schedResp(PacketPtr pkt)
 
 
 void
+AbstractIntegrityVerifier::schedMetadataReq(PacketPtr pkt)
+{
+    // Similar to schedReq(), but sending to the metadata cache.
+    sendReqToMetadataCache(pkt);
+}
+
+void
+AbstractIntegrityVerifier::schedMetadataResp(PacketPtr pkt)
+{
+    // Similar to schedResp(), but sending to the metadata cache.
+    sendRespToMetadataCache(pkt);
+}
+
+
+void
 AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
 {
-    // Data requests should already be added to packetLookup.
-    if (!pkt->isMetadataRequest()) {
-        assert(packetLookup[pkt->req] == pkt);
-    }
+    // Requests should already be added to packetLookup.
+    assert(packetLookup[pkt->req] == pkt);
 
     // Verify requests are going to places that make sense.
     if (pkt->isMetadataRequest()) {
@@ -1192,17 +1129,13 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
 
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
         __func__, pkt->print());
-    requestPort.schedTimingReq(pkt, curTick() + Cycles(1));
+    requestPort.schedTimingReq(pkt, clockEdge(Cycles(1)));
 
     if (!pkt->needsResponse()) {
         // Packets that aren't getting a response should not be tracked for
         // response timing, and are ready to discard.
         removeFromPacketLookup(pkt);
         return;
-    }
-
-    if (pkt->isMetadataRequest()) {
-        addToPacketLookup(pkt);
     }
 
     markReqStart(pkt);
@@ -1214,9 +1147,39 @@ AbstractIntegrityVerifier::sendRespToCpu(PacketPtr pkt)
 {
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling resp %s to CPU\n",
         __func__, pkt->print());
-    responsePort.schedTimingResp(pkt, curTick() + Cycles(1));
+    responsePort.schedTimingResp(pkt, clockEdge(Cycles(1)));
 
     removeFromPacketLookup(pkt);
+}
+
+
+void
+AbstractIntegrityVerifier::sendReqToMetadataCache(PacketPtr pkt)
+{
+    assert(pkt->isMetadataRequest());
+    assert(pkt->needsResponse());
+    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
+           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+
+    addToPacketLookup(pkt);
+
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Scheduling req %s to metadata cache\n",
+        __func__, pkt->print());
+    metadataRequestPort.schedTimingReq(pkt, clockEdge(Cycles(1)));
+}
+
+void
+AbstractIntegrityVerifier::sendRespToMetadataCache(PacketPtr pkt)
+{
+    assert(pkt->isMetadataRequest());
+    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
+           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Scheduling resp %s to metadata cache\n",
+        __func__, pkt->print());
+    metadataResponsePort.schedTimingResp(pkt, clockEdge(Cycles(1)));
 }
 
 
@@ -1235,7 +1198,7 @@ AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
             addr < pkt->getAddr() + pkt->getSize();
             addr += 64)
         {
-            accessedCacheLines.emplace(addrBlockAlign(addr, 64));
+            stats.accessedCacheLines.emplace(addrBlockAlign(addr, 64));
         }
     }
 
@@ -1244,16 +1207,6 @@ AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
     DPRINTF(AbstractIntegrityVerifier,
         "%s: arrivalTime increased. size: %d\n",
         __func__, arrivalTime.size());
-
-    // Mark the time since we start missing this metadata entry.
-    if (pkt->isMetadataRequest()) {
-        assert(metadataMissTime.find(pkt->req) == metadataMissTime.end());
-
-        metadataMissTime[pkt->req] = curTick();
-
-        // This should be removed from metadataMissTime once inserted into the
-        // metadata cache.
-    }
 }
 
 
@@ -1389,185 +1342,6 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
 }
 
 
-std::string
-AbstractIntegrityVerifier::printPendingToUnlock()
-{
-    std::ostringstream str;
-
-    ccprintf(str, "pendingToUnlock size: %d\n", pendingToUnlock.size());
-    for (auto it = pendingToUnlock.begin();
-        it != pendingToUnlock.end();
-        it++) {
-        auto locked = it->first;
-        auto depending_on_locked = it->second;
-
-        for (auto item : depending_on_locked) {
-            if (item != 0) {
-                ccprintf(str,
-                    "- Node %llu is depending on locked node %llu\n",
-                    item, locked);
-            } else {
-                // 0 indicates a data request.
-                ccprintf(str,
-                    "- A data request is depending on locked node %llu\n",
-                    locked);
-            }
-        }
-    }
-
-    return str.str();
-}
-
-std::string
-AbstractIntegrityVerifier::printArrivalTime()
-{
-    std::ostringstream str;
-
-    ccprintf(str, "arrivalTime size: %d\n", arrivalTime.size());
-    for (auto it : arrivalTime) {
-        RequestPtr req = it.first;
-        Tick arrival = it.second;
-
-        auto search = packetLookup.find(req);
-        if (search != packetLookup.end()) {
-            // We have the original packet for this.
-            PacketPtr pkt = search->second;
-            ccprintf(str, "pkt %s (%p)\t%llu\n", pkt->print(), pkt, arrival);
-        } else {
-            // No original packet.
-            ccprintf(str, "req 0x%x (%p)\t%llu\n",
-                req->hasPaddr() ? req->getPaddr() : 999999,
-                req,
-                arrival);
-        }
-    }
-
-    return str.str();
-}
-
-
-void
-AbstractIntegrityVerifier::fullDebugOutput()
-{
-    cprintf("==============================\n");
-    cprintf("INTEGRITY VERIFIER:\n");
-    cprintf("outstandingIntegrityVerification (size %d):\n",
-        outstandingIntegrityVerification.size());
-    for (auto it : outstandingIntegrityVerification) {
-        cprintf("- %s (%p)\n", it->print(), it);
-    }
-
-    cprintf("outstandingIntegrityHashes (size %d):\n",
-        outstandingIntegrityHashes.size());
-    for (auto it : outstandingIntegrityHashes) {
-        if (packetLookup.find(it) != packetLookup.end()) {
-            PacketPtr pkt = packetLookup[it];
-            cprintf("- %s (%p)  <-- req for 0x%x (%p)\n",
-                pkt->print(), pkt, it->getPaddr(), it);
-        } else {
-            cprintf("- (unknown packet) <-- req for 0x%x (%p)\n",
-                it->getPaddr(), it);
-        }
-
-    }
-
-    cprintf("outstandingMetadataRequests (size %d):\n",
-        outstandingMetadataRequests.size());
-    for (auto it : outstandingMetadataRequests) {
-        if (packetLookup.find(it.second) != packetLookup.end()) {
-            PacketPtr pkt = packetLookup[it.second];
-            cprintf("- Node %llu requested by pkt %s (%p)   "
-                "(req for 0x%x, allocated @ %p)\n",
-                it.first, pkt->print(), pkt,
-                it.second->getPaddr(), it.second);
-        } else if (it.second == nullptr) {
-            cprintf("- Node %llu requested by an eviction\n",
-                it.first);
-        } else {
-            cprintf("- Node %llu requested by (unknown packet)   "
-                "(req for 0x%x allocated @ %p)\n",
-                it.first,
-                it.second->getPaddr(), it.second);
-        }
-
-    }
-
-    cprintf("outstandingMetadataEvictions (size %d):\n",
-        outstandingMetadataEvictions.size());
-    for (auto it : outstandingMetadataEvictions) {
-        if (packetLookup.find(it.second.second) != packetLookup.end()) {
-            PacketPtr pkt = packetLookup[it.second.second];
-            cprintf("- Node %llu, parent of to-evict child %llu to be "
-                "replaced by %s\n",
-                it.first, it.second.first,
-                pkt->print());
-        } else {
-            cprintf("- Node %llu, parent of to-evict child %llu to be "
-                "replaced by (unknown - req for 0x%x, allocated @ %p)\n",
-                it.first, it.second.first,
-                it.second.second->getPaddr(), it.second.second);
-        }
-    }
-
-    cprintf("pendingToUnlock (size %d):\n", pendingToUnlock.size());
-    cprintf("%s", printPendingToUnlock());
-
-    cprintf("responseQueue (size %d):\n", responseQueue.size());
-    cprintf("   front: ");
-    if (!responseQueue.empty()) {
-        auto front = responseQueue.front();
-
-        if (packetLookup.find(front) != packetLookup.end()) {
-            PacketPtr pkt = packetLookup[front];
-            cprintf("%s (%p)  <-- req for 0x%x (%p)\n",
-                pkt->print(), pkt, front->getPaddr(), front);
-        } else {
-            cprintf("(unknown packet) <-- req for 0x%x (%p)\n",
-                front->getPaddr(), front);
-        }
-    }
-    else {
-        cprintf("(empty)\n");
-    }
-
-    cprintf("requestQueue (size %d):\n", requestQueue.size());
-    cprintf("   front: ");
-    if (!requestQueue.empty()) {
-        auto front = requestQueue.front();
-
-        if (packetLookup.find(front) != packetLookup.end()) {
-            PacketPtr pkt = packetLookup[front];
-            cprintf("%s (%p)  <-- req for 0x%x (%p)\n",
-                pkt->print(), pkt, front->getPaddr(), front);
-        } else {
-            cprintf("(unknown packet) <-- req for 0x%x (%p)\n",
-                front->getPaddr(), front);
-        }
-    }
-    else {
-        cprintf("(empty)\n");
-    }
-
-    cprintf("arrivalTime (size %d):\n", arrivalTime.size());
-    cprintf("%s", printArrivalTime());
-
-    cprintf("packetLookup (size %d):\n", packetLookup.size());
-    for (auto it : packetLookup) {
-        cprintf("- req for 0x%x (%p) --> %s (%p)\n",
-            it.first->getPaddr(), it.first,
-            it.second->print(), it.second);
-    }
-
-    cprintf("-------\n");
-    cprintf("METADATA CACHE:\n");
-    cprintf("size: %d\n", metadataCache->getSize());
-    cprintf("locked: %d\n", metadataCache->getLockedLineCount());
-    cprintf("dirty: %d\n", metadataCache->getDirtyLineCount());
-    cprintf("pending eviction: %d\n",
-        metadataCache->getPendingEvictionCount());
-    cprintf("==============================\n");
-}
-
 void
 AbstractIntegrityVerifier::addToPacketLookup(PacketPtr pkt)
 {
@@ -1629,27 +1403,18 @@ AbstractIntegrityVerifier::addToOutstandingMetadataRequests(
     PacketPtr pkt
 )
 {
+    assert(pkt != nullptr);
+
     // Is this node already being required by another request?
     bool batching = outstandingMetadataRequests.find(node) !=
                     outstandingMetadataRequests.end();
 
-    if (pkt == nullptr) {
-        // In the case of eviction, a null pointer is used. The
-        // outstandingMetadataEvictions list should be used to ensure
-        // everything is satisfied.
-        outstandingMetadataRequests.insert({node, nullptr});
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: outstandingMetadataRequests updated. "
-            "Noting %llu is needed to evict a child node.\n",
-            __func__, node);
-    } else {
-        // Associate (parent) node `node` with the causing request `req`.
-        outstandingMetadataRequests.insert({node, pkt->req});
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: outstandingMetadataRequests updated. "
-            "Noting %llu is needed by %s\n",
-            __func__, node, pkt->print());
-    }
+    // Associate (parent) node `node` with the causing request `req`.
+    outstandingMetadataRequests.insert({node, pkt->req});
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: outstandingMetadataRequests updated. "
+        "Noting %llu is needed by %s\n",
+        __func__, node, pkt->print());
 
     if (batching) {
         DPRINTF(AbstractIntegrityVerifier,
@@ -1675,6 +1440,7 @@ AbstractIntegrityVerifier::removeFromOutstandingMetadataRequests(
     for (auto it = outstandingMetadataRequests.begin();
          it != outstandingMetadataRequests.end();) {
         if (it->first == node && it->second == req) {
+            assert(!removed);
             it = outstandingMetadataRequests.erase(it);
             DPRINTF(AbstractIntegrityVerifier,
                 "%s: outstandingMetadataRequests decreased. size: %d\n",
@@ -1688,59 +1454,48 @@ AbstractIntegrityVerifier::removeFromOutstandingMetadataRequests(
     assert(removed);
 }
 
-void
-AbstractIntegrityVerifier::addToPendingToUnlock(
-    uint64_t locked,
-    uint64_t depending_node
+
+bool
+AbstractIntegrityVerifier::hasOutstandingMetadataRequest(
+    PacketPtr pkt
 )
 {
-    if (depending_node != 0) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Adding relationship between %llu and the node depending "
-            "on it, %llu\n",
-            __func__, locked, depending_node);
-    } else {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: Adding relationship between %llu and a data request "
-            "that depends on it\n",
-            __func__, locked);
+    // If the parent node is the secure root, assume there is never an
+    // outstanding request.
+    if (parentNodeIsSecureRoot(pkt)) {
+        return false;
     }
 
-    auto search = pendingToUnlock.find(locked);
-    bool exists = search != pendingToUnlock.end();
+    // Use the packet's parent node as the default
+    uint64_t parentNode = getParentNode(pkt);
 
-    if (exists) {
-        search->second.push_back(depending_node);
-    } else {
-        pendingToUnlock.insert({locked, std::list<uint64_t>()});
-        pendingToUnlock[locked].push_back(depending_node);
-    }
-
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s:%d: %s",
-        __func__, __LINE__, printPendingToUnlock());
+    return hasOutstandingMetadataRequest(parentNode, pkt);
 }
 
-void
-AbstractIntegrityVerifier::copyOMRtoPTU(uint64_t node)
-{
-    assert(outstandingMetadataRequests.find(node) !=
-           outstandingMetadataRequests.end());
 
+bool
+AbstractIntegrityVerifier::hasOutstandingMetadataRequest(
+    uint64_t node,
+    PacketPtr pkt
+)
+{
     auto range = outstandingMetadataRequests.equal_range(node);
     for (auto it = range.first; it != range.second; ++it) {
+        // Find the packet that is associated with this request.
         if (it->second == nullptr) {
-            // If this metadata request was created due to an eviction, this is
-            // handled separately.
+            // Skip placeholders (not to be handled here).
             continue;
         }
-        // Find the packet that is associated with this request.
         PacketPtr packet = packetLookup.find(it->second)->second;
-        uint64_t depending_node = packet->isMetadataRequest() ?
-                                    packet->getMetadataNode() : 0;
-        addToPendingToUnlock(node, depending_node);
+        uint64_t outstandingNode = it->first;
+        if (packet == pkt && outstandingNode == node) {
+            return true;
+        }
     }
+
+    return false;
 }
+
 
 bool
 AbstractIntegrityVerifier::addrInOIV(Addr addr)
@@ -1784,60 +1539,6 @@ AbstractIntegrityVerifier::sanityCheckPacketLookup()
         warn("outstandingIntegrityVerification: %d",
             outstandingIntegrityVerification.size());
     }
-}
-
-void
-AbstractIntegrityVerifier::sanityCheckEvictionVictim(
-    uint64_t victim,
-    uint64_t replacement
-)
-{
-    // Victim should be in the cache.
-    assert(metadataCache->containsPendingOkay(victim));
-
-    // Parent of victim would not be in the cache.
-    assert(!metadataCache->contains(integrityTree->parentBlockIndex(victim)));
-
-    // Metadata cache does not already have the replacement.
-    assert(!metadataCache->contains(replacement));
-
-    uint64_t victimParent = integrityTree->parentBlockIndex(victim);
-    uint64_t replacementParent = integrityTree->parentBlockIndex(replacement);
-
-    assert(victimParent != replacementParent);
-    assert(victimParent != replacement);
-    assert(victim != replacementParent);
-
-    assert(outstandingMetadataRequests.find(victim) ==
-           outstandingMetadataRequests.end());
-    assert(outstandingMetadataRequests.find(victimParent) ==
-           outstandingMetadataRequests.end());
-
-    // Assert that the lowest ancestor of victim is lower than replacement,
-    // or that there is no ancestor of the victim at all cached.
-    assert(!integrityTree->isAncestor(replacement, victim) ||
-           metadataCache->getLowestCachedAncestor(victim) !=
-            replacementParent);
-}
-
-void
-AbstractIntegrityVerifier::ResponsePort::recvFunctional(PacketPtr pkt)
-{
-    if (parent.trySatisfyFunctional(pkt)) {
-        pkt->makeResponse();
-    } else {
-        parent.requestPort.sendFunctional(pkt);
-    }
-}
-
-bool
-AbstractIntegrityVerifier::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
-{
-    const Tick when = curTick() + parent.delaySnoopResp(pkt);
-
-    parent.requestPort.schedTimingSnoopResp(pkt, when);
-
-    return true;
 }
 
 
@@ -1942,28 +1643,6 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Total number of integrity bytes to memory in CXL "
             "(location post-translation)"),
 
-    ADD_STAT(metadataCacheAccesses, statistics::units::Count::get(),
-            "Total number of metadata cache accesses"),
-    ADD_STAT(metadataCacheAccessesTypes, statistics::units::Count::get(),
-            "Total number of metadata cache accesses (typed)"),
-    ADD_STAT(metadataCacheMisses, statistics::units::Count::get(),
-            "Total number of metadata cache misses"),
-    ADD_STAT(metadataCacheMissesTypes, statistics::units::Count::get(),
-            "Total number of metadata cache misses (typed)"),
-    ADD_STAT(metadataCacheHits, statistics::units::Count::get(),
-            "Total number of metadata cache hits"),
-    ADD_STAT(metadataCacheHitsTypes, statistics::units::Count::get(),
-            "Total number of metadata cache hits (typed)"),
-    ADD_STAT(metadataCacheMissRate, statistics::units::Ratio::get(),
-            "Metadata cache miss rate"),
-    ADD_STAT(metadataCacheMissRateTypes, statistics::units::Ratio::get(),
-            "Metadata cache miss rate (typed)"),
-
-    ADD_STAT(metadataCacheMissLatencyTotal, statistics::units::Tick::get(),
-            "Total amount of time taken for metadata cache misses"),
-    ADD_STAT(metadataCacheMissLatencyAverage, statistics::units::Tick::get(),
-            "Average time taken for metadata cache misses"),
-
     ADD_STAT(totalRequestingTime, statistics::units::Tick::get(),
             "Total amount of time where a request is out then in"),
     ADD_STAT(totalMetadataReqTime, statistics::units::Tick::get(),
@@ -2063,31 +1742,6 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "IntegrityVerifier, for data in CXL "
             "(location post-translation)")
 {
-    metadataCacheAccessesTypes.init(
-        AbstractIntegrityTree::TREE_NODE_TYPE_COUNT);
-    metadataCacheMissesTypes.init(
-        AbstractIntegrityTree::TREE_NODE_TYPE_COUNT);
-    metadataCacheHitsTypes.init(
-        AbstractIntegrityTree::TREE_NODE_TYPE_COUNT);
-
-    for (int i = 0; i < AbstractIntegrityTree::TREE_NODE_TYPE_COUNT; i++) {
-        metadataCacheAccessesTypes.subname(i,
-            AbstractIntegrityTree::treeNodeStrings[i]);
-        metadataCacheMissesTypes.subname(i,
-            AbstractIntegrityTree::treeNodeStrings[i]);
-        metadataCacheHitsTypes.subname(i,
-            AbstractIntegrityTree::treeNodeStrings[i]);
-        metadataCacheMissRateTypes.subname(i,
-            AbstractIntegrityTree::treeNodeStrings[i]);
-    }
-
-    metadataCacheMissRate = metadataCacheMisses / metadataCacheAccesses;
-    metadataCacheMissRateTypes =
-        metadataCacheMissesTypes / metadataCacheAccessesTypes;
-
-    metadataCacheMissLatencyAverage =
-        metadataCacheMissLatencyTotal / metadataCacheMisses;
-
     avgReqLatency = totalRequestingTime / requestsHandled;
     avgMetadataReqLatency = totalMetadataReqTime / metadataReqHandled;
     avgDataReqLatency = totalDataReqTime / dataReqHandled;
@@ -2121,7 +1775,7 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::preDumpStats()
     // TODO Hardcoded cache line size
     Addr cacheLineSize = 64;
 
-    memoryFootprint = parent->accessedCacheLines.size() * cacheLineSize;
+    memoryFootprint = accessedCacheLines.size() * cacheLineSize;
 
     // Compute total amount of data used in all memory regions.
 
@@ -2134,7 +1788,7 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::preDumpStats()
     dataUsedOs = 0;
     dataUsedIntegrity = 0;
 
-    for (auto line : parent->accessedCacheLines) {
+    for (auto line : accessedCacheLines) {
         if (rangeListContains(parent->dramFullRanges, line)) {
             dataUsedDram += cacheLineSize;
 
@@ -2163,74 +1817,150 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::preDumpStats()
     }
 }
 
-bool
-AbstractIntegrityVerifier::hasValidRanges()
+
+std::string
+AbstractIntegrityVerifier::printArrivalTime()
 {
-    bool dramIntegrityRangeValid = dramIntegrityRanges.size() > 0;
-    bool cxlIntegrityRangeValid = cxlIntegrityRanges.size() > 0;
+    std::ostringstream str;
 
-    if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::DramOnly) {
-        return dramIntegrityRangeValid;
-    } else if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::CxlOnly) {
-        return cxlIntegrityRangeValid;
-    } else if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::BasicMix) {
-        return dramIntegrityRangeValid && cxlIntegrityRangeValid;
+    ccprintf(str, "arrivalTime size: %d\n", arrivalTime.size());
+    for (auto it : arrivalTime) {
+        RequestPtr req = it.first;
+        Tick arrival = it.second;
+
+        auto search = packetLookup.find(req);
+        if (search != packetLookup.end()) {
+            // We have the original packet for this.
+            PacketPtr pkt = search->second;
+            ccprintf(str, "pkt %s (%p)\t%llu\n", pkt->print(), pkt, arrival);
+        } else {
+            // No original packet.
+            ccprintf(str, "req 0x%x (%p)\t%llu\n",
+                req->hasPaddr() ? req->getPaddr() : 999999,
+                req,
+                arrival);
+        }
     }
-    panic("%s: Integrity allocation mode unimplemented.\n", __func__);
-    return false;
-}
 
-bool
-AbstractIntegrityVerifier::treeSizeValid()
-{
-    DPRINTF(AbstractIntegrityVerifier, "%s: Integrity structure size: %lld\n",
-        __func__, integrityTree->statStructureSize());
-
-    if (integrityAllocationMode ==
-                enums::IntegrityAllocationMode::DramOnly) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: DRAM size: %lld\n",
-            __func__, rangeListSize(dramIntegrityRanges));
-
-        return integrityTree->statStructureSize() <=
-                rangeListSize(dramIntegrityRanges);
-    }
-    else if (integrityAllocationMode ==
-                enums::IntegrityAllocationMode::CxlOnly) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: CXL size: %lld\n",
-            __func__, rangeListSize(cxlIntegrityRanges));
-
-        return integrityTree->statStructureSize() <=
-                rangeListSize(cxlIntegrityRanges);
-    }
-    else if (integrityAllocationMode ==
-                enums::IntegrityAllocationMode::BasicMix) {
-        panic("%s: Basic mix integrity allocation mode not (yet) supported.",
-            __func__);
-    }
-    return false;
-}
-
-bool
-AbstractIntegrityVerifier::needsVerification(Addr addr)
-{
-    assert(hasValidRanges());
-
-    return (
-        rangeListContains(dramOsRanges, addr) ||
-        rangeListContains(dramIntegrityRanges, addr) ||
-        rangeListContains(cxlOsRanges, addr) ||
-        rangeListContains(cxlIntegrityRanges, addr)
-    );
+    return str.str();
 }
 
 
+void
+AbstractIntegrityVerifier::fullDebugOutput()
+{
+    cprintf("==============================\n");
+    cprintf("INTEGRITY VERIFIER:\n");
+    cprintf("outstandingIntegrityVerification (size %d):\n",
+        outstandingIntegrityVerification.size());
+    for (auto it : outstandingIntegrityVerification) {
+        cprintf("- %s (%p)\n", it->print(), it);
+    }
 
-IntegrityVerifier::IntegrityVerifier(const IntegrityVerifierParams &p)
+    cprintf("outstandingIntegrityHashes (size %d):\n",
+        outstandingIntegrityHashes.size());
+    for (auto it : outstandingIntegrityHashes) {
+        if (packetLookup.find(it) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it];
+            cprintf("- %s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, it->getPaddr(), it);
+        } else {
+            cprintf("- (unknown packet) <-- req for 0x%x (%p)\n",
+                it->getPaddr(), it);
+        }
+
+    }
+
+    cprintf("outstandingMetadataRequests (size %d):\n",
+        outstandingMetadataRequests.size());
+    for (auto it : outstandingMetadataRequests) {
+        if (packetLookup.find(it.second) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it.second];
+            cprintf("- Node %llu requested by pkt %s (%p)   "
+                "(req for 0x%x, allocated @ %p)\n",
+                it.first, pkt->print(), pkt,
+                it.second->getPaddr(), it.second);
+        } else if (it.second == nullptr) {
+            cprintf("- Node %llu requested by an eviction\n",
+                it.first);
+        } else {
+            cprintf("- Node %llu requested by (unknown packet)   "
+                "(req for 0x%x allocated @ %p)\n",
+                it.first,
+                it.second->getPaddr(), it.second);
+        }
+
+    }
+
+    cprintf("outstandingMetadataEvictions (size %d):\n",
+        outstandingMetadataEvictions.size());
+    for (auto it : outstandingMetadataEvictions) {
+        if (packetLookup.find(it.second.second) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it.second.second];
+            cprintf("- Node %llu, parent of to-evict child %llu to be "
+                "replaced by %s\n",
+                it.first, it.second.first,
+                pkt->print());
+        } else {
+            cprintf("- Node %llu, parent of to-evict child %llu to be "
+                "replaced by (unknown - req for 0x%x, allocated @ %p)\n",
+                it.first, it.second.first,
+                it.second.second->getPaddr(), it.second.second);
+        }
+    }
+
+    cprintf("responseQueue (size %d):\n", responseQueue.size());
+    cprintf("   front: ");
+    if (!responseQueue.empty()) {
+        auto front = responseQueue.front();
+
+        if (packetLookup.find(front) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[front];
+            cprintf("%s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, front->getPaddr(), front);
+        } else {
+            cprintf("(unknown packet) <-- req for 0x%x (%p)\n",
+                front->getPaddr(), front);
+        }
+    }
+    else {
+        cprintf("(empty)\n");
+    }
+
+    cprintf("requestQueue (size %d):\n", requestQueue.size());
+    cprintf("   front: ");
+    if (!requestQueue.empty()) {
+        auto front = requestQueue.front();
+
+        if (packetLookup.find(front) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[front];
+            cprintf("%s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, front->getPaddr(), front);
+        } else {
+            cprintf("(unknown packet) <-- req for 0x%x (%p)\n",
+                front->getPaddr(), front);
+        }
+    }
+    else {
+        cprintf("(empty)\n");
+    }
+
+    cprintf("arrivalTime (size %d):\n", arrivalTime.size());
+    cprintf("%s", printArrivalTime());
+
+    cprintf("packetLookup (size %d):\n", packetLookup.size());
+    for (auto it : packetLookup) {
+        cprintf("- req for 0x%x (%p) --> %s (%p)\n",
+            it.first->getPaddr(), it.first,
+            it.second->print(), it.second);
+    }
+
+    cprintf("==============================\n");
+}
+
+
+
+IntegrityVerifier::IntegrityVerifier(const Params &p)
     : AbstractIntegrityVerifier(p),
       readReqDelay(p.read_req),
       readRespDelay(p.read_resp),

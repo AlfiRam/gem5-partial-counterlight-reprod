@@ -114,6 +114,8 @@ PySource('gem5.components.cachehierarchies.classic.caches',
 PySource('gem5.components.cachehierarchies.classic.caches',
     'gem5/components/cachehierarchies/classic/caches/l3cache.py')
 PySource('gem5.components.cachehierarchies.classic.caches',
+    'gem5/components/cachehierarchies/classic/caches/metadata.py')
+PySource('gem5.components.cachehierarchies.classic.caches',
     'gem5/components/cachehierarchies/classic/caches/mmu_cache.py')
 PySource('gem5.components.cachehierarchies.ruby',
     'gem5/components/cachehierarchies/ruby/__init__.py')

@@ -50,6 +50,7 @@ from .abstract_classic_cache_hierarchy import AbstractClassicCacheHierarchy
 from .caches.l1dcache import L1DCache
 from .caches.l1icache import L1ICache
 from .caches.l2cache import L2Cache
+from .caches.metadata import ClassicMetadataCache
 from .caches.mmu_cache import MMUCache
 
 
@@ -267,11 +268,18 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             write_resp="10ns",
             # req_size = 512,
             # resp_size = 512,
-            metadata_cache_size=self._metadata_cache_size,
-            metadata_cache_assoc=self._metadata_cache_assoc,
         )
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port
+
+        # Attach cache
+        self.metadata_cache = ClassicMetadataCache(
+            size=f"{self._metadata_cache_size * 64}B",
+            assoc=self._metadata_cache_assoc,
+            writeback_clean=False,
+        )
+        self.metadata_cache.cpu_side = self.verifier.metadata_req_port
+        self.verifier.metadata_resp_port = self.metadata_cache.mem_side
 
         # Memory <--> NCX <--> membus
         if board.use_ncx():
@@ -393,24 +401,6 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
 
         if self._integrity_tree_arity:
             self.verifier.integrity_tree_arity = self._integrity_tree_arity
-
-        if self._metadata_cache_type:
-            self.verifier.metadata_cache_type = self._metadata_cache_type
-
-        if self._metadata_cache_size_tree_nodes:
-            self.verifier.metadata_cache_size_tree_nodes = (
-                self._metadata_cache_size_tree_nodes
-            )
-
-        if self._metadata_cache_size_counter_nodes:
-            self.verifier.metadata_cache_size_counter_nodes = (
-                self._metadata_cache_size_counter_nodes
-            )
-
-        if self._metadata_cache_size_mac_nodes:
-            self.verifier.metadata_cache_size_mac_nodes = (
-                self._metadata_cache_size_mac_nodes
-            )
 
     def _setup_io_cache(self, board: AbstractBoard) -> None:
         """Create a cache for coherent I/O connections"""

@@ -439,7 +439,7 @@ AbstractMemory::access(PacketPtr pkt)
                 stats.numOther[pkt->req->requestorId()]++;
             }
         }
-    } else if (pkt->isRead() && !pkt->isMetadataRequest()) {
+    } else if (pkt->isRead()) {
         assert(!pkt->isWrite());
         if (pkt->isLLSC()) {
             assert(!pkt->fromCache());
@@ -464,7 +464,7 @@ AbstractMemory::access(PacketPtr pkt)
         // can be seen due to cache maintenance requests
 
         // no need to do anything
-    } else if (pkt->isWrite() && !pkt->isMetadataRequest()) {
+    } else if (pkt->isWrite()) {
         if (writeOK(pkt)) {
             if (pmemAddr) {
                 pkt->writeData(host_addr);
@@ -478,8 +478,6 @@ AbstractMemory::access(PacketPtr pkt)
                 stats.bytesWritten[pkt->req->requestorId()] += pkt->getSize();
             }
         }
-    } else if (pkt->isMetadataRequest()) {
-        assert(pkt->needsResponse());
     } else {
         panic("Unexpected packet %s", pkt->print());
     }
