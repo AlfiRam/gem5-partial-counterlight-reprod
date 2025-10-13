@@ -175,10 +175,10 @@ class AbstractIntegrityVerifier : public ClockedObject
     bool treeSizeValid();
 
     /**
-     * Returns true if this address should be handled by integrity
+     * Returns true if this packet should be handled by integrity
      * verification.
      */
-    bool needsVerification(Addr addr);
+    bool needsVerification(PacketPtr pkt);
 
 
     // Port interface

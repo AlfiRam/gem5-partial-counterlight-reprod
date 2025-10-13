@@ -262,9 +262,11 @@ AbstractIntegrityVerifier::treeSizeValid()
 }
 
 bool
-AbstractIntegrityVerifier::needsVerification(Addr addr)
+AbstractIntegrityVerifier::needsVerification(PacketPtr pkt)
 {
     assert(hasValidRanges());
+
+    auto addr = pkt->getAddr();
 
     return (
         rangeListContains(dramOsRanges, addr) ||
@@ -365,7 +367,7 @@ AbstractIntegrityVerifier::processReq(PacketPtr pkt)
 
     // Don't do anything special for memory requests that are not actually
     // for memory.
-    if (needsVerification(pkt->getAddr()) && pkt->isWrite()) {
+    if (needsVerification(pkt) && pkt->isWrite()) {
         // Writebacks must be verified first before they can be forwarded to
         // memory. This will be handled now.
         return handlePacket(pkt);
@@ -434,7 +436,7 @@ AbstractIntegrityVerifier::processResp(PacketPtr pkt)
 
     // Don't do anything special for memory requests that are not actually
     // for memory.
-    if (needsVerification(pkt->getAddr())) {
+    if (needsVerification(pkt)) {
         // Read responses must be verified first before they can be used.
         if (pkt->isRead()) {
             return handlePacket(pkt);
@@ -1128,7 +1130,7 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
         // This is integrity metadata.
         assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
                rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
-    } else if (needsVerification(pkt->getAddr())) {
+    } else if (needsVerification(pkt)) {
         // This is application data.
         assert(rangeListContains(dramOsRanges, pkt->getAddr()) ||
                rangeListContains(cxlOsRanges, pkt->getAddr()));
@@ -1199,7 +1201,7 @@ AbstractIntegrityVerifier::markReqStart(PacketPtr pkt)
     assert(arrivalTime.find(pkt->req) == arrivalTime.end());
 
     // Take a note of the memory region being used.
-    if (needsVerification(pkt->getAddr())) {
+    if (needsVerification(pkt)) {
         // NOTE: Uses hard-coded cache line size.
         for (Addr addr = pkt->getAddr();
             addr < pkt->getAddr() + pkt->getSize();
@@ -1223,7 +1225,7 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
     // This request should have been entered prior.
     assert(arrivalTime.find(pkt->req) != arrivalTime.end());
 
-    if (needsVerification(pkt->getAddr())) {
+    if (needsVerification(pkt)) {
         stats.requestsHandled++;
         stats.bytesHandled += pkt->getSize();
         stats.totalRequestingTime += curTick() - arrivalTime[pkt->req];
