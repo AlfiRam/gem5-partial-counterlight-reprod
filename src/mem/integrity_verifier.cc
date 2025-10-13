@@ -1969,7 +1969,19 @@ AbstractIntegrityVerifier::fullDebugOutput()
             cprintf("- (unknown packet) <-- req for 0x%x (%p)\n",
                 it->getPaddr(), it);
         }
+    }
 
+    cprintf("outstandingXors (size %d):\n",
+        outstandingXors.size());
+    for (auto it : outstandingXors) {
+        if (packetLookup.find(it) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it];
+            cprintf("- %s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, it->getPaddr(), it);
+        } else {
+            cprintf("- (unknown packet) <-- req for 0x%x (%p)\n",
+                it->getPaddr(), it);
+        }
     }
 
     cprintf("outstandingMetadataRequests (size %d):\n",
@@ -2010,6 +2022,19 @@ AbstractIntegrityVerifier::fullDebugOutput()
         }
     }
 
+    cprintf("responseReady (size %d):\n",
+        responseReady.size());
+    for (auto it : responseReady) {
+        if (packetLookup.find(it) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it];
+            cprintf("- %s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, it->getPaddr(), it);
+        } else {
+            cprintf("- (unknown packet) <-- req for 0x%x (%p)\n",
+                it->getPaddr(), it);
+        }
+    }
+
     cprintf("responseQueue (size %d):\n", responseQueue.size());
     cprintf("   front: ");
     if (!responseQueue.empty()) {
@@ -2028,10 +2053,41 @@ AbstractIntegrityVerifier::fullDebugOutput()
         cprintf("(empty)\n");
     }
 
+    cprintf("requestReady (size %d):\n",
+        requestReady.size());
+    for (auto it : requestReady) {
+        if (packetLookup.find(it) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[it];
+            cprintf("- %s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, it->getPaddr(), it);
+        } else {
+            cprintf("- (unknown packet) <-- req for 0x%x (%p)\n",
+                it->getPaddr(), it);
+        }
+    }
+
     cprintf("requestQueue (size %d):\n", requestQueue.size());
     cprintf("   front: ");
     if (!requestQueue.empty()) {
         auto front = requestQueue.front();
+
+        if (packetLookup.find(front) != packetLookup.end()) {
+            PacketPtr pkt = packetLookup[front];
+            cprintf("%s (%p)  <-- req for 0x%x (%p)\n",
+                pkt->print(), pkt, front->getPaddr(), front);
+        } else {
+            cprintf("(unknown packet) <-- req for 0x%x (%p)\n",
+                front->getPaddr(), front);
+        }
+    }
+    else {
+        cprintf("(empty)\n");
+    }
+
+    cprintf("metadataRequestQueue (size %d):\n", metadataRequestQueue.size());
+    cprintf("   front: ");
+    if (!metadataRequestQueue.empty()) {
+        auto front = metadataRequestQueue.front();
 
         if (packetLookup.find(front) != packetLookup.end()) {
             PacketPtr pkt = packetLookup[front];
