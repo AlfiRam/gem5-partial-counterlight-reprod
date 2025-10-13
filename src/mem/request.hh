@@ -479,6 +479,8 @@ class Request : public Extensible<Request>
 
     size_t _metadataNode;
 
+    size_t _metadataType;
+
     bool _isForPageSwap;
 
     bool _isTranslatedPageSwap;
@@ -499,6 +501,7 @@ class Request : public Extensible<Request>
     Request() {
         _isMetadataRequest = false;
         _metadataNode = 0;
+        _metadataType = 0;
         _isForPageSwap = false;
         _isTranslatedPageSwap = false;
         _originalAddr = Addr(0);
@@ -520,6 +523,7 @@ class Request : public Extensible<Request>
         _isGPUFuncAccess = false;
         _isMetadataRequest = false;
         _metadataNode = 0;
+        _metadataType = 0;
         _isForPageSwap = false;
         _isTranslatedPageSwap = false;
         _originalAddr = Addr(0);
@@ -537,6 +541,7 @@ class Request : public Extensible<Request>
         _isGPUFuncAccess = false;
         _isMetadataRequest = false;
         _metadataNode = 0;
+        _metadataType = 0;
         _isForPageSwap = false;
         _isTranslatedPageSwap = false;
         _originalAddr = Addr(0);
@@ -559,6 +564,7 @@ class Request : public Extensible<Request>
           _localAccessor(other._localAccessor),
           _isMetadataRequest(other._isMetadataRequest),
           _metadataNode(other._metadataNode),
+          _metadataType(other._metadataType),
           _isForPageSwap(other._isForPageSwap),
           _isTranslatedPageSwap(other._isTranslatedPageSwap),
           _originalAddr(other._originalAddr),
@@ -1203,6 +1209,17 @@ class Request : public Extensible<Request>
     getMetadataNode()
     {
         return _metadataNode;
+    }
+
+    void
+    setMetadataType(size_t type) {
+        _metadataType = type;
+    }
+
+    size_t
+    getMetadataType()
+    {
+        return _metadataType;
     }
 
     void

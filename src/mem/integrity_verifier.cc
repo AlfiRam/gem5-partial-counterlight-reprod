@@ -715,6 +715,20 @@ AbstractIntegrityVerifier::generateMetadataRequest(size_t node)
     metadataRequestPkt->dataDynamic(pkt_data);
     // Set the flag that this is a metadata request.
     metadataRequestPkt->setMetadataRequest();
+    switch (integrityTree->getNodeType(node))
+    {
+        case AbstractIntegrityTree::TreeNodeType::TreeNode:
+            metadataRequestPkt->setMetadataType(0);
+            break;
+        case AbstractIntegrityTree::TreeNodeType::Counter:
+            metadataRequestPkt->setMetadataType(1);
+            break;
+        case AbstractIntegrityTree::TreeNodeType::MAC:
+            metadataRequestPkt->setMetadataType(2);
+            break;
+        default:
+            fatal("Unknown metadata type.");
+    }
 
     // Indicate the integrity tree node that will be accessed.
     metadataRequestPkt->setMetadataNode(node);

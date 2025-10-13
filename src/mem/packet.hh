@@ -643,6 +643,9 @@ class Packet : public Printable, public Extensible<Packet>
     uint64_t getMetadataNode() const     { return req->getMetadataNode(); }
     void setMetadataNode(uint64_t node)  { req->setMetadataNode(node); }
 
+    uint64_t getMetadataType() const     { return req->getMetadataType(); }
+    void setMetadataType(uint64_t type)  { req->setMetadataType(type); }
+
     bool isForPageSwap() const       { return req->getForPageSwap(); }
     void setForPageSwap()            { req->setForPageSwap(true); }
 
