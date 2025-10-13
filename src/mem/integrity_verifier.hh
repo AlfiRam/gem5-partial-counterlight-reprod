@@ -124,6 +124,11 @@ class AbstractIntegrityVerifier : public ClockedObject
     AddrRangeList cxlOsRanges;
     AddrRangeList cxlIntegrityRanges;
 
+    /**
+     * Convienence range list for all integrity ranges.
+     */
+    AddrRangeList integrityRanges;
+
 
     /**
      * Store the outstanding hash/pad generation while we wait for the

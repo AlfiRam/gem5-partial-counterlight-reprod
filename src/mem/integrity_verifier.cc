@@ -127,6 +127,14 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         }
     }
 
+    // Create convienence range list for all integrity data
+    for (auto range : dramIntegrityRanges) {
+        integrityRanges.emplace_back(range);
+    }
+    for (auto range : cxlIntegrityRanges) {
+        integrityRanges.emplace_back(range);
+    }
+
     switch (integrityTreeType) {
         case enums::IntegrityTreeType::TimingTree:
         integrityTree = new TimingTree(
