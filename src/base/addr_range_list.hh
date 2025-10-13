@@ -8,6 +8,7 @@ namespace gem5
 
 // Extra utility functions for lists of AddrRange.
 
+[[maybe_unused]]
 static inline bool
 rangeListContains(const AddrRangeList &base, const Addr &addr)
 {
@@ -20,6 +21,7 @@ rangeListContains(const AddrRangeList &base, const Addr &addr)
 /**
  * Assumes disjoint address ranges.
  */
+[[maybe_unused]]
 static inline Addr
 rangeListSize(const AddrRangeList &base)
 {
@@ -31,6 +33,7 @@ rangeListSize(const AddrRangeList &base)
     return sum;
 }
 
+[[maybe_unused]]
 static std::string
 rangeListToString(const AddrRangeList &base)
 {
