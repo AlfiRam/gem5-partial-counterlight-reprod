@@ -178,7 +178,6 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
 AbstractIntegrityVerifier::~AbstractIntegrityVerifier()
 {
     delete integrityTree;
-    // delete metadataCache;
 }
 
 void
@@ -832,7 +831,7 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     } else {
         DPRINTF(AbstractIntegrityVerifier,
             "%s: pkt %s does not need to create a metadata request. Parent "
-            "%llu is already requested. Batching.",
+            "%llu is already requested. Batching.\n",
             __func__, pkt->print(), parentNode);
     }
 
