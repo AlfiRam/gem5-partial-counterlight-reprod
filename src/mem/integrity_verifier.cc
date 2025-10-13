@@ -74,6 +74,7 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
       metadataReqQueue(*this, metadataRequestPort),
       metadataRespQueue(*this, metadataResponsePort),
       metadataSnoopRespQueue(*this, metadataRequestPort),
+      unifiedUpstreamCache(p.unified_upstream_cache),
       stats(this)
 {
     // Compute integrity memory ranges.
@@ -186,9 +187,19 @@ AbstractIntegrityVerifier::init()
     if (!responsePort.isConnected() || !requestPort.isConnected())
         fatal("Integrity verifier is not connected on both sides.\n");
 
-    if (!metadataResponsePort.isConnected() ||
-        !metadataRequestPort.isConnected())
-        fatal("Metadata cache is not connected to integrity verifier.\n");
+    if (unifiedUpstreamCache) {
+        if (!metadataRequestPort.isConnected())
+            fatal("Metadata cache is not connected to integrity verifier.\n");
+        if (metadataResponsePort.isConnected())
+            fatal("Metadata response port should not be connected to "
+                  "integrity verifier if upstream cache is used as metadata "
+                  "cache.\n");
+    } else {
+        if (!metadataResponsePort.isConnected() ||
+            !metadataRequestPort.isConnected())
+            fatal("Metadata cache is not connected to integrity verifier.\n");
+    }
+
 
     if (!hasValidRanges()) {
         fatal("The integrity verifier has not been provided a valid "
@@ -269,10 +280,11 @@ AbstractIntegrityVerifier::needsVerification(PacketPtr pkt)
     auto addr = pkt->getAddr();
 
     return (
-        rangeListContains(dramOsRanges, addr) ||
+        (pkt->isRead() || pkt->isWrite()) &&
+        (rangeListContains(dramOsRanges, addr) ||
         rangeListContains(dramIntegrityRanges, addr) ||
         rangeListContains(cxlOsRanges, addr) ||
-        rangeListContains(cxlIntegrityRanges, addr)
+        rangeListContains(cxlIntegrityRanges, addr))
     );
 }
 
@@ -348,10 +360,6 @@ AbstractIntegrityVerifier::ResponsePort::recvTimingSnoopResp(PacketPtr pkt)
 bool
 AbstractIntegrityVerifier::processReq(PacketPtr pkt)
 {
-    // Under no means should we be getting a metadata request.
-    // They are only sent from here.
-    assert(!pkt->isMetadataRequest());
-
     DPRINTF(AbstractIntegrityVerifierReqs,
         "%s: Recv req %s (pkt addr %p, req addr %p)\n",
         __func__, pkt->print(), pkt, pkt->req);
@@ -359,6 +367,23 @@ AbstractIntegrityVerifier::processReq(PacketPtr pkt)
     // We want to just bypass immediately if this is an express snoop.
     if (pkt->isExpressSnoop()) {
         return requestPort.sendTimingReq(pkt);
+    }
+
+    // If this is a metadata request, treat this as such.
+    if (unifiedUpstreamCache && (
+            pkt->isMetadataRequest() ||
+            rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
+            rangeListContains(cxlIntegrityRanges, pkt->getAddr()))
+        )
+    {
+        return processMetadataReq(pkt);
+    }
+
+    // Metadata reqeusts should not arrive here if not using a unified
+    // upstream cache.
+    if (!unifiedUpstreamCache) {
+        assert(!pkt->isMetadataRequest());
+        assert(!rangeListContains(integrityRanges, pkt->getAddr()));
     }
 
     markReqReceived(pkt);
@@ -480,17 +505,9 @@ AbstractIntegrityVerifier::processMetadataReq(PacketPtr pkt)
         "%s: Recv metadata req %s (pkt addr %p, req addr %p)\n",
         __func__, pkt->print(), pkt, pkt->req);
 
-    if (!pkt->isMetadataRequest()) {
-        // Bypass usual checks. This is a request from the cache itself.
-        // (i.e., a writeback or eviction)
-        // We should note a pending metadata eviction here if needed.
-        // pendingMetadataEvictions.insert(...
-        //     compute the tree node associated with this packet's address)
-        DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
-            __func__, pkt->print());
-        requestPort.schedTimingReq(pkt, clockEdge(Cycles(1)));
-        return true;
-    }
+    markMetadataReqReceived(pkt);
+
+    sanityCheckPacketLookup();
 
     // We are expecting a request from the metadata cache here for integrity
     // data.
@@ -545,6 +562,8 @@ AbstractIntegrityVerifier::processMetadataResp(PacketPtr pkt)
         __func__, pkt->print(), pkt, pkt->req);
 
     updatePacketLookup(pkt);
+
+    sanityCheckPacketLookup();
 
     // For every packet that was waiting for this node, notify them that their
     // parent node is verified and here.
@@ -999,7 +1018,8 @@ AbstractIntegrityVerifier::completeIntegrityVerification(PacketPtr pkt)
 void
 AbstractIntegrityVerifier::markReqReceived(PacketPtr pkt)
 {
-    assert(!pkt->isMetadataRequest());
+    assert(!pkt->isMetadataRequest() &&
+           !rangeListContains(integrityRanges, pkt->getAddr()));
 
     DPRINTF(AbstractIntegrityVerifier,
         "%s: Recv req %s (pkt addr %p, req addr %p)\n",
@@ -1024,6 +1044,35 @@ AbstractIntegrityVerifier::markReqReceived(PacketPtr pkt)
 
 
 void
+AbstractIntegrityVerifier::markMetadataReqReceived(PacketPtr pkt)
+{
+    assert(pkt->isMetadataRequest() ||
+        rangeListContains(integrityRanges, pkt->getAddr()));
+
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: Recv metadata req %s (pkt addr %p, req addr %p)\n",
+        __func__, pkt->print(), pkt, pkt->req);
+
+    if (!pkt->isMetadataRequest()) {
+        // Associate this packet with its request. This should only be removed
+        // from packet lookup once the packet will no longer be expected to be
+        // handled here anymore (either when sent to memory if it doesn't need
+        // a response, or when returned to the CPU if it did need a response).
+        addToPacketLookup(pkt);
+    } else {
+        // Packet lookup should already be accounted for if we created the
+        // request ourselves.
+        assert(packetLookup.find(pkt->req) != packetLookup.end());
+    }
+
+
+    // Account for the ordering of this packet with respect to forwarding to
+    // memory.
+    metadataRequestQueue.push(pkt->req);
+}
+
+
+void
 AbstractIntegrityVerifier::markRespReceived(PacketPtr pkt)
 {
     DPRINTF(AbstractIntegrityVerifier,
@@ -1043,26 +1092,25 @@ AbstractIntegrityVerifier::markRespReceived(PacketPtr pkt)
 void
 AbstractIntegrityVerifier::schedReq(PacketPtr pkt)
 {
-    // Metadata requests do not need to have strict ordering, so it can be
-    // sent right away.
-    if (pkt->isMetadataRequest()) {
-        // addToPacketLookup(pkt);
-        sendReqToMem(pkt);
-        return;
-    }
-
     // Mark this packet as ready to request.
     requestReady.insert(pkt->req);
 
     // There should be something in the request queue, or otherwise we are
     // attempting to send a request we know nothing about.
-    assert(!requestQueue.empty());
+    if (pkt->isMetadataRequest() ||
+        rangeListContains(integrityRanges, pkt->getAddr()))
+    {
+        assert(!metadataRequestQueue.empty());
+    } else {
+        assert(!requestQueue.empty());
+    }
 
     // If this is a data request, this should already be added to
     // `packetLookup`.
     assert(packetLookup.find(pkt->req) != packetLookup.end());
 
     // Check if there's anything we can take off the queue now.
+    // There are two queues: one for data and one for metadata.
     while (!requestQueue.empty()) {
         auto front = requestQueue.front();
 
@@ -1074,6 +1122,23 @@ AbstractIntegrityVerifier::schedReq(PacketPtr pkt)
 
             requestReady.erase(front);
             requestQueue.pop();
+        } else {
+            // The request at the front of the queue is not ready to send.
+            // Stop.
+            break;
+        }
+    }
+    while (!metadataRequestQueue.empty()) {
+        auto front = metadataRequestQueue.front();
+
+        bool isReady = requestReady.find(front) != requestReady.end();
+        if (isReady) {
+            // This request is now the front of the queue and has been
+            // determined ready to send. Let's send it off!
+            sendReqToMem(packetLookup[front]);
+
+            requestReady.erase(front);
+            metadataRequestQueue.pop();
         } else {
             // The request at the front of the queue is not ready to send.
             // Stop.
@@ -1195,14 +1260,27 @@ AbstractIntegrityVerifier::sendReqToMetadataCache(PacketPtr pkt)
 void
 AbstractIntegrityVerifier::sendRespToMetadataCache(PacketPtr pkt)
 {
-    assert(pkt->isMetadataRequest());
-    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
-           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+    assert(pkt->isMetadataRequest() ||
+           rangeListContains(integrityRanges, pkt->getAddr()));
 
-    DPRINTF(AbstractIntegrityVerifier,
-        "%s: Scheduling resp %s to metadata cache\n",
-        __func__, pkt->print());
-    metadataResponsePort.schedTimingResp(pkt, clockEdge(Cycles(1)));
+    // Use the standard response port if we have a unified upstream cache and
+    // metadata cache.
+    if (!unifiedUpstreamCache) {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Scheduling resp %s to metadata cache\n",
+            __func__, pkt->print());
+        metadataResponsePort.schedTimingResp(pkt, clockEdge(Cycles(1)));
+    } else {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: Scheduling metadata resp %s to upstream (metadata cache)\n",
+            __func__, pkt->print());
+        responsePort.schedTimingResp(pkt, clockEdge(Cycles(1)));
+    }
+
+    // Requests made by the cache itself should not be tracked anymore.
+    if (!pkt->isMetadataRequest()) {
+        removeFromPacketLookup(pkt);
+    }
 }
 
 

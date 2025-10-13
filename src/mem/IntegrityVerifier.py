@@ -69,6 +69,13 @@ class AbstractIntegrityVerifier(ClockedObject):
     metadata_resp_port = ResponsePort(
         "This port receives metadata requests and sends responses"
     )
+    unified_upstream_cache = Param.Bool(
+        False,
+        "Determine whether to unify the metadata cache with the "
+        "upstream cache. If enabled, only `metadata_req_port` is needed."
+        "Metadata requests will arrive and responses will send through "
+        "`cpu_side_port`.",
+    )
 
     system = Param.System(Parent.any, "System that the object belongs to.")
 

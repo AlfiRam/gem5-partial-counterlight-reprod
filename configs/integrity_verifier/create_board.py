@@ -231,6 +231,13 @@ def add_arguments(parser):
         default=16,
     )
 
+    parser.add_argument(
+        "--unified-upstream-cache",
+        action="store_true",
+        required=False,
+        help="Enable using the LLC as a metadata cache.",
+    )
+
     # CXL configuration
     parser.add_argument(
         "--cxl-mode",
@@ -561,6 +568,7 @@ def create_board(args):
             metadata_cache_size_counter_nodes=args.metadata_cache_size_counter_nodes,
             metadata_cache_size_mac_nodes=args.metadata_cache_size_mac_nodes,
             metadata_cache_assoc=args.metadata_cache_assoc,
+            unified_upstream_cache=args.unified_upstream_cache,
             integrity_allocation_mode=args.integrity_allocation_mode,
             integrity_tree_type=args.integrity_tree_type,
             integrity_tree_arity=args.integrity_tree_arity,

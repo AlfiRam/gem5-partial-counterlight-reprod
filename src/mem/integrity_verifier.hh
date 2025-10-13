@@ -341,10 +341,21 @@ class AbstractIntegrityVerifier : public ClockedObject
     SnoopRespPacketQueue metadataSnoopRespQueue;
 
     /**
+     * Use the upstream cache as a metadata cache.
+     */
+    bool unifiedUpstreamCache;
+
+    /**
      * We must enforce that packets leave in the same order that they were
      * received.
      */
     std::queue<RequestPtr> requestQueue;
+
+    /**
+     * We enforce metadata requests that arrive (from cache for memory) should
+     * leave to memory in the same order that they were received.
+     */
+    std::queue<RequestPtr> metadataRequestQueue;
 
     /**
      * We must enforce that packets leave in the same order that they were
@@ -583,6 +594,8 @@ class AbstractIntegrityVerifier : public ClockedObject
      * request, so that the correct order may be maintained.
      */
     void markReqReceived(PacketPtr pkt);
+
+    void markMetadataReqReceived(PacketPtr pkt);
 
     /**
      * Mark a response as received by ensuring it has arrived and update

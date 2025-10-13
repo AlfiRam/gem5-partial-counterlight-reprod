@@ -100,6 +100,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         metadata_cache_size_counter_nodes: Optional[int] = 0,
         metadata_cache_size_mac_nodes: Optional[int] = 0,
         metadata_cache_assoc: Optional[int] = 0,
+        unified_upstream_cache: Optional[bool] = False,
         integrity_allocation_mode: Optional[str] = None,
         integrity_tree_type: Optional[str] = None,
         integrity_tree_arity: Optional[int] = 0,
@@ -159,6 +160,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             self._metadata_cache_size_mac_nodes = metadata_cache_size_mac_nodes
 
         self._metadata_cache_assoc = metadata_cache_assoc
+
+        self._unified_upstream_cache = unified_upstream_cache
 
         self._integrity_allocation_mode = integrity_allocation_mode
 
@@ -272,14 +275,34 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port
 
-        # Attach cache
-        self.metadata_cache = ClassicMetadataCache(
-            size=f"{self._metadata_cache_size * 64}B",
-            assoc=self._metadata_cache_assoc,
-            writeback_clean=False,
-        )
-        self.metadata_cache.cpu_side = self.verifier.metadata_req_port
-        self.verifier.metadata_resp_port = self.metadata_cache.mem_side
+        if self._unified_upstream_cache:
+            # Metadata cache is part of LLC
+
+            # Send requests to the LLC with the request port, and
+            # responses will be send through the standard data
+            # response port.
+            self.l2bus.cpu_side_ports = self.verifier.metadata_req_port
+            self.verifier.unified_upstream_cache = True
+        else:
+            # Use separate metadata cache
+
+            # Create cache
+            if self._metadata_cache_type == "MetadataCache":
+                self.metadata_cache = ClassicMetadataCache(
+                    size=f"{self._metadata_cache_size * 64}B",
+                    assoc=self._metadata_cache_assoc,
+                    writeback_clean=False,
+                )
+            elif self._metadata_cache_type == "PartitionedMetadataCache":
+                self.metadata_cache = ClassicMetadataCache(
+                    size=f"{self._metadata_cache_size * 64}B",
+                    assoc=self._metadata_cache_assoc * 3,
+                    writeback_clean=False,
+                )
+
+            # Attach metadata cache to ports
+            self.metadata_cache.cpu_side = self.verifier.metadata_req_port
+            self.verifier.metadata_resp_port = self.metadata_cache.mem_side
 
         # Memory <--> NCX <--> membus
         if board.use_ncx():
