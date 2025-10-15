@@ -5,7 +5,6 @@
 #include "base/trace.hh"
 #include "debug/MetadataCache.hh"
 #include "debug/MetadataCacheEviction.hh"
-#include "debug/SimpleMetadataCache.hh"
 
 namespace gem5
 {

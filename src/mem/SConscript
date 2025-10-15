@@ -209,5 +209,4 @@ CompoundFlag('IntegrityVerifierAll',
               'AbstractIntegrityVerifierReqs',
               'AbstractIntegrityVerifierResps',
               'MetadataCache',
-              'SimpleMetadataCache',
              ])
