@@ -44,51 +44,51 @@ data_gen_bars_compare_runs(
         #     "app-cxl-big-only",
         # ),
         (
-            "Application on DRAM, Integrity on DRAM (No Page Swap)",
+            "Application on DRAM, Metadata on DRAM (No Page Swap)",
             "app-dram-integrity-dram.*PageSwapNo",
         ),
         ## (
-        ##     "Application on DRAM, Integrity on DRAM (Page Swap)",
+        ##     "Application on DRAM, Metadata on DRAM (Page Swap)",
         ##     "app-dram-integrity-dram.*PageSwapYes",
         ## ),
         (
-            "Application on DRAM, Integrity on CXL (No Page Swap)",
+            "Application on DRAM, Metadata on CXL (No Page Swap)",
             "app-dram-integrity-cxl.*PageSwapNo",
         ),
         (
-            "Application on DRAM, Integrity on CXL (Page Swap)",
+            "Application on DRAM, Metadata on CXL (Page Swap)",
             "app-dram-integrity-cxl.*PageSwapYes",
         ),
         (
-            "Application on CXL, Integrity on DRAM (No Page Swap)",
+            "Application on CXL, Metadata on DRAM (No Page Swap)",
             "app-cxl-integrity-dram.*PageSwapNo",
         ),
         # (
-        #     "Application on CXL, Integrity on DRAM (No Page Swap)",
+        #     "Application on CXL, Metadata on DRAM (No Page Swap)",
         #     "app-cxl-big-integrity-dram.*PageSwapNo",
         # ),
         (
-            "Application on CXL, Integrity on DRAM (Page Swap)",
+            "Application on CXL, Metadata on DRAM (Page Swap)",
             "app-cxl-integrity-dram.*PageSwapYes",
         ),
         # (
-        #     "Application on CXL, Integrity on DRAM (Page Swap)",
+        #     "Application on CXL, Metadata on DRAM (Page Swap)",
         #     "app-cxl-big-integrity-dram.*PageSwapYes",
         # ),
         (
-            "Application on CXL, Integrity on CXL (No Page Swap)",
+            "Application on CXL, Metadata on CXL (No Page Swap)",
             "app-cxl-integrity-cxl.*PageSwapNo",
         ),
         # (
-        #     "Application on CXL, Integrity on CXL (No Page Swap)",
+        #     "Application on CXL, Metadata on CXL (No Page Swap)",
         #     "app-cxl-big-integrity-cxl-big.*PageSwapNo",
         # ),
         (
-            "Application on CXL, Integrity on CXL (Page Swap)",
+            "Application on CXL, Metadata on CXL (Page Swap)",
             "app-cxl-integrity-cxl.*PageSwapYes",
         ),
         # (
-        #     "Application on CXL, Integrity on CXL (Page Swap)",
+        #     "Application on CXL, Metadata on CXL (Page Swap)",
         #     "app-cxl-big-integrity-cxl-big.*PageSwapYes",
         # ),
     ],

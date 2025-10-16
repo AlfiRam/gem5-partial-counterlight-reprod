@@ -31,19 +31,19 @@ data_gen_bars_compare_runs(
         #     "app-cxl-only",
         # ),
         (
-            "Application on DRAM, Integrity on DRAM",
+            "Application on DRAM, Metadata on DRAM",
             "app-dram-integrity-dram",
         ),
         (
-            "Application on DRAM, Integrity on CXL",
+            "Application on DRAM, Metadata on CXL",
             "app-dram-integrity-cxl",
         ),
         (
-            "Application on CXL, Integrity on DRAM",
+            "Application on CXL, Metadata on DRAM",
             "app-cxl-integrity-dram",
         ),
         (
-            "Application on CXL, Integrity on CXL",
+            "Application on CXL, Metadata on CXL",
             "app-cxl-integrity-cxl",
         ),
     ],
@@ -123,19 +123,19 @@ for graph in graphs:
             #     "app-cxl-only",
             # ),
             (
-                "Application on DRAM, Integrity on DRAM",
+                "Application on DRAM, Metadata on DRAM",
                 "app-dram-integrity-dram",
             ),
             (
-                "Application on DRAM, Integrity on CXL",
+                "Application on DRAM, Metadata on CXL",
                 "app-dram-integrity-cxl",
             ),
             (
-                "Application on CXL, Integrity on DRAM",
+                "Application on CXL, Metadata on DRAM",
                 "app-cxl-integrity-dram",
             ),
             (
-                "Application on CXL, Integrity on CXL",
+                "Application on CXL, Metadata on CXL",
                 "app-cxl-integrity-cxl",
             ),
         ],
