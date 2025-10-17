@@ -38,7 +38,9 @@
 #ifndef __MEM_CACHE_TAGS_PARTITIONING_MANAGER_HH__
 #define __MEM_CACHE_TAGS_PARTITIONING_MANAGER_HH__
 
+#include "mem/mtree/abstract_tree.hh"
 #include "mem/packet.hh"
+#include "params/IntegrityPartitionManager.hh"
 #include "params/PartitionManager.hh"
 #include "sim/sim_object.hh"
 
@@ -103,6 +105,30 @@ class PartitionManager : public SimObject
     /** Partitioning policies */
     std::vector<partitioning_policy::BasePartitioningPolicy *>
         partitioningPolicies;
+};
+
+
+/**
+ * Partition IDs based on type of metadata (counter, MAC, etc.).
+ */
+class IntegrityPartitionManager : public PartitionManager
+{
+  public:
+    PARAMS(IntegrityPartitionManager);
+    IntegrityPartitionManager(const Params &p);
+
+    uint64_t readPacketPartitionID(PacketPtr pkt) const override
+    {
+      assert(pkt->isMetadataRequest());
+
+      return pkt->getMetadataType();
+    }
+
+    uint64_t
+    getMaxExpectedPartitions() const override
+    {
+      return AbstractIntegrityTree::TREE_NODE_TYPE_COUNT;
+    }
 };
 
 } // namespace partitioning_policy

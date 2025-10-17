@@ -32,12 +32,15 @@ from m5.objects import (
     BaseXBar,
     Bridge,
     Cache,
+    IntegrityPartitionManager,
     IntegrityVerifier,
     L1XBar,
     L2XBar,
     PageSwapper,
     Port,
     SystemXBar,
+    WayPartitioningPolicy,
+    WayPolicyAllocation,
 )
 from m5.util.convert import toMemorySize
 
@@ -279,6 +282,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         self.verifier.cpu_side_port = self.l2cache.mem_side
         self.membus.cpu_side_ports = self.verifier.mem_side_port
 
+        partition_manager = None
+
         if self._unified_upstream_cache:
             # Metadata cache is part of LLC
 
@@ -303,6 +308,49 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
                     assoc=self._metadata_cache_assoc * 3,
                     writeback_clean=False,
                 )
+                # Each node type has the normal associativity.
+                # We create 3 times the associativity, then split it 3 ways.
+                partition_manager = IntegrityPartitionManager(
+                    partitioning_policies=[
+                        WayPartitioningPolicy(
+                            allocations=[
+                                # Tree nodes
+                                WayPolicyAllocation(
+                                    partition_id=0,
+                                    ways=[
+                                        way
+                                        for way in range(
+                                            0, self._metadata_cache_assoc
+                                        )
+                                    ],
+                                ),
+                                # Counters
+                                WayPolicyAllocation(
+                                    partition_id=1,
+                                    ways=[
+                                        way
+                                        for way in range(
+                                            self._metadata_cache_assoc,
+                                            self._metadata_cache_assoc * 2,
+                                        )
+                                    ],
+                                ),
+                                # MACs
+                                WayPolicyAllocation(
+                                    partition_id=2,
+                                    ways=[
+                                        way
+                                        for way in range(
+                                            self._metadata_cache_assoc * 2,
+                                            self._metadata_cache_assoc * 3,
+                                        )
+                                    ],
+                                ),
+                            ]
+                        ),
+                    ]
+                )
+                self.metadata_cache.partitioning_manager = partition_manager
 
             # Attach metadata cache to ports
             self.metadata_cache.cpu_side = self.verifier.metadata_req_port

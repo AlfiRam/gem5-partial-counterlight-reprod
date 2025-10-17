@@ -54,6 +54,12 @@ class PartitionManager(SimObject):
     )
 
 
+class IntegrityPartitionManager(PartitionManager):
+    type = "IntegrityPartitionManager"
+    cxx_header = "mem/cache/tags/partitioning_policies/partition_manager.hh"
+    cxx_class = "gem5::partitioning_policy::IntegrityPartitionManager"
+
+
 class BasePartitioningPolicy(SimObject):
     type = "BasePartitioningPolicy"
     cxx_header = "mem/cache/tags/partitioning_policies/base_pp.hh"

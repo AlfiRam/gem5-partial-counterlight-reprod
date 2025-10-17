@@ -80,6 +80,10 @@ PartitionManager::filterByPartition(
     }
 }
 
+IntegrityPartitionManager::IntegrityPartitionManager(const Params &p)
+  : PartitionManager(p)
+{}
+
 } // namespace partitioning_policy
 
 } // namespace gem5
