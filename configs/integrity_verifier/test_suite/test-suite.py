@@ -643,6 +643,10 @@ def run_command(cmd):
                     "cmd": cmd,
                 }
             )
+
+            with open(failed_run_file, "a") as f:
+                f.write(cmd)
+                f.write("\n")
         else:
             print(
                 f"==> [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] SUCCESS: {outdir} (duration: {total_elapsed_time/60:.2f} minutes)"
@@ -657,6 +661,8 @@ def run_command(cmd):
 
 
 def run_suite(commands, max_concurrent):
+    print(f"{len(commands)} commands to run in total.")
+
     start_time = time.time()
     cmd_queue = queue.Queue()
 
@@ -697,6 +703,7 @@ def run_suite(commands, max_concurrent):
         )
         for r in error_runs:
             print(r["dir"])
+        print(f"See full details of failed run(s) at: {failed_run_file}")
 
         # Output to file
         with open(suite_output_file, "a") as f:
@@ -704,11 +711,6 @@ def run_suite(commands, max_concurrent):
             f.write(f"Failed runs ({len(error_runs)} total):\n")
             for r in error_runs:
                 f.write(r["dir"])
-                f.write("\n")
-
-        with open(failed_run_file, "w") as f:
-            for r in error_runs:
-                f.write(r["cmd"])
                 f.write("\n")
 
 
@@ -723,16 +725,21 @@ if __name__ == "__main__":
     parser = add_arguments(parser)
     args = parser.parse_args()
 
-    suite_output_file = f'output/{args.test_group}/suite_output-{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}{"-dryrun" if args.print_configs else ""}.txt'
-    failed_run_file = f"output/{args.test_group}/failed_runs-{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+    start_time = datetime.datetime.now()
+    file_timestamp = start_time.strftime("%Y-%m-%d_%H-%M-%S")
+
+    suite_output_file = f'output/{args.test_group}/suite_output-{file_timestamp}{"-dryrun" if args.print_configs else ""}.txt'
+    failed_run_file = (
+        f"output/{args.test_group}/failed_runs-{file_timestamp}.txt"
+    )
 
     try:
         os.makedirs(f"output/{args.test_group}", exist_ok=True)
-        # print(f"Directory '{outdir}' created successfully.")
     except Exception as e:
         print(
             f"An error occurred while creating 'output/{args.test_group}': {e}"
         )
+        exit(1)
 
     # parsec-blackscholes-test parsec-bodytrack-test parsec-canneal-test parsec-dedup-test parsec-facesim-test parsec-ferret-test parsec-fluidanimate-test parsec-freqmine-test parsec-raytrace-test parsec-streamcluster-test parsec-swaptions-test parsec-vips-test parsec-x264-test
     # parsec-blackscholes-simsmall parsec-bodytrack-simsmall parsec-canneal-simsmall parsec-dedup-simsmall parsec-facesim-simsmall parsec-ferret-simsmall parsec-fluidanimate-simsmall parsec-freqmine-simsmall parsec-raytrace-simsmall parsec-streamcluster-simsmall parsec-swaptions-simsmall parsec-vips-simsmall parsec-x264-simsmall
@@ -802,7 +809,7 @@ if __name__ == "__main__":
     with open(suite_output_file, "w") as f:
         f.write("==================================================\n")
         f.write(
-            f"Test Suite Run on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Test Suite Run on {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
         )
         f.write("Launch Command: ")
         f.write(" ".join(sys.argv[:]))
