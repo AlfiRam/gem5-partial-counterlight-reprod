@@ -282,6 +282,10 @@ NoncoherentCache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt,
             assert(tgt_pkt->req->requestorId() < system->maxRequestors());
             stats.cmdStats(tgt_pkt).missLatency[tgt_pkt->req->requestorId()] +=
                 completion_time - target.recvTime;
+            if (partitionManager)
+                stats.partitionStats(tgt_pkt)
+                    .missLatency[tgt_pkt->req->requestorId()] +=
+                    completion_time - target.recvTime;
 
             tgt_pkt->makeTimingResponse();
             if (pkt->isError())

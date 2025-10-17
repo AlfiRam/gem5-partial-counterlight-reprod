@@ -71,6 +71,22 @@ class PartitionManager : public SimObject
         return 0;
     };
 
+    virtual std::string
+    getPartitionName(uint64_t partition_id) const
+    {
+        return std::string("unnamed");
+    }
+
+    /**
+     * Return the maximum number of partitions expected, given this partition
+     * manager.
+     */
+    virtual uint64_t
+    getMaxExpectedPartitions() const
+    {
+        return 1;
+    }
+
     /**
     * Notify of acquisition of ownership of a cache line
     * @param partition_id PartitionID of the upstream memory request

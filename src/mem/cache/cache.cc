@@ -333,6 +333,9 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
         assert(!blk || !blk->isValid());
 
         stats.cmdStats(pkt).mshrUncacheable[pkt->req->requestorId()]++;
+        if (partitionManager)
+            stats.partitionStats(pkt)
+                .mshrUncacheable[pkt->req->requestorId()]++;
 
         if (pkt->isWrite()) {
             allocateWriteBuffer(pkt, forward_time);
@@ -814,6 +817,10 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
                 stats.cmdStats(tgt_pkt)
                     .missLatency[tgt_pkt->req->requestorId()] +=
                     completion_time - target.recvTime;
+                if (partitionManager)
+                    stats.partitionStats(tgt_pkt)
+                        .missLatency[tgt_pkt->req->requestorId()] +=
+                        completion_time - target.recvTime;
 
                 if (tgt_pkt->cmd == MemCmd::LockedRMWReadReq) {
                     // We're going to leave a target in the MSHR until the

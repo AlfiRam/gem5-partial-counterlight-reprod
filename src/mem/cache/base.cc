@@ -344,6 +344,9 @@ BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
 
                 assert(pkt->req->requestorId() < system->maxRequestors());
                 stats.cmdStats(pkt).mshrHits[pkt->req->requestorId()]++;
+                if (partitionManager)
+                    stats.partitionStats(pkt)
+                        .mshrHits[pkt->req->requestorId()]++;
 
                 // We use forward_time here because it is the same
                 // considering new targets. We have multiple
@@ -368,6 +371,8 @@ BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
         // no MSHR
         assert(pkt->req->requestorId() < system->maxRequestors());
         stats.cmdStats(pkt).mshrMisses[pkt->req->requestorId()]++;
+        if (partitionManager)
+            stats.partitionStats(pkt).mshrMisses[pkt->req->requestorId()]++;
         if (prefetcher && pkt->isDemand())
             prefetcher->incrDemandMhsrMisses();
 
@@ -536,10 +541,18 @@ BaseCache::recvTimingResp(PacketPtr pkt)
         assert(pkt->req->requestorId() < system->maxRequestors());
         stats.cmdStats(initial_tgt->pkt)
             .mshrUncacheableLatency[pkt->req->requestorId()] += miss_latency;
+        if (partitionManager)
+            stats.partitionStats(initial_tgt->pkt)
+                .mshrUncacheableLatency[pkt->req->requestorId()
+                    ] += miss_latency;
     } else {
         assert(pkt->req->requestorId() < system->maxRequestors());
         stats.cmdStats(initial_tgt->pkt)
             .mshrMissLatency[pkt->req->requestorId()] += miss_latency;
+        if (partitionManager)
+            stats.partitionStats(initial_tgt->pkt)
+                .mshrMissLatency[pkt->req->requestorId()
+                    ] += miss_latency;
     }
 
     PacketList writebacks;
@@ -935,6 +948,9 @@ BaseCache::getNextQueueEntry()
                 // (hwpf_mshr_misses)
                 assert(pkt->req->requestorId() < system->maxRequestors());
                 stats.cmdStats(pkt).mshrMisses[pkt->req->requestorId()]++;
+                if (partitionManager)
+                    stats.partitionStats(pkt)
+                        .mshrMisses[pkt->req->requestorId()]++;
 
                 // allocate an MSHR and return it, note
                 // that we send the packet straight away, so do not
@@ -2214,6 +2230,179 @@ BaseCache::CacheCmdStats::regStatsFromParent()
     }
 }
 
+BaseCache::CachePartitionStats::CachePartitionStats(BaseCache &c,
+                                        const std::string &name)
+    : statistics::Group(&c, name.c_str()), cache(c),
+      ADD_STAT(hits, statistics::units::Count::get(),
+               ("number of " + name + " hits").c_str()),
+      ADD_STAT(misses, statistics::units::Count::get(),
+               ("number of " + name + " misses").c_str()),
+      ADD_STAT(hitLatency, statistics::units::Tick::get(),
+               ("number of " + name + " hit ticks").c_str()),
+      ADD_STAT(missLatency, statistics::units::Tick::get(),
+               ("number of " + name + " miss ticks").c_str()),
+      ADD_STAT(accesses, statistics::units::Count::get(),
+               ("number of " + name + " accesses(hits+misses)").c_str()),
+      ADD_STAT(missRate, statistics::units::Ratio::get(),
+               ("miss rate for " + name + " accesses").c_str()),
+      ADD_STAT(avgMissLatency, statistics::units::Rate<
+                    statistics::units::Tick, statistics::units::Count>::get(),
+               ("average " + name + " miss latency").c_str()),
+      ADD_STAT(mshrHits, statistics::units::Count::get(),
+               ("number of " + name + " MSHR hits").c_str()),
+      ADD_STAT(mshrMisses, statistics::units::Count::get(),
+               ("number of " + name + " MSHR misses").c_str()),
+      ADD_STAT(mshrUncacheable, statistics::units::Count::get(),
+               ("number of " + name + " MSHR uncacheable").c_str()),
+      ADD_STAT(mshrMissLatency, statistics::units::Tick::get(),
+               ("number of " + name + " MSHR miss ticks").c_str()),
+      ADD_STAT(mshrUncacheableLatency, statistics::units::Tick::get(),
+               ("number of " + name + " MSHR uncacheable ticks").c_str()),
+      ADD_STAT(mshrMissRate, statistics::units::Ratio::get(),
+               ("mshr miss rate for " + name + " accesses").c_str()),
+      ADD_STAT(avgMshrMissLatency, statistics::units::Rate<
+                    statistics::units::Tick, statistics::units::Count>::get(),
+               ("average " + name + " mshr miss latency").c_str()),
+      ADD_STAT(avgMshrUncacheableLatency, statistics::units::Rate<
+                    statistics::units::Tick, statistics::units::Count>::get(),
+               ("average " + name + " mshr uncacheable latency").c_str())
+{
+}
+
+void
+BaseCache::CachePartitionStats::regStatsFromParent()
+{
+    using namespace statistics;
+
+    statistics::Group::regStats();
+    System *system = cache.system;
+    const auto max_requestors = system->maxRequestors();
+
+    hits
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        hits.subname(i, system->getRequestorName(i));
+    }
+
+    // Miss statistics
+    misses
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        misses.subname(i, system->getRequestorName(i));
+    }
+
+    // Hit latency statistics
+    hitLatency
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        hitLatency.subname(i, system->getRequestorName(i));
+    }
+
+    // Miss latency statistics
+    missLatency
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        missLatency.subname(i, system->getRequestorName(i));
+    }
+
+    // access formulas
+    accesses.flags(total | nozero | nonan);
+    accesses = hits + misses;
+    for (int i = 0; i < max_requestors; i++) {
+        accesses.subname(i, system->getRequestorName(i));
+    }
+
+    // miss rate formulas
+    missRate.flags(total | nozero | nonan);
+    missRate = misses / accesses;
+    for (int i = 0; i < max_requestors; i++) {
+        missRate.subname(i, system->getRequestorName(i));
+    }
+
+    // miss latency formulas
+    avgMissLatency.flags(total | nozero | nonan);
+    avgMissLatency = missLatency / misses;
+    for (int i = 0; i < max_requestors; i++) {
+        avgMissLatency.subname(i, system->getRequestorName(i));
+    }
+
+    // MSHR statistics
+    // MSHR hit statistics
+    mshrHits
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        mshrHits.subname(i, system->getRequestorName(i));
+    }
+
+    // MSHR miss statistics
+    mshrMisses
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        mshrMisses.subname(i, system->getRequestorName(i));
+    }
+
+    // MSHR miss latency statistics
+    mshrMissLatency
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        mshrMissLatency.subname(i, system->getRequestorName(i));
+    }
+
+    // MSHR uncacheable statistics
+    mshrUncacheable
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        mshrUncacheable.subname(i, system->getRequestorName(i));
+    }
+
+    // MSHR miss latency statistics
+    mshrUncacheableLatency
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        mshrUncacheableLatency.subname(i, system->getRequestorName(i));
+    }
+
+    // MSHR miss rate formulas
+    mshrMissRate.flags(total | nozero | nonan);
+    mshrMissRate = mshrMisses / accesses;
+
+    for (int i = 0; i < max_requestors; i++) {
+        mshrMissRate.subname(i, system->getRequestorName(i));
+    }
+
+    // mshrMiss latency formulas
+    avgMshrMissLatency.flags(total | nozero | nonan);
+    avgMshrMissLatency = mshrMissLatency / mshrMisses;
+    for (int i = 0; i < max_requestors; i++) {
+        avgMshrMissLatency.subname(i, system->getRequestorName(i));
+    }
+
+    // mshrUncacheable latency formulas
+    avgMshrUncacheableLatency.flags(total | nozero | nonan);
+    avgMshrUncacheableLatency = mshrUncacheableLatency / mshrUncacheable;
+    for (int i = 0; i < max_requestors; i++) {
+        avgMshrUncacheableLatency.subname(i, system->getRequestorName(i));
+    }
+}
+
 BaseCache::CacheStats::CacheStats(BaseCache &c)
     : statistics::Group(&c), cache(c),
 
@@ -2291,10 +2480,34 @@ BaseCache::CacheStats::CacheStats(BaseCache &c)
              "number of data expansions"),
     ADD_STAT(dataContractions, statistics::units::Count::get(),
              "number of data contractions"),
-    cmd(MemCmd::NUM_MEM_CMDS)
+    cmd(MemCmd::NUM_MEM_CMDS),
+    partition(cache.partitionManager ?
+        cache.partitionManager->getMaxExpectedPartitions() : 0)
 {
     for (int idx = 0; idx < MemCmd::NUM_MEM_CMDS; ++idx)
         cmd[idx].reset(new CacheCmdStats(c, MemCmd(idx).toString()));
+
+    auto partitions = cache.partitionManager ?
+        cache.partitionManager->getMaxExpectedPartitions() : 0;
+    for (int idx = 0; idx < partitions; ++idx) {
+        std::string partition_name;
+        if (cache.partitionManager) {
+            partition_name = cache.partitionManager->getPartitionName(idx);
+        } else {
+            partition_name = std::string("unnamed");
+        }
+
+        partition[idx].reset(new CachePartitionStats(c,
+                            "partition_" + std::to_string(idx) +
+                            "_" + partition_name));
+    }
+}
+
+BaseCache::CachePartitionStats&
+BaseCache::CacheStats::partitionStats(const PacketPtr p) {
+    auto pm = cache.partitionManager;
+    assert(pm != nullptr);
+    return *partition[pm->readPacketPartitionID(p)];
 }
 
 void
@@ -2309,6 +2522,9 @@ BaseCache::CacheStats::regStats()
 
     for (auto &cs : cmd)
         cs->regStatsFromParent();
+
+    for (auto &ps : partition)
+        ps->regStatsFromParent();
 
 // These macros make it easier to sum the right subset of commands and
 // to change the subset of commands that are considered "demand" vs
