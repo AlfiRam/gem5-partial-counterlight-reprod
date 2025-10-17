@@ -60,6 +60,22 @@ class IntegrityPartitionManager(PartitionManager):
     cxx_class = "gem5::partitioning_policy::IntegrityPartitionManager"
 
 
+class DataLocationPartitionManager(PartitionManager):
+    type = "DataLocationPartitionManager"
+    cxx_header = "mem/cache/tags/partitioning_policies/partition_manager.hh"
+    cxx_class = "gem5::partitioning_policy::DataLocationPartitionManager"
+
+    # All ranges are assumed to be disjoint and in sorted order.
+    dram_full_ranges = VectorParam.AddrRange(
+        [], "Full available range(s) of DRAM"
+    )
+    dram_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
+    cxl_full_ranges = VectorParam.AddrRange(
+        [], "Full available range(s) of CXL"
+    )
+    cxl_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
+
+
 class BasePartitioningPolicy(SimObject):
     type = "BasePartitioningPolicy"
     cxx_header = "mem/cache/tags/partitioning_policies/base_pp.hh"

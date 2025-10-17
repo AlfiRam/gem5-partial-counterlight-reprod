@@ -40,6 +40,7 @@
 
 #include "mem/mtree/abstract_tree.hh"
 #include "mem/packet.hh"
+#include "params/DataLocationPartitionManager.hh"
 #include "params/IntegrityPartitionManager.hh"
 #include "params/PartitionManager.hh"
 #include "sim/sim_object.hh"
@@ -128,6 +129,52 @@ class IntegrityPartitionManager : public PartitionManager
     getMaxExpectedPartitions() const override
     {
       return AbstractIntegrityTree::TREE_NODE_TYPE_COUNT;
+    }
+};
+
+
+/**
+ * Partition IDs based on provided address ranges.
+ */
+class DataLocationPartitionManager : public PartitionManager
+{
+  public:
+    PARAMS(DataLocationPartitionManager);
+    DataLocationPartitionManager(const Params &p);
+
+    void init() override;
+
+    AddrRangeList dramFullRanges;
+    AddrRangeList dramOsRanges;
+    AddrRangeList dramIntegrityRanges;
+    AddrRangeList cxlFullRanges;
+    AddrRangeList cxlOsRanges;
+    AddrRangeList cxlIntegrityRanges;
+
+    static const uint16_t PARTITION_COUNT = 5;
+
+    const std::string PARTITION_NAMES[PARTITION_COUNT] = {
+      "LocalOs",
+      "LocalMetadata",
+      "RemoteOs",
+      "RemoteMetadata",
+      "Other",
+    };
+
+    static const uint16_t PARTITION_ID_LOCAL_OS = 0;
+    static const uint16_t PARTITION_ID_LOCAL_METADATA = 1;
+    static const uint16_t PARTITION_ID_REMOTE_OS = 2;
+    static const uint16_t PARTITION_ID_REMOTE_METADATA = 3;
+    static const uint16_t PARTITION_ID_OTHER = 4;
+
+    uint64_t readPacketPartitionID(PacketPtr pkt) const override;
+
+    std::string getPartitionName(uint64_t partition_id) const override;
+
+    uint64_t
+    getMaxExpectedPartitions() const override
+    {
+      return PARTITION_COUNT;
     }
 };
 

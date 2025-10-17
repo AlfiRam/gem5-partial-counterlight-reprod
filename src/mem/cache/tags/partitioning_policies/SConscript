@@ -40,6 +40,7 @@ Import('*')
 SimObject('PartitioningPolicies.py', sim_objects=[
     'PartitionManager',
     'IntegrityPartitionManager',
+    'DataLocationPartitionManager',
     'BasePartitioningPolicy',
     'MaxCapacityPartitioningPolicy',
     'WayPolicyAllocation',
