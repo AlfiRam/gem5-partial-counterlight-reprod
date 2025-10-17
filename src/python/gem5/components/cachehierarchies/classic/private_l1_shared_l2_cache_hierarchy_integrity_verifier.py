@@ -217,7 +217,11 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
                 for i in range(board.get_processor().get_num_cores())
             ]
         self.l2bus = L2XBar()
-        self.l2cache = L2Cache(size=self._l2_size, assoc=self._l2_assoc)
+        # Even if not using unified cache, increase MSHRs to avoid deadlocks
+        # when using a unified metadata+data cache.
+        self.l2cache = L2Cache(
+            size=self._l2_size, assoc=self._l2_assoc, mshrs=40
+        )
         # ITLB Page walk caches
         self.iptw_caches = [
             MMUCache(size="8KiB", writeback_clean=False)
