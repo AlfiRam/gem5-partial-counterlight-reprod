@@ -74,10 +74,11 @@ class PartitionManager : public SimObject
     /**
     * Notify of acquisition of ownership of a cache line
     * @param partition_id PartitionID of the upstream memory request
+    * @param entry The cache line associated with the new ownership
     */
-    void notifyAcquire(uint64_t partition_id);
+    void notifyAcquire(uint64_t partition_id, ReplaceableEntry *entry);
 
-    void notifyRelease(uint64_t partition_id);
+    void notifyRelease(uint64_t partition_id, ReplaceableEntry *entry);
 
     void filterByPartition(std::vector<ReplaceableEntry *> &entries,
         const uint64_t partition_id) const;

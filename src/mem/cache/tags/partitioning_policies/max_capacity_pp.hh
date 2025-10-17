@@ -74,10 +74,12 @@ class MaxCapacityPartitioningPolicy : public BasePartitioningPolicy
                       const uint64_t partition_id) const override;
 
     void
-    notifyAcquire(const uint64_t partition_id) override;
+    notifyAcquire(const uint64_t partition_id,
+                  ReplaceableEntry *entry) override;
 
     void
-    notifyRelease(const uint64_t partition_id) override;
+    notifyRelease(const uint64_t partition_id,
+                  ReplaceableEntry *entry) override;
 
     /**
     * Set the maximum capacity (as a fraction) for the provided partition

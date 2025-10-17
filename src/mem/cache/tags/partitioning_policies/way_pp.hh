@@ -73,17 +73,21 @@ class WayPartitioningPolicy : public BasePartitioningPolicy
     * Empty implementation as block allocations do not vary with number of
     * allocated blocks for this policy
     * @param partition_id PartitionID of the upstream memory request
+    * @param entry The cache block that will contain the newly-owned data
     */
     void
-    notifyAcquire(const uint64_t partition_id) override {};
+    notifyAcquire(const uint64_t partition_id,
+                    ReplaceableEntry *entry) override {};
 
     /**
     * Empty implementation as block allocations do not vary with number of
     * allocated blocks for this policy
     * @param partition_id PartitionID of the upstream memory request
+    * @param entry The cache block related to the release
     */
     void
-    notifyRelease(const uint64_t partition_id) override {};
+    notifyRelease(const uint64_t partition_id,
+                    ReplaceableEntry *entry) override {};
 
     void addWayToPartition(uint64_t partition_id, unsigned way);
     void removeWayToPartition(uint64_t partition_id, unsigned way);

@@ -51,21 +51,21 @@ PartitionManager::PartitionManager(const Params &p)
 {}
 
 void
-PartitionManager::notifyAcquire(uint64_t partition_id)
+PartitionManager::notifyAcquire(uint64_t partition_id, ReplaceableEntry *entry)
 {
     // Notify partitioning policies of acquisition of ownership
     for (auto & partitioning_policy : partitioningPolicies) {
         // get partitionId from Packet
-        partitioning_policy->notifyAcquire(partition_id);
+        partitioning_policy->notifyAcquire(partition_id, entry);
     }
 }
 
 void
-PartitionManager::notifyRelease(uint64_t partition_id)
+PartitionManager::notifyRelease(uint64_t partition_id, ReplaceableEntry *entry)
 {
     // Notify partitioning policies of release of ownership
     for (auto partitioning_policy : partitioningPolicies) {
-        partitioning_policy->notifyRelease(partition_id);
+        partitioning_policy->notifyRelease(partition_id, entry);
     }
 }
 

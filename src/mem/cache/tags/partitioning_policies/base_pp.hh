@@ -82,16 +82,18 @@ class BasePartitioningPolicy : public SimObject
     /**
     * Notify of acquisition of ownership of a cache line
     * @param partition_id PartitionID of the upstream memory request
+    * @param entry The cache block that will contain the newly-owned data
     */
     virtual void
-    notifyAcquire(const uint64_t partition_id) = 0;
+    notifyAcquire(const uint64_t partition_id, ReplaceableEntry *entry) = 0;
 
     /**
     * Notify of release of ownership of a cache line
     * @param partition_id PartitionID of the upstream memory request
+    * @param entry The cache block related to the release
     */
     virtual void
-    notifyRelease(const uint64_t partition_id) = 0;
+    notifyRelease(const uint64_t partition_id, ReplaceableEntry *entry) = 0;
 };
 
 } // namespace partitioning_policy

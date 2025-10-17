@@ -104,7 +104,7 @@ BaseSetAssoc::invalidate(CacheBlk *blk)
 {
     // Notify partitioning policies of release of ownership
     if (partitionManager) {
-        partitionManager->notifyRelease(blk->getPartitionId());
+        partitionManager->notifyRelease(blk->getPartitionId(), blk);
     }
 
     BaseTags::invalidate(blk);

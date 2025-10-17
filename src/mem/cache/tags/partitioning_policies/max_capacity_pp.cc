@@ -117,7 +117,9 @@ MaxCapacityPartitioningPolicy::filterByPartition(
 }
 
 void
-MaxCapacityPartitioningPolicy::notifyAcquire(const uint64_t partition_id)
+MaxCapacityPartitioningPolicy::notifyAcquire(
+    const uint64_t partition_id,
+    ReplaceableEntry *entry)
 {
     // sanity check current allocation does not exceed its configured maximum
     assert(partitionIdCurCapacity[partition_id] <=
@@ -127,7 +129,9 @@ MaxCapacityPartitioningPolicy::notifyAcquire(const uint64_t partition_id)
 }
 
 void
-MaxCapacityPartitioningPolicy::notifyRelease(const uint64_t partition_id)
+MaxCapacityPartitioningPolicy::notifyRelease(
+    const uint64_t partition_id,
+    ReplaceableEntry *entry)
 {
     // sanity check current allocation will not cause underflow
     assert(partitionIdCurCapacity[partition_id] > 0);

@@ -387,7 +387,7 @@ class BaseSetAssoc : public BaseTags
 
         if (partitionManager) {
             auto partition_id = partitionManager->readPacketPartitionID(pkt);
-            partitionManager->notifyAcquire(partition_id);
+            partitionManager->notifyAcquire(partition_id, blk);
         }
 
         // Update replacement policy
