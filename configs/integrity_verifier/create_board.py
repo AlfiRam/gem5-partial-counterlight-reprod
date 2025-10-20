@@ -14,11 +14,11 @@ from m5.util.convert import toMemorySize
 
 from gem5.components.boards.x86_board import X86Board
 from gem5.components.cachehierarchies.classic.no_cache import NoCache
-from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy import (
-    PrivateL1SharedL2CacheHierarchy,
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_shared_l3_cache_hierarchy import (
+    PrivateL1PrivateL2SharedL3CacheHierarchy,
 )
-from gem5.components.cachehierarchies.classic.private_l1_shared_l2_cache_hierarchy_integrity_verifier import (
-    PrivateL1SharedL2CacheHierarchyIntegrityVerifier,
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_shared_l3_cache_hierarchy_integrity_verifier import (
+    PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier,
 )
 from gem5.components.memory.mtree.TimingBmt import TimingBmt
 from gem5.components.memory.mtree.TimingTree import TimingTree
@@ -93,6 +93,22 @@ def add_arguments(parser):
         required=False,
         help="Associativity of L2 cache.",
         default=16,
+    )
+
+    parser.add_argument(
+        "--l3-size",
+        type=str,
+        required=False,
+        help="Size of L3 cache.",
+        default="16MiB",
+    )
+
+    parser.add_argument(
+        "--l3-assoc",
+        type=int,
+        required=False,
+        help="Associativity of L3 cache.",
+        default=32,
     )
 
     # Memory sizes
@@ -553,13 +569,15 @@ def create_board(args):
 
     # Cache
     if args.use_integrity_verifier:
-        cache_hierarchy = PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
+        cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier(
             l1d_size="32KiB",
             l1d_assoc=8,
             l1i_size="32KiB",
             l1i_assoc=8,
             l2_size=args.l2_size,
             l2_assoc=args.l2_assoc,
+            l3_size=args.l3_size,
+            l3_assoc=args.l3_assoc,
             unified_l1_cache=args.unified_l1_cache,
             membus=membus,
             metadata_cache_type=args.metadata_cache_type,
@@ -580,13 +598,15 @@ def create_board(args):
             membus=membus,
         )
     else:
-        cache_hierarchy = PrivateL1SharedL2CacheHierarchy(
+        cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
             l1d_size="32KiB",
             l1d_assoc=8,
             l1i_size="32KiB",
             l1i_assoc=8,
             l2_size=args.l2_size,
             l2_assoc=args.l2_assoc,
+            l3_size=args.l3_size,
+            l3_assoc=args.l3_assoc,
             unified_l1_cache=args.unified_l1_cache,
             membus=membus,
         )
