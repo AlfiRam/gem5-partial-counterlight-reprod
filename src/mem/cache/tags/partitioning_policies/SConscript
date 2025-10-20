@@ -43,6 +43,7 @@ SimObject('PartitioningPolicies.py', sim_objects=[
     'DataLocationPartitionManager',
     'BasePartitioningPolicy',
     'MaxCapacityPartitioningPolicy',
+    'DynamicCapacityPartitioningPolicy',
     'WayPolicyAllocation',
     'WayPartitioningPolicy']
     )

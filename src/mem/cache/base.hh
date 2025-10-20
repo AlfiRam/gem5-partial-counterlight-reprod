@@ -1099,6 +1099,31 @@ class BaseCache : public ClockedObject
         statistics::Formula avgMshrUncacheableLatency;
     };
 
+    struct CachePartitionIntervalStats : public statistics::Group
+    {
+        CachePartitionIntervalStats(BaseCache &c, const std::string &name);
+
+        /**
+         * Callback to register stats from parent
+         * CacheStats::regStats(). We can't use the normal flow since
+         * there is is no guaranteed order and CacheStats::regStats()
+         * needs to rely on these stats being initialised.
+         */
+        void regStatsFromParent();
+
+        const BaseCache &cache;
+
+        /** Number of hits for each partition. */
+        statistics::Scalar hits;
+        /** Number of misses for each partition. */
+        statistics::Scalar misses;
+
+        /** The number of accesses per partition. */
+        statistics::Formula accesses;
+        /** The miss rate per partition. */
+        statistics::Formula missRate;
+    };
+
     struct CacheStats : public statistics::Group
     {
         CacheStats(BaseCache &c);
@@ -1110,6 +1135,8 @@ class BaseCache : public ClockedObject
         }
 
         CachePartitionStats &partitionStats(const PacketPtr p);
+
+        CachePartitionIntervalStats &partitionIntervalStats(const PacketPtr p);
 
         const BaseCache &cache;
 
@@ -1209,6 +1236,9 @@ class BaseCache : public ClockedObject
 
         /** Per-partition statistics */
         std::vector<std::unique_ptr<CachePartitionStats>> partition;
+
+        std::vector<std::shared_ptr<CachePartitionIntervalStats>>
+            partitionInterval;
     } stats;
 
     /** Registers probes. */
@@ -1367,6 +1397,7 @@ class BaseCache : public ClockedObject
         stats.cmdStats(pkt).misses[pkt->req->requestorId()]++;
         if (partitionManager) {
             stats.partitionStats(pkt).misses[pkt->req->requestorId()]++;
+            stats.partitionIntervalStats(pkt).misses++;
         }
         pkt->req->incAccessDepth();
         if (missCount) {
@@ -1381,6 +1412,7 @@ class BaseCache : public ClockedObject
         stats.cmdStats(pkt).hits[pkt->req->requestorId()]++;
         if (partitionManager) {
             stats.partitionStats(pkt).hits[pkt->req->requestorId()]++;
+            stats.partitionIntervalStats(pkt).hits++;
         }
     }
 

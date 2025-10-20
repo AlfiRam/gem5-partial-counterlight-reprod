@@ -46,7 +46,8 @@ namespace partitioning_policy
 {
 
 BasePartitioningPolicy::BasePartitioningPolicy
-    (const BasePartitioningPolicyParams &params): SimObject(params)
+    (const BasePartitioningPolicyParams &params): SimObject(params),
+    cache(nullptr), pm(nullptr)
 {
 
 }

@@ -38,6 +38,7 @@
 #include "mem/cache/tags/partitioning_policies/partition_manager.hh"
 
 #include "base/addr_range_list.hh"
+#include "debug/PartitionManager.hh"
 #include "mem/cache/tags/partitioning_policies/base_pp.hh"
 
 namespace gem5
@@ -48,8 +49,18 @@ namespace partitioning_policy
 
 PartitionManager::PartitionManager(const Params &p)
   : SimObject(p),
+    cache(nullptr),
     partitioningPolicies(p.partitioning_policies)
-{}
+{
+    for (auto pp : partitioningPolicies) {
+        pp->setPartitionManager(this);
+    }
+}
+
+void
+PartitionManager::init()
+{
+}
 
 void
 PartitionManager::notifyAcquire(uint64_t partition_id, ReplaceableEntry *entry)
@@ -142,6 +153,11 @@ DataLocationPartitionManager::DataLocationPartitionManager(const Params &p)
             cxlOsRangeIt++;
         }
     }
+}
+
+void
+DataLocationPartitionManager::init() {
+    PartitionManager::init();
 }
 
 uint64_t

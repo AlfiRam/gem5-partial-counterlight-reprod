@@ -140,6 +140,10 @@ BaseCache::BaseCache(const BaseCacheParams &p, unsigned blk_size)
         "Compressed cache %s does not have a compression algorithm", name());
     if (compressor)
         compressor->setCache(this);
+
+    if (partitionManager) {
+        partitionManager->setCache(this);
+    }
 }
 
 BaseCache::~BaseCache()
@@ -2403,6 +2407,45 @@ BaseCache::CachePartitionStats::regStatsFromParent()
     }
 }
 
+
+BaseCache::CachePartitionIntervalStats::CachePartitionIntervalStats(
+    BaseCache &c,
+    const std::string &name)
+    : statistics::Group(&c, name.c_str()), cache(c),
+      ADD_STAT(hits, statistics::units::Count::get(),
+               ("number of " + name + " hits").c_str()),
+      ADD_STAT(misses, statistics::units::Count::get(),
+               ("number of " + name + " misses").c_str()),
+      ADD_STAT(accesses, statistics::units::Count::get(),
+               ("number of " + name + " accesses(hits+misses)").c_str()),
+      ADD_STAT(missRate, statistics::units::Ratio::get(),
+               ("miss rate for " + name + " accesses").c_str())
+{
+}
+
+void
+BaseCache::CachePartitionIntervalStats::regStatsFromParent()
+{
+    using namespace statistics;
+
+    statistics::Group::regStats();
+
+    // Hit statistics
+    hits.flags(nozero | nonan);
+
+    // Miss statistics
+    misses.flags(nozero | nonan);
+
+    // access formulas
+    accesses.flags(nozero | nonan);
+    accesses = hits + misses;
+
+    // miss rate formulas
+    missRate.flags(nozero | nonan);
+    missRate = misses / accesses;
+}
+
+
 BaseCache::CacheStats::CacheStats(BaseCache &c)
     : statistics::Group(&c), cache(c),
 
@@ -2482,6 +2525,8 @@ BaseCache::CacheStats::CacheStats(BaseCache &c)
              "number of data contractions"),
     cmd(MemCmd::NUM_MEM_CMDS),
     partition(cache.partitionManager ?
+        cache.partitionManager->getMaxExpectedPartitions() : 0),
+    partitionInterval(cache.partitionManager ?
         cache.partitionManager->getMaxExpectedPartitions() : 0)
 {
     for (int idx = 0; idx < MemCmd::NUM_MEM_CMDS; ++idx)
@@ -2500,6 +2545,9 @@ BaseCache::CacheStats::CacheStats(BaseCache &c)
         partition[idx].reset(new CachePartitionStats(c,
                             "partition_" + std::to_string(idx) +
                             "_" + partition_name));
+        partitionInterval[idx].reset(new CachePartitionIntervalStats(c,
+                            "partitionInterval_" + std::to_string(idx) +
+                            "_" + partition_name));
     }
 }
 
@@ -2508,6 +2556,13 @@ BaseCache::CacheStats::partitionStats(const PacketPtr p) {
     auto pm = cache.partitionManager;
     assert(pm != nullptr);
     return *partition[pm->readPacketPartitionID(p)];
+}
+
+BaseCache::CachePartitionIntervalStats&
+BaseCache::CacheStats::partitionIntervalStats(const PacketPtr p) {
+    auto pm = cache.partitionManager;
+    assert(pm != nullptr);
+    return *partitionInterval[pm->readPacketPartitionID(p)];
 }
 
 void
@@ -2525,6 +2580,9 @@ BaseCache::CacheStats::regStats()
 
     for (auto &ps : partition)
         ps->regStatsFromParent();
+
+    for (auto &pis : partitionInterval)
+        pis->regStatsFromParent();
 
 // These macros make it easier to sum the right subset of commands and
 // to change the subset of commands that are considered "demand" vs

@@ -41,10 +41,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/priority_queue_handled.hh"
 #include "debug/PartitionPolicy.hh"
+#include "mem/cache/base.hh"
 #include "mem/cache/cache_blk.hh"
 #include "mem/cache/tags/partitioning_policies/base_pp.hh"
 #include "params/BasePartitioningPolicy.hh"
+#include "params/DynamicCapacityPartitioningPolicy.hh"
 #include "params/MaxCapacityPartitioningPolicy.hh"
 
 namespace gem5
@@ -89,7 +92,7 @@ class MaxCapacityPartitioningPolicy : public BasePartitioningPolicy
     */
     void configurePartition(uint64_t partition_id, double cap_frac);
 
-  private:
+  protected:
     /**
     * Total number of cache blocks
     */
@@ -115,6 +118,199 @@ class MaxCapacityPartitioningPolicy : public BasePartitioningPolicy
     * Map of PartitionIDs and currently allocated blck coutns
     */
     std::unordered_map< uint64_t, uint64_t > partitionIdCurCapacity;
+};
+
+
+class DynamicCapacityPartitioningPolicy : public MaxCapacityPartitioningPolicy
+{
+  public:
+    DynamicCapacityPartitioningPolicy
+    (const DynamicCapacityPartitioningPolicyParams &params);
+
+    void init() override;
+
+    /**
+     * Adjust partition target capacities based on factors such as miss rate
+     * or access frequency.
+     */
+    void computeTargetCapacities();
+
+    /**
+     * Compute the difference between a partition's target capacity and its
+     * actual capacity.
+     *
+     * Positive implies there is more actually allocated than targeted.
+     * Negative implies there is less actually allocated than targeted.
+     */
+    int64_t computeDifference(const uint64_t partition_id);
+
+    /**
+     * Update computed differences between a partition's target capacity and
+     * actual cache occupancy.
+     */
+    void updateDifferences();
+
+    void
+    filterByPartition(std::vector<ReplaceableEntry *> &entries,
+                      const uint64_t partition_id) const override;
+
+    void
+    notifyAcquire(const uint64_t partition_id,
+                  ReplaceableEntry *entry) override;
+
+    void
+    notifyRelease(const uint64_t partition_id,
+                  ReplaceableEntry *entry) override;
+
+    struct PartitioningStats : public statistics::Group
+    {
+        PartitioningStats(DynamicCapacityPartitioningPolicy *parent);
+
+        std::string name() const {
+          return parent->name() + ".stats";
+        }
+
+        DynamicCapacityPartitioningPolicy *parent;
+
+        // Number of changes to the target proportions
+        statistics::Scalar targetAdjustments;
+        statistics::Scalar targetAdjustmentAttempts;
+
+    };
+
+    PartitioningStats stats;
+
+    /**
+     * Statistics specifically for the end of simulation or right before
+     * dumping stats.
+     *
+     * This gives the resulting partitioning as determined by the dynamic
+     * cache partitioning scheme.
+     */
+    struct PartitioningEndStats : public statistics::Group
+    {
+        PartitioningEndStats(DynamicCapacityPartitioningPolicy *parent);
+
+        /**
+         * Due stats not being a SimObject, an init() call must be done from
+         * the parent SimObject.
+         */
+        void initFromParent();
+
+        std::string name() const {
+          return parent->name() + ".stats";
+        }
+
+        void preDumpStats() override;
+
+        DynamicCapacityPartitioningPolicy *parent;
+
+        // In number of blocks
+        statistics::Vector actualBlocks;
+        statistics::Vector targetBlocks;
+
+        // Between [0, 1]
+        statistics::Vector actualUsage;
+        statistics::Vector targetUsage;
+    };
+
+    PartitioningEndStats endStats;
+
+  private:
+    /**
+     * Associativity of cache. Used for sanity checking valid states.
+     */
+    unsigned int assoc;
+
+    /**
+     * Rate in ticks to update the target capacity levels.
+     */
+    Tick updateRate;
+
+    /**
+     * The number of cache blocks that should be changed (marginally) when
+     * adjusting partition sizes.
+     */
+    const uint64_t partitionMargin;
+
+    /**
+    * Map of PartitionIDs and currently allocated block counts, per set.
+    *
+    * Used for sanity checking valid states.
+    */
+    std::vector<
+      std::unordered_map<uint64_t, uint64_t>> partitionIdCurCapacitySets;
+
+    /**
+     * Minimum allocatable block count for every partition.
+     */
+    const uint64_t partitionMinCapacity;
+
+    /**
+    * Map of PartitionIDs and target allocatable cache block counts;
+    * On evictions full partitions are prioritized.
+    */
+    std::unordered_map< uint64_t, uint64_t > partitionIdTargetCapacity;
+
+    /**
+     * Total number of blocks in the target partition scheme.
+     *
+     * Used for sanity checking valid states.
+     */
+    uint64_t sumOfTargetCapacities;
+
+    /**
+     * Max heap of partitions in terms of the difference between their target
+     * capacity and the actual occupancy of the partition.
+     *
+     * The top of the heap is the partition with the most excess blocks
+     * compared to the targeted amount.
+     */
+    HandledPriorityQueue<
+      uint64_t, int64_t, std::less<int64_t>> highestDifference;
+    /**
+     * Min heap of partitions in terms of the difference between their target
+     * capacity and the actual occupancy of the partition.
+     *
+     * The top of the heap is the partition with the most missing blocks
+     * compared to the targeted amount.
+     */
+    HandledPriorityQueue<
+      uint64_t,int64_t, std::greater<int64_t>> lowestDifference;
+
+    /**
+     * Process the changes that have been made to statistics by updating cache
+     * partitioning if needed. Stats are then reset until the next update
+     * interval arrives.
+     */
+    void processStatUpdate();
+
+    /**
+     * A refresh after the next statistics interval has been scheduled.
+     */
+    bool statRefreshScheduled;
+
+    class StatRefreshEvent : public Event
+    {
+      private:
+        // Pointer to the related partitioning policy object.
+        DynamicCapacityPartitioningPolicy *pp;
+
+      public:
+        StatRefreshEvent(
+          DynamicCapacityPartitioningPolicy *pp
+        ) : Event(Default_Pri, AutoDelete),
+          pp(pp)
+        { }
+
+        void process() override {
+          pp->processStatUpdate();
+        }
+    };
+
+    /// DEBUG
+
+    std::string printTargetCapacities();
 };
 
 } // namespace partitioning_policy

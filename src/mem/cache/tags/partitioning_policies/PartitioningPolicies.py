@@ -137,3 +137,15 @@ class MaxCapacityPartitioningPolicy(BasePartitioningPolicy):
         "Format: [<max_capacity>,<max_capacity>,...]"
         "Example: [0.5, 0.75]"
     )
+
+
+class DynamicCapacityPartitioningPolicy(MaxCapacityPartitioningPolicy):
+    type = "DynamicCapacityPartitioningPolicy"
+    cxx_header = "mem/cache/tags/partitioning_policies/max_capacity_pp.hh"
+    cxx_class = "gem5::partitioning_policy::DynamicCapacityPartitioningPolicy"
+
+    assoc = Param.Unsigned(Parent.assoc, "Cache associativity")
+
+    update_rate = Param.Tick(
+        100000, "Rate to update the dynamic capacity values"
+    )

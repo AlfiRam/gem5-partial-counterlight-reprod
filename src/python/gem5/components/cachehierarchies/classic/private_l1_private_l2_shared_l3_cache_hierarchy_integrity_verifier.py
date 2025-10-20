@@ -33,6 +33,8 @@ from m5.objects import (
     BaseXBar,
     Bridge,
     Cache,
+    DataLocationPartitionManager,
+    DynamicCapacityPartitioningPolicy,
     IntegrityPartitionManager,
     IntegrityVerifier,
     L1XBar,
@@ -310,6 +312,18 @@ class PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier(
 
         if self._unified_upstream_cache:
             # Metadata cache is part of LLC
+
+            if self._enable_partition_manager:
+                partition_manager = DataLocationPartitionManager(
+                    partitioning_policies=[
+                        DynamicCapacityPartitioningPolicy(
+                            partition_ids=[0, 1, 2, 3],
+                            capacities=[0.2, 0.2, 0.2, 0.2],
+                            update_rate=1000000000,  # 1ms / 0.001s
+                        ),
+                    ]
+                )
+                self.l3cache.partitioning_manager = partition_manager
 
             # Send requests to the LLC with the request port, and
             # responses will be sent through the standard data

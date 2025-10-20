@@ -254,6 +254,13 @@ def add_arguments(parser):
         help="Enable using the LLC as a metadata cache.",
     )
 
+    parser.add_argument(
+        "--enable-partition-manager",
+        action="store_true",
+        required=False,
+        help="Enable dynamic partitioning of data.",
+    )
+
     # CXL configuration
     parser.add_argument(
         "--cxl-mode",
@@ -587,6 +594,7 @@ def create_board(args):
             metadata_cache_size_mac_nodes=args.metadata_cache_size_mac_nodes,
             metadata_cache_assoc=args.metadata_cache_assoc,
             unified_upstream_cache=args.unified_upstream_cache,
+            enable_partition_manager=args.enable_partition_manager,
             integrity_allocation_mode=args.integrity_allocation_mode,
             integrity_tree_type=args.integrity_tree_type,
             integrity_tree_arity=args.integrity_tree_arity,

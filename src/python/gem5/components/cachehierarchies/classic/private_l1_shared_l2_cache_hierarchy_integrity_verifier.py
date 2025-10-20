@@ -32,6 +32,8 @@ from m5.objects import (
     BaseXBar,
     Bridge,
     Cache,
+    DataLocationPartitionManager,
+    DynamicCapacityPartitioningPolicy,
     IntegrityPartitionManager,
     IntegrityVerifier,
     L1XBar,
@@ -104,6 +106,7 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         metadata_cache_size_mac_nodes: Optional[int] = 0,
         metadata_cache_assoc: Optional[int] = 0,
         unified_upstream_cache: Optional[bool] = False,
+        enable_partition_manager: Optional[bool] = False,
         integrity_allocation_mode: Optional[str] = None,
         integrity_tree_type: Optional[str] = None,
         integrity_tree_arity: Optional[int] = 0,
@@ -165,6 +168,8 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
         self._metadata_cache_assoc = metadata_cache_assoc
 
         self._unified_upstream_cache = unified_upstream_cache
+
+        self._enable_partition_manager = enable_partition_manager
 
         self._integrity_allocation_mode = integrity_allocation_mode
 
@@ -286,6 +291,18 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
 
         if self._unified_upstream_cache:
             # Metadata cache is part of LLC
+
+            if self._enable_partition_manager:
+                partition_manager = DataLocationPartitionManager(
+                    partitioning_policies=[
+                        DynamicCapacityPartitioningPolicy(
+                            partition_ids=[0, 1, 2, 3],
+                            capacities=[0.2, 0.2, 0.2, 0.2],
+                            update_rate=1000000000,  # 1ms / 0.001s
+                        ),
+                    ]
+                )
+                self.l2cache.partitioning_manager = partition_manager
 
             # Send requests to the LLC with the request port, and
             # responses will be send through the standard data
@@ -458,6 +475,14 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
                 self.page_swapper.dram_full_ranges = dram_full_ranges
                 self.page_swapper.dram_os_ranges = dram_os_ranges
 
+            # Advertise address ranges if applicable to partition manager
+            if partition_manager is not None:
+                try:
+                    partition_manager.dram_full_ranges = dram_full_ranges
+                    partition_manager.dram_os_ranges = dram_os_ranges
+                except Exception:
+                    pass
+
         if cxl_memory is not None:
             self.verifier.cxl_full_ranges = cxl_full_ranges
             self.verifier.cxl_os_ranges = cxl_os_ranges
@@ -465,6 +490,14 @@ class PrivateL1SharedL2CacheHierarchyIntegrityVerifier(
             if self._use_page_swapper:
                 self.page_swapper.cxl_full_ranges = cxl_full_ranges
                 self.page_swapper.cxl_os_ranges = cxl_os_ranges
+
+            # Advertise address ranges if applicable to partition manager
+            if partition_manager is not None:
+                try:
+                    partition_manager.cxl_full_ranges = cxl_full_ranges
+                    partition_manager.cxl_os_ranges = cxl_os_ranges
+                except Exception:
+                    pass
 
         if self._integrity_allocation_mode:
             self.verifier.integrity_allocation_mode = (

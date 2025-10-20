@@ -38,6 +38,8 @@
 #ifndef __MEM_CACHE_TAGS_PARTITIONING_MANAGER_HH__
 #define __MEM_CACHE_TAGS_PARTITIONING_MANAGER_HH__
 
+#include "mem/cache/base.hh"
+#include "mem/cache/tags/partitioning_policies/base_pp.hh"
 #include "mem/mtree/abstract_tree.hh"
 #include "mem/packet.hh"
 #include "params/DataLocationPartitionManager.hh"
@@ -60,6 +62,17 @@ class PartitionManager : public SimObject
   public:
     PARAMS(PartitionManager);
     PartitionManager(const Params &p);
+
+    void init() override;
+
+    virtual void
+    setCache(BaseCache *_cache) {
+      assert(!cache);
+      cache = _cache;
+      for (auto pp : partitioningPolicies) {
+        pp->setCache(cache);
+      }
+    }
 
     /**
     * PartitionManager interface to retrieve PartitionID from a packet;
@@ -103,6 +116,11 @@ class PartitionManager : public SimObject
         const uint64_t partition_id) const;
 
   protected:
+    /**
+     * Link to cache
+     */
+    BaseCache *cache;
+
     /** Partitioning policies */
     std::vector<partitioning_policy::BasePartitioningPolicy *>
         partitioningPolicies;

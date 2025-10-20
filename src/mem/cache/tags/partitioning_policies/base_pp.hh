@@ -40,6 +40,8 @@
 
 #include <vector>
 
+#include "debug/PartitionPolicy.hh"
+#include "mem/cache/base.hh"
 #include "params/BasePartitioningPolicy.hh"
 #include "sim/sim_object.hh"
 
@@ -68,6 +70,26 @@ class BasePartitioningPolicy : public SimObject
 {
   public:
     BasePartitioningPolicy(const BasePartitioningPolicyParams &params);
+
+    /**
+     * Link to cache.
+     */
+    BaseCache *cache;
+
+    PartitionManager *pm;
+
+    virtual void
+    setCache(BaseCache *_cache) {
+      cache = _cache;
+    }
+
+    virtual void
+    setPartitionManager(PartitionManager *_pm) {
+      DPRINTF(PartitionPolicy,
+              "%s: Saving partition manager (%p)\n",
+              __func__, _pm);
+      pm = _pm;
+    }
 
     /**
     * Filters the allocatable cache blocks for a memory request based on its

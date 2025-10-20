@@ -241,6 +241,18 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
+        "--enable-partition-manager",
+        type=str,
+        required=False,
+        nargs="+",
+        default="No",
+        choices=[
+            "Yes",
+            "No",
+        ],
+    )
+
+    parser.add_argument(
         "--page-swap",
         type=str,
         required=False,
@@ -291,6 +303,7 @@ def compile_command(
     tree_type: str = None,
     metadata_cache_type: str = None,
     metadata_cache_size: int = None,
+    enable_partition_manager: str = None,
     page_swap: str = None,
     page_swap_epoch: int = None,
     cxl_latency: str = None,
@@ -510,6 +523,19 @@ def compile_command(
                 outdir += f"_MetadataCacheSize{metadata_cache_size}"
                 metadata_cache_type_param += f" --metadata-cache-size={metadata_cache_size} --metadata-cache-size-tree-nodes={metadata_cache_size} --metadata-cache-size-counter-nodes={metadata_cache_size} --metadata-cache-size-mac-nodes={metadata_cache_size}"
 
+    if enable_partition_manager is not None:
+        outdir += f"_PartitionManager{enable_partition_manager}"
+    else:
+        enable_partition_manager_param = ""
+
+    match enable_partition_manager:
+        case "No":
+            enable_partition_manager_param = ""
+        case "Yes":
+            enable_partition_manager_param = "--enable-partition-manager"
+        case _:
+            pass
+
     if page_swap is not None:
         outdir += f"_PageSwap{page_swap}"
     else:
@@ -536,7 +562,7 @@ def compile_command(
         outdir += f"_CxlLat{cxl_latency}"
         configuration_params += f" --cxl-latency={cxl_latency}"
 
-    command = f"{gem5_binary} {gem5_params} --outdir {outdir} {config_file} {benchmark_params} {common_config_params} {configuration_params} {tree_type_param} {metadata_cache_type_param} {page_swap_type_param} {extra_arguments}"
+    command = f"{gem5_binary} {gem5_params} --outdir {outdir} {config_file} {benchmark_params} {common_config_params} {configuration_params} {tree_type_param} {metadata_cache_type_param} {enable_partition_manager_param} {page_swap_type_param} {extra_arguments}"
 
     return command
 
@@ -753,6 +779,7 @@ if __name__ == "__main__":
     tree_types = args.tree_type or [None]
     cache_types = args.cache_type or [None]
     metadata_cache_sizes = args.metadata_cache_size or [None]
+    enable_partition_manager_types = args.enable_partition_manager or [None]
     page_swap_types = args.page_swap or [None]
     page_swap_epochs = args.page_swap_epoch or [None]
     cxl_latencies = args.cxl_latency or [None]
@@ -780,24 +807,28 @@ if __name__ == "__main__":
                 for t in tree_types:
                     for cache in cache_types:
                         for metadata_cache_size in metadata_cache_sizes:
-                            for p in page_swap_types:
-                                for epoch in page_swap_epochs:
-                                    for l in cxl_latencies:
-                                        for cmt in cxl_memory_types:
-                                            command = compile_command(
-                                                args,
-                                                benchmark=b,
-                                                configuration=c,
-                                                tree_type=t,
-                                                metadata_cache_type=cache,
-                                                metadata_cache_size=metadata_cache_size,
-                                                page_swap=p,
-                                                page_swap_epoch=epoch,
-                                                cxl_latency=l,
-                                                cxl_memory_type=cmt,
-                                                extra_arguments=args.extra_arguments,
-                                            )
-                                            commands_to_run.append(command)
+                            for (
+                                enable_partition_manager
+                            ) in enable_partition_manager_types:
+                                for p in page_swap_types:
+                                    for epoch in page_swap_epochs:
+                                        for l in cxl_latencies:
+                                            for cmt in cxl_memory_types:
+                                                command = compile_command(
+                                                    args,
+                                                    benchmark=b,
+                                                    configuration=c,
+                                                    tree_type=t,
+                                                    metadata_cache_type=cache,
+                                                    metadata_cache_size=metadata_cache_size,
+                                                    enable_partition_manager=enable_partition_manager,
+                                                    page_swap=p,
+                                                    page_swap_epoch=epoch,
+                                                    cxl_latency=l,
+                                                    cxl_memory_type=cmt,
+                                                    extra_arguments=args.extra_arguments,
+                                                )
+                                                commands_to_run.append(command)
 
     # Set the maximum number of concurrent commands
     max_concurrent_commands = args.threads
