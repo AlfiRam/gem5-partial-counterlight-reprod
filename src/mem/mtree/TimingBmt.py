@@ -41,15 +41,15 @@ class TimingBmt:
         self.mac_count = ceil_div(
             total_protected_data, self._get_hash_input_size()
         )
-        print(f"PYTHON: Number of MACs: {self.mac_count}")
+        # print(f"PYTHON: Number of MACs: {self.mac_count}")
         self.mac_nodes = ceil_div(self.mac_count, arity)
-        print(f"PYTHON: Number of MAC nodes: {self.mac_nodes}")
+        # print(f"PYTHON: Number of MAC nodes: {self.mac_nodes}")
         self.data_size += self.mac_nodes
 
         self.counter_count = ceil_div(
             total_protected_data, self._get_hash_input_size()
         )
-        print(f"PYTHON: Number of (minor) counters: {self.counter_count}")
+        # print(f"PYTHON: Number of (minor) counters: {self.counter_count}")
 
         minor_counter_space = (
             self._get_block_size_bytes() * 8
@@ -58,10 +58,10 @@ class TimingBmt:
             self._get_page_size_bytes() / self._get_hash_input_size()
         )
         self.minor_counter_bits = int(minor_counter_space / counters_per_page)
-        print(
-            f"PYTHON: Major counter size: {self._get_major_counter_bits()} bits"
-        )
-        print(f"PYTHON: Minor counter size: {self.minor_counter_bits} bits")
+        # print(
+        #     f"PYTHON: Major counter size: {self._get_major_counter_bits()} bits"
+        # )
+        # print(f"PYTHON: Minor counter size: {self.minor_counter_bits} bits")
 
         assert (
             self._get_major_counter_bits()
@@ -69,13 +69,13 @@ class TimingBmt:
         ) <= (self._get_block_size_bytes() * 8)
 
         self.counter_nodes = ceil_div(self.counter_count, counters_per_page)
-        print(f"PYTHON: Number of counter nodes: {self.counter_nodes}")
+        # print(f"PYTHON: Number of counter nodes: {self.counter_nodes}")
         self.data_size += self.counter_nodes
 
         self.leaves = ceil_div(self.counter_nodes, arity)
         self.height = ceil(log(self.leaves, arity)) + 1
 
-        print(f"PYTHON: The height of the tree is {self.height}")
+        # print(f"PYTHON: The height of the tree is {self.height}")
 
         non_leaf_nodes = int(
             (self.arity ** (self.height - 1)) / (self.arity - 1)
@@ -92,24 +92,24 @@ class TimingBmt:
             == self.tree_nodes + self.counter_nodes + self.mac_nodes
         )
 
-        print(f"PYTHON: Total number of nodes is {self.data_size}")
+        # print(f"PYTHON: Total number of nodes is {self.data_size}")
 
-        print(
-            f"PYTHON: Total space protected by tree: {self._stat_data_protected()} (Requested: {total_protected_data} bytes.)"
-        )
+        # print(
+        #     f"PYTHON: Total space protected by tree: {self._stat_data_protected()} (Requested: {total_protected_data} bytes.)"
+        # )
 
-        print(
-            f"PYTHON: Total space taken by tree nodes: {self.tree_nodes * self._get_block_size_bytes()} bytes."
-        )
-        print(
-            f"PYTHON: Total space taken by counter nodes: {self.counter_nodes * self._get_block_size_bytes()} bytes."
-        )
-        print(
-            f"PYTHON: Total space taken by MAC nodes: {self.mac_nodes * self._get_block_size_bytes()} bytes."
-        )
-        print(
-            f"PYTHON: Total space taken by tree: {self._stat_structure_size()} bytes."
-        )
+        # print(
+        #     f"PYTHON: Total space taken by tree nodes: {self.tree_nodes * self._get_block_size_bytes()} bytes."
+        # )
+        # print(
+        #     f"PYTHON: Total space taken by counter nodes: {self.counter_nodes * self._get_block_size_bytes()} bytes."
+        # )
+        # print(
+        #     f"PYTHON: Total space taken by MAC nodes: {self.mac_nodes * self._get_block_size_bytes()} bytes."
+        # )
+        # print(
+        #     f"PYTHON: Total space taken by tree: {self._stat_structure_size()} bytes."
+        # )
 
     def _get_block_size_bytes(self) -> int:
         return 64
@@ -191,21 +191,21 @@ class TimingBmt:
 
         assert total_remote_size % cache_line_size == 0
 
-        print(
-            f"TimingBmt.determine_max_protected_size: min_local_size: {min_local_size}"
-        )
-        print(
-            f"TimingBmt.determine_max_protected_size: total_local_size: {total_local_size}"
-        )
-        print(
-            f"TimingBmt.determine_max_protected_size: total_remote_size: {total_remote_size}"
-        )
-        print(
-            f"TimingBmt.determine_max_protected_size: min_scale_factor: {min_scale_factor}"
-        )
-        print(
-            f"TimingBmt.determine_max_protected_size: max_scale_factor: {max_scale_factor}"
-        )
+        # print(
+        #     f"TimingBmt.determine_max_protected_size: min_local_size: {min_local_size}"
+        # )
+        # print(
+        #     f"TimingBmt.determine_max_protected_size: total_local_size: {total_local_size}"
+        # )
+        # print(
+        #     f"TimingBmt.determine_max_protected_size: total_remote_size: {total_remote_size}"
+        # )
+        # print(
+        #     f"TimingBmt.determine_max_protected_size: min_scale_factor: {min_scale_factor}"
+        # )
+        # print(
+        #     f"TimingBmt.determine_max_protected_size: max_scale_factor: {max_scale_factor}"
+        # )
 
         iterations = 0
         while True:
@@ -234,27 +234,27 @@ class TimingBmt:
             )
 
             # Calculate tree size
-            print(f"TimingBmt.determine_max_protected_size: ==============")
+            # print(f"TimingBmt.determine_max_protected_size: ==============")
             tree = TimingBmt(arity, attempted_protected_size)
 
-            print(
-                f"TimingBmt.determine_max_protected_size: min_scale_factor: {min_scale_factor} (Local = {min_local_protected}, Remote = {total_remote_size}, Total = {min_local_protected + total_remote_size})"
-            )
-            print(
-                f"TimingBmt.determine_max_protected_size: selected_scale_factor: {selected_scale_factor} (Local = {attempted_local_protected}, Remote = {total_remote_size}, Total = {attempted_protected_size})"
-            )
-            print(
-                f"TimingBmt.determine_max_protected_size: --> Available space: {remaining_local_space}"
-            )
-            print(
-                f"TimingBmt.determine_max_protected_size: --> Tree size: {tree._stat_structure_size()}"
-            )
-            print(
-                f"TimingBmt.determine_max_protected_size: --> Difference: {remaining_local_space - tree._stat_structure_size()}"
-            )
-            print(
-                f"TimingBmt.determine_max_protected_size: max_scale_factor: {max_scale_factor} (Local = {max_local_protected}, Remote = {total_remote_size}, Total = {max_local_protected + total_remote_size})"
-            )
+            # print(
+            #     f"TimingBmt.determine_max_protected_size: min_scale_factor: {min_scale_factor} (Local = {min_local_protected}, Remote = {total_remote_size}, Total = {min_local_protected + total_remote_size})"
+            # )
+            # print(
+            #     f"TimingBmt.determine_max_protected_size: selected_scale_factor: {selected_scale_factor} (Local = {attempted_local_protected}, Remote = {total_remote_size}, Total = {attempted_protected_size})"
+            # )
+            # print(
+            #     f"TimingBmt.determine_max_protected_size: --> Available space: {remaining_local_space}"
+            # )
+            # print(
+            #     f"TimingBmt.determine_max_protected_size: --> Tree size: {tree._stat_structure_size()}"
+            # )
+            # print(
+            #     f"TimingBmt.determine_max_protected_size: --> Difference: {remaining_local_space - tree._stat_structure_size()}"
+            # )
+            # print(
+            #     f"TimingBmt.determine_max_protected_size: max_scale_factor: {max_scale_factor} (Local = {max_local_protected}, Remote = {total_remote_size}, Total = {max_local_protected + total_remote_size})"
+            # )
 
             if (
                 remaining_local_space - tree._stat_structure_size() >= 0
@@ -271,15 +271,15 @@ class TimingBmt:
                 return attempted_local_protected, total_remote_size
             elif tree._stat_structure_size() < remaining_local_space:
                 # There is more space that could be protected, since there is leftover space on the table.
-                print(
-                    f"TimingBmt.determine_max_protected_size: Increasing scale factor."
-                )
+                # print(
+                #     f"TimingBmt.determine_max_protected_size: Increasing scale factor."
+                # )
                 min_scale_factor = selected_scale_factor
             else:
                 # This structure is too large for the amount of space that is leftover, reduce the protected size to make more space for integrity data
-                print(
-                    f"TimingBmt.determine_max_protected_size: Decreasing scale factor."
-                )
+                # print(
+                #     f"TimingBmt.determine_max_protected_size: Decreasing scale factor."
+                # )
                 max_scale_factor = selected_scale_factor
 
             selected_scale_factor = min_scale_factor + (
