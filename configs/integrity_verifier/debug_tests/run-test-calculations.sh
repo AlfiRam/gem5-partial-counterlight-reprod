@@ -11,7 +11,7 @@ config_file="configs/integrity_verifier/debug_tests/test-tree-size-calculations.
 # redirect="--redirect-stdout --stdout-file stdout.txt --redirect-stderr --stderr-file stderr.txt"
 redirect=""
 
-benchmark_params="--use-integrity-verifier --metadata-cache-size=30000 --enable-cxl"
+benchmark_params="--use-integrity-verifier --metadata-cache-size=30000"
 outdir="m5out-integrityalloc-calcs"
 
 ${gem5_binary} ${gem5_params} --outdir ${outdir} ${redirect} ${config_file} ${benchmark_params}

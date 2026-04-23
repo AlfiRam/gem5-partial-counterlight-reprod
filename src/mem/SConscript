@@ -45,7 +45,7 @@ Source('comm_monitor.cc')
 
 SimObject('AbstractMemory.py', sim_objects=['AbstractMemory'])
 SimObject('AddrMapper.py', sim_objects=['AddrMapper', 'RangeAddrMapper'])
-SimObject('Bridge.py', sim_objects=['Bridge', 'CXLBridge'])
+SimObject('Bridge.py', sim_objects=['Bridge'])
 SimObject('SysBridge.py', sim_objects=['SysBridge'])
 DebugFlag('SysBridge')
 SimObject('MemCtrl.py', sim_objects=['MemCtrl'],
@@ -75,12 +75,11 @@ SimObject('SerialLink.py', sim_objects=['SerialLink'])
 SimObject('MemDelay.py', sim_objects=['MemDelay', 'SimpleMemDelay'])
 SimObject('IntegrityVerifier.py', sim_objects=[
     'AbstractIntegrityVerifier', 'IntegrityVerifier'],
-    enums=['IntegrityAllocationMode',
-           'IntegrityTreeType',
+    enums=['IntegrityTreeType',
            'MetadataCacheType',
+           'ReadPathMode',
     ]
 )
-SimObject('PageSwapper.py', sim_objects=['AbstractPageSwapper', 'PageSwapper'])
 SimObject('PortTerminator.py', sim_objects=['PortTerminator'])
 SimObject('ThreadBridge.py', sim_objects=['ThreadBridge'])
 
@@ -88,7 +87,6 @@ Source('abstract_mem.cc')
 Source('addr_mapper.cc')
 Source('backdoor_manager.cc')
 Source('bridge.cc')
-Source('cxl_bridge.cc')
 Source('coherent_xbar.cc')
 Source('cfi_mem.cc')
 Source('drampower.cc')
@@ -122,7 +120,6 @@ Source('htm.cc')
 Source('serial_link.cc')
 Source('mem_delay.cc')
 Source('integrity_verifier.cc')
-Source('page_swapper.cc')
 Source('port_terminator.cc')
 
 GTest('backdoor_manager.test', 'backdoor_manager.test.cc',
@@ -185,9 +182,6 @@ DebugFlag('MemDelay')
 DebugFlag('MMU')
 DebugFlag('MemoryAccess')
 DebugFlag('PacketQueue')
-DebugFlag('AbstractPageSwapper')
-DebugFlag('AbstractPageSwapperInit')
-DebugFlag('AbstractPageSwapperTest')
 DebugFlag("PortTrace")
 DebugFlag('ResponsePort')
 DebugFlag('StackDist')

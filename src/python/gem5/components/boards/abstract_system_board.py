@@ -52,16 +52,6 @@ class AbstractSystemBoard(System, AbstractBoard):
         processor: "AbstractProcessor",
         cache_hierarchy: "AbstractCacheHierarchy",
         memory: Optional[List["AbstractMemorySystem"]] = [],
-        cxl_mode: Optional[str] = "Disabled",
-        cxl_memory: Optional["AbstractMemorySystem"] = None,
-        is_asic: Optional[bool] = False,
-        main_memory_type: Optional[str] = "DRAM",
-        use_ncx: Optional[bool] = False,
-        cxl_latency: Optional[str] = "35ns",
-        cxl_latency_read_req: Optional[str] = None,
-        cxl_latency_read_resp: Optional[str] = None,
-        cxl_latency_write_req: Optional[str] = None,
-        cxl_latency_write_resp: Optional[str] = None,
     ):
         System.__init__(self)
         AbstractBoard.__init__(
@@ -70,16 +60,6 @@ class AbstractSystemBoard(System, AbstractBoard):
             processor=processor,
             memory=memory,
             cache_hierarchy=cache_hierarchy,
-            cxl_mode=cxl_mode,
-            cxl_memory=cxl_memory,
-            is_asic=is_asic,
-            main_memory_type=main_memory_type,
-            use_ncx=use_ncx,
-            cxl_latency=cxl_latency,
-            cxl_latency_read_req=cxl_latency_read_req,
-            cxl_latency_read_resp=cxl_latency_read_resp,
-            cxl_latency_write_req=cxl_latency_write_req,
-            cxl_latency_write_resp=cxl_latency_write_resp,
         )
 
     @overrides(SimObject)

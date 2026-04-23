@@ -165,25 +165,18 @@ class DataLocationPartitionManager : public PartitionManager
     AddrRangeList dramFullRanges;
     AddrRangeList dramOsRanges;
     AddrRangeList dramIntegrityRanges;
-    AddrRangeList cxlFullRanges;
-    AddrRangeList cxlOsRanges;
-    AddrRangeList cxlIntegrityRanges;
 
-    static const uint16_t PARTITION_COUNT = 5;
+    static const uint16_t PARTITION_COUNT = 3;
 
     const std::string PARTITION_NAMES[PARTITION_COUNT] = {
-      "LocalOs",
-      "LocalMetadata",
-      "RemoteOs",
-      "RemoteMetadata",
+      "Os",
+      "Metadata",
       "Other",
     };
 
-    static const uint16_t PARTITION_ID_LOCAL_OS = 0;
-    static const uint16_t PARTITION_ID_LOCAL_METADATA = 1;
-    static const uint16_t PARTITION_ID_REMOTE_OS = 2;
-    static const uint16_t PARTITION_ID_REMOTE_METADATA = 3;
-    static const uint16_t PARTITION_ID_OTHER = 4;
+    static const uint16_t PARTITION_ID_OS = 0;
+    static const uint16_t PARTITION_ID_METADATA = 1;
+    static const uint16_t PARTITION_ID_OTHER = 2;
 
     uint64_t readPacketPartitionID(PacketPtr pkt) const override;
 

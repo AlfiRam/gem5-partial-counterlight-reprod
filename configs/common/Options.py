@@ -385,13 +385,6 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
                       number of programs.""",
     )
     parser.add_argument(
-        "--enable-cxl",
-        action="store_true",
-        default=False,
-        help="""
-                      Enable CXL functionality.""",
-    )
-    parser.add_argument(
         "--elastic-trace-en",
         action="store_true",
         help="""Enable capture of data dependency and instruction
@@ -729,50 +722,6 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
         default=None,
         help="Override vendor string returned by CPUID instruction in X86.",
     )
-
-    # CXL options
-    parser.add_argument(
-        "--cxl-mem-size",
-        action="store",
-        type=str,
-        default="2GiB",
-        help="Specify the CXL Device memory size",
-    )
-    # parser.add_argument(
-    #     "--cxl-mem-lat",
-    #     action="store",
-    #     type=str,
-    #     default="60ns",
-    #     help="Delay in accessing CXL device backend storage media",
-    # )
-    # parser.add_argument(
-    #     "--cxl-proto-parsing",
-    #     action="store",
-    #     type=str,
-    #     default="90ns",
-    #     help="The delay of CXL device controller parsing CXL protocol",
-    # )
-    # parser.add_argument(
-    #     "--cxl-proto-processing",
-    #     action="store",
-    #     type=str,
-    #     default="40ns",
-    #     help="The delay of processing the CXL protocol package in Bridge",
-    # )
-    # parser.add_argument(
-    #     "--cxl-req-fifo",
-    #     action="store",
-    #     type=int,
-    #     default=48,
-    #     help="The depth of the CXL packet request queue in Bridge",
-    # )
-    # parser.add_argument(
-    #     "--cxl-resp-fifo",
-    #     action="store",
-    #     type=int,
-    #     default=48,
-    #     help="The depth of the CXL packet response queue in Bridge",
-    # )
 
 
 def addSEOptions(parser):

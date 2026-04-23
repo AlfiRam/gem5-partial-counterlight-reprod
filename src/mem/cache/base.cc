@@ -90,7 +90,6 @@ BaseCache::BaseCache(const BaseCacheParams &p, unsigned blk_size)
       partitionManager(p.partitioning_manager),
       prefetcher(p.prefetcher),
       writeAllocator(p.write_allocator),
-      enable_cxl(p.enable_cxl),
       writebackClean(p.writeback_clean),
       tempBlockWriteback(nullptr),
       writebackTempBlockAtomicEvent([this]{ writebackTempBlockAtomic(); },

@@ -99,9 +99,7 @@ IntegrityPartitionManager::IntegrityPartitionManager(const Params &p)
 DataLocationPartitionManager::DataLocationPartitionManager(const Params &p)
   : PartitionManager(p),
     dramFullRanges(p.dram_full_ranges.begin(), p.dram_full_ranges.end()),
-    dramOsRanges(p.dram_os_ranges.begin(), p.dram_os_ranges.end()),
-    cxlFullRanges(p.cxl_full_ranges.begin(), p.cxl_full_ranges.end()),
-    cxlOsRanges(p.cxl_os_ranges.begin(), p.cxl_os_ranges.end())
+    dramOsRanges(p.dram_os_ranges.begin(), p.dram_os_ranges.end())
 {
     // Compute integrity memory ranges.
     auto dramOsRangeIt = dramOsRanges.begin();
@@ -128,31 +126,6 @@ DataLocationPartitionManager::DataLocationPartitionManager(const Params &p)
             dramOsRangeIt++;
         }
     }
-
-    auto cxlOsRangeIt = cxlOsRanges.begin();
-    for (auto cxlFullRangeIt = cxlFullRanges.begin();
-        cxlFullRangeIt != cxlFullRanges.end();
-        cxlFullRangeIt++)
-    {
-        if (cxlOsRangeIt->end() >= cxlFullRangeIt->end()) {
-            // The OS range ends at the end of this range or later.
-            // The integrity range may start at the next range in the list.
-            cxlOsRangeIt++;
-            continue;
-        }
-
-        // We can use (at least some of) this range for integrity.
-        if (cxlOsRangeIt == cxlOsRanges.end()) {
-            // The entire range can be used for integrity.
-            cxlIntegrityRanges.emplace_back(
-                AddrRange(cxlFullRangeIt->start(), cxlFullRangeIt->end()));
-        } else {
-            // This range can be partially used for integrity.
-            cxlIntegrityRanges.emplace_back(
-                AddrRange(cxlOsRangeIt->end(), cxlFullRangeIt->end()));
-            cxlOsRangeIt++;
-        }
-    }
 }
 
 void
@@ -164,13 +137,9 @@ uint64_t
 DataLocationPartitionManager::readPacketPartitionID(PacketPtr pkt) const
 {
     if (rangeListContains(dramOsRanges, pkt->getAddr())) {
-        return PARTITION_ID_LOCAL_OS;
+        return PARTITION_ID_OS;
     } else if (rangeListContains(dramIntegrityRanges, pkt->getAddr())) {
-        return PARTITION_ID_LOCAL_METADATA;
-    } else if (rangeListContains(cxlOsRanges, pkt->getAddr())) {
-        return PARTITION_ID_REMOTE_OS;
-    } else if (rangeListContains(cxlIntegrityRanges, pkt->getAddr())) {
-        return PARTITION_ID_REMOTE_METADATA;
+        return PARTITION_ID_METADATA;
     } else {
         return PARTITION_ID_OTHER;
     }

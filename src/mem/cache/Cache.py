@@ -169,8 +169,6 @@ class BaseCache(ClockedObject):
     # data cache.
     write_allocator = Param.WriteAllocator(NULL, "Write allocator")
 
-    enable_cxl = Param.Bool(False, "Enable CXL functionality")
-
     enable_west_stats = Param.Bool(
         False, "Enable statistic collection based on the WEST paper."
     )

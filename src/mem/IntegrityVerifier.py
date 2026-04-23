@@ -42,12 +42,18 @@ class MetadataCacheType(Enum):
     vals = ["MetadataCache", "PartitionedMetadataCache"]
 
 
-class IntegrityAllocationMode(Enum):
-    vals = ["DramOnly", "CxlOnly", "BasicMix"]
-
-
 class IntegrityTreeType(Enum):
     vals = ["TimingTree", "TimingBmt"]
+
+
+class ReadPathMode(Enum):
+    vals = [
+        "FullBmt",
+        "BmtStripped",
+        "CounterLight",
+        "CounterLightBmt",
+        "CounterLightMacBmt",
+    ]
 
 
 class AbstractIntegrityVerifier(ClockedObject):
@@ -90,22 +96,30 @@ class AbstractIntegrityVerifier(ClockedObject):
         [], "Full available range(s) of DRAM"
     )
     dram_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
-    cxl_full_ranges = VectorParam.AddrRange(
-        [], "Full available range(s) of CXL"
-    )
-    cxl_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
-
-    integrity_allocation_mode = Param.IntegrityAllocationMode(
-        "DramOnly",
-        "The allocation strategy for integrity metadata across DRAM and CXL "
-        "memory (if applicable).",
-    )
 
     integrity_tree_type = Param.IntegrityTreeType(
         "TimingTree", "Type of integrity tree class used."
     )
 
     integrity_tree_arity = Param.Int(4, "Arity of integrity tree.")
+
+    read_path_mode = Param.ReadPathMode(
+        "FullBmt",
+        "Read-path timing model: FullBmt = baseline tree walk; BmtStripped = "
+        "parallel Counter fetch + walk termination at Counter; CounterLight = "
+        "skip all read-side metadata, charge parity-decode + MAC-check latency.",
+    )
+
+    # Counter-light (ISCA 2024) §IV-D: "decoding EncryptionMetadata from
+    # parity" — a few XOR gates that extract the per-line counter value from
+    # the data block's ECC parity bits in lieu of a separate counter-block
+    # DRAM fetch. Applied only when read_path_mode == CounterLight; unused by
+    # FullBmt / BmtStripped. The MAC-check cost is reused from
+    # integrity_hashing_latency (already the per-block MAC/hash cost in the
+    # baseline), so this is the only new latency knob the paper motivates.
+    parity_decode_latency = Param.Cycles(
+        2, "Counter-light parity-decode latency (cycles)."
+    )
 
 
 class IntegrityVerifier(AbstractIntegrityVerifier):

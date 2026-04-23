@@ -198,8 +198,6 @@ elif not args.kernel_path and args.img_path:
 
 if args.kernel_path and args.img_path:
     # We are using a manual kernel and disk image.
-    #
-    # Assistance from configs/example/gem5_library/x86-cxl-run.py in CXL-DMSim.
     board.set_kernel_disk_workload(
         kernel=KernelResource(local_path=args.kernel_path),
         disk_image=DiskImageResource(local_path=args.img_path),

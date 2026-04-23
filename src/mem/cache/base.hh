@@ -393,8 +393,6 @@ class BaseCache : public ClockedObject
      */
     WriteAllocator * const writeAllocator;
 
-    bool enable_cxl;
-
     /**
      * Temporary cache block for occasional transitory use.  We use
      * the tempBlock to fill when allocation fails (e.g., when there

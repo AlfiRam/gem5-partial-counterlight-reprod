@@ -55,15 +55,14 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
 )
     : ClockedObject(p),
       integrityTreeType(p.integrity_tree_type),
-      integrityAllocationMode(p.integrity_allocation_mode),
       _requestorId(p.system->getRequestorId(this)),
       integrityHashingLatency(Cycles(p.integrity_hashing_latency)),
       xorLatency(Cycles(p.xor_latency)),
+      readPathMode(p.read_path_mode),
+      parityDecodeLatency(Cycles(p.parity_decode_latency)),
       system(p.system),
       dramFullRanges(p.dram_full_ranges.begin(), p.dram_full_ranges.end()),
       dramOsRanges(p.dram_os_ranges.begin(), p.dram_os_ranges.end()),
-      cxlFullRanges(p.cxl_full_ranges.begin(), p.cxl_full_ranges.end()),
-      cxlOsRanges(p.cxl_os_ranges.begin(), p.cxl_os_ranges.end()),
       requestPort(name() + "-mem_side_port", *this),
       responsePort(name() + "-cpu_side_port", *this),
       metadataRequestPort(name() + "-metadata_req_port", *this),
@@ -103,36 +102,8 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         }
     }
 
-    auto cxlOsRangeIt = cxlOsRanges.begin();
-    for (auto cxlFullRangeIt = cxlFullRanges.begin();
-        cxlFullRangeIt != cxlFullRanges.end();
-        cxlFullRangeIt++)
-    {
-        if (cxlOsRangeIt->end() >= cxlFullRangeIt->end()) {
-            // The OS range ends at the end of this range or later.
-            // The integrity range may start at the next range in the list.
-            cxlOsRangeIt++;
-            continue;
-        }
-
-        // We can use (at least some of) this range for integrity.
-        if (cxlOsRangeIt == cxlOsRanges.end()) {
-            // The entire range can be used for integrity.
-            cxlIntegrityRanges.emplace_back(
-                AddrRange(cxlFullRangeIt->start(), cxlFullRangeIt->end()));
-        } else {
-            // This range can be partially used for integrity.
-            cxlIntegrityRanges.emplace_back(
-                AddrRange(cxlOsRangeIt->end(), cxlFullRangeIt->end()));
-            cxlOsRangeIt++;
-        }
-    }
-
     // Create convienence range list for all integrity data
     for (auto range : dramIntegrityRanges) {
-        integrityRanges.emplace_back(range);
-    }
-    for (auto range : cxlIntegrityRanges) {
         integrityRanges.emplace_back(range);
     }
 
@@ -140,14 +111,14 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
         case enums::IntegrityTreeType::TimingTree:
         integrityTree = new TimingTree(
             (unsigned int)p.integrity_tree_arity,
-            rangeListSize(dramOsRanges) + rangeListSize(cxlOsRanges)
+            rangeListSize(dramOsRanges)
         );
         break;
 
         case enums::IntegrityTreeType::TimingBmt:
         integrityTree = new TimingBmt(
             (unsigned int)p.integrity_tree_arity,
-            rangeListSize(dramOsRanges) + rangeListSize(cxlOsRanges)
+            rangeListSize(dramOsRanges)
         );
         break;
 
@@ -164,16 +135,6 @@ AbstractIntegrityVerifier::AbstractIntegrityVerifier(
     DPRINTF(AbstractIntegrityVerifierInit,
         "%s: dramIntegrityRanges: %s\n",
         __func__, rangeListToString(dramIntegrityRanges));
-
-    DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: cxlFullRanges: %s\n",
-        __func__, rangeListToString(cxlFullRanges));
-    DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: cxlOsRanges: %s\n",
-        __func__, rangeListToString(cxlOsRanges));
-    DPRINTF(AbstractIntegrityVerifierInit,
-        "%s: cxlIntegrityRange: %s\n",
-        __func__, rangeListToString(cxlIntegrityRanges));
 }
 
 AbstractIntegrityVerifier::~AbstractIntegrityVerifier()
@@ -211,11 +172,9 @@ AbstractIntegrityVerifier::init()
         fatal("The integrity tree size is larger than the amount of memory "
               "available for the tree.\n"
               "Integrity structure size: %lld\n"
-              "DRAM integrity size: %lld\n"
-              "CXL integrity size: %lld\n",
+              "DRAM integrity size: %lld\n",
               integrityTree->statStructureSize(),
-              rangeListSize(dramIntegrityRanges),
-              rangeListSize(cxlIntegrityRanges));
+              rangeListSize(dramIntegrityRanges));
     }
 }
 
@@ -223,21 +182,7 @@ AbstractIntegrityVerifier::init()
 bool
 AbstractIntegrityVerifier::hasValidRanges()
 {
-    bool dramIntegrityRangeValid = dramIntegrityRanges.size() > 0;
-    bool cxlIntegrityRangeValid = cxlIntegrityRanges.size() > 0;
-
-    if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::DramOnly) {
-        return dramIntegrityRangeValid;
-    } else if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::CxlOnly) {
-        return cxlIntegrityRangeValid;
-    } else if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::BasicMix) {
-        return dramIntegrityRangeValid && cxlIntegrityRangeValid;
-    }
-    panic("%s: Integrity allocation mode unimplemented.\n", __func__);
-    return false;
+    return dramIntegrityRanges.size() > 0;
 }
 
 bool
@@ -246,30 +191,12 @@ AbstractIntegrityVerifier::treeSizeValid()
     DPRINTF(AbstractIntegrityVerifier, "%s: Integrity structure size: %lld\n",
         __func__, integrityTree->statStructureSize());
 
-    if (integrityAllocationMode ==
-                enums::IntegrityAllocationMode::DramOnly) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: DRAM size: %lld\n",
-            __func__, rangeListSize(dramIntegrityRanges));
+    DPRINTF(AbstractIntegrityVerifier,
+        "%s: DRAM size: %lld\n",
+        __func__, rangeListSize(dramIntegrityRanges));
 
-        return integrityTree->statStructureSize() <=
-                rangeListSize(dramIntegrityRanges);
-    }
-    else if (integrityAllocationMode ==
-                enums::IntegrityAllocationMode::CxlOnly) {
-        DPRINTF(AbstractIntegrityVerifier,
-            "%s: CXL size: %lld\n",
-            __func__, rangeListSize(cxlIntegrityRanges));
-
-        return integrityTree->statStructureSize() <=
-                rangeListSize(cxlIntegrityRanges);
-    }
-    else if (integrityAllocationMode ==
-                enums::IntegrityAllocationMode::BasicMix) {
-        panic("%s: Basic mix integrity allocation mode not (yet) supported.",
-            __func__);
-    }
-    return false;
+    return integrityTree->statStructureSize() <=
+            rangeListSize(dramIntegrityRanges);
 }
 
 bool
@@ -282,9 +209,7 @@ AbstractIntegrityVerifier::needsVerification(PacketPtr pkt)
     return (
         (pkt->isRead() || pkt->isWrite()) &&
         (rangeListContains(dramOsRanges, addr) ||
-        rangeListContains(dramIntegrityRanges, addr) ||
-        rangeListContains(cxlOsRanges, addr) ||
-        rangeListContains(cxlIntegrityRanges, addr))
+        rangeListContains(dramIntegrityRanges, addr))
     );
 }
 
@@ -372,8 +297,7 @@ AbstractIntegrityVerifier::processReq(PacketPtr pkt)
     // If this is a metadata request, treat this as such.
     if (unifiedUpstreamCache && (
             pkt->isMetadataRequest() ||
-            rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
-            rangeListContains(cxlIntegrityRanges, pkt->getAddr()))
+            rangeListContains(dramIntegrityRanges, pkt->getAddr()))
         )
     {
         return processMetadataReq(pkt);
@@ -396,6 +320,51 @@ AbstractIntegrityVerifier::processReq(PacketPtr pkt)
         // Writebacks must be verified first before they can be forwarded to
         // memory. This will be handled now.
         return handlePacket(pkt);
+    }
+
+    // Config 2b — BmtStripped. Pre-issue the Counter-level metadata request
+    // in parallel with the data DRAM read (Counter-light §IV-C Fig. 9).
+    //
+    // Register the data packet at macNode (not counterNode) because the
+    // existing attemptXor pipeline asks getParentNode(dataPkt), which for
+    // a data packet returns addressToBlockIndex(addr) = macNode. Matching
+    // that wait-point lets the existing stall/resume logic work unchanged.
+    //
+    // The Counter response arrives keyed by counterNode, so we also stash
+    // the counterNode -> req association in bmtStrippedCounterWaiters and
+    // tag the issued Counter's req in bmtStrippedCounterReqs. Phase 3b.2
+    // (processMetadataResp) uses these to bridge from counterNode back to
+    // the waiting data packet's macNode when firing notifyParentReceived.
+    //
+    // All three bookkeeping inserts happen BEFORE schedMetadataReq: a
+    // synchronous cache-hit response could re-enter processMetadataResp
+    // immediately, and the maps must already be populated.
+    //
+    // Writes stay on the FullBmt path handled above — they never reach
+    // this branch.
+    if (readPathMode == enums::ReadPathMode::BmtStripped &&
+        pkt->isRead() &&
+        !pkt->isMetadataRequest() &&
+        needsVerification(pkt))
+    {
+        size_t macNode =
+            integrityTree->addressToBlockIndex(pkt->getAddr());
+        size_t counterNode = integrityTree->parentBlockIndex(macNode);
+
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: BmtStripped parallel Counter pre-issue for pkt %s "
+            "(MAC node %llu, Counter node %llu)\n",
+            __func__, pkt->print(), macNode, counterNode);
+
+        addToOutstandingMetadataRequests(macNode, pkt);
+
+        PacketPtr md_pkt = generateMetadataRequest(counterNode);
+        bmtStrippedCounterWaiters.emplace(counterNode, pkt->req);
+        bmtStrippedCounterReqs.insert(md_pkt->req);
+
+        schedMetadataReq(md_pkt);
+        // Fall through: schedReq(pkt) below still fires the data DRAM read
+        // in parallel with the Counter metadata fetch.
     }
 
     // If this is a read request, we will handle verification for this once it
@@ -472,8 +441,7 @@ AbstractIntegrityVerifier::processResp(PacketPtr pkt)
     }
 
     // This packet should not be for integrity data.
-    assert(!rangeListContains(dramIntegrityRanges, pkt->getAddr()) &&
-           !rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+    assert(!rangeListContains(dramIntegrityRanges, pkt->getAddr()));
 
     schedResp(pkt);
 
@@ -512,8 +480,7 @@ AbstractIntegrityVerifier::processMetadataReq(PacketPtr pkt)
     // We are expecting a request from the metadata cache here for integrity
     // data.
 
-    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
-           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()));
 
     updatePacketLookup(pkt);
 
@@ -552,10 +519,22 @@ AbstractIntegrityVerifier::processMetadataResp(PacketPtr pkt)
     // the cache).
 
     assert(pkt->isMetadataRequest());
-    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
-           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()));
+    // BmtStripped-originated Counter responses satisfy this invariant via
+    // bmtStrippedCounterReqs instead: the waiter is registered at macNode
+    // (not counterNode), so outstandingMetadataRequests.find(counterNode)
+    // legitimately returns end(). 3b.2 below bridges from counterNode back
+    // to macNode when firing notifyParentReceived.
+    // CounterLightMacBmt pre-issues MAC requests that register the waiting
+    // data packet out-of-band in counterLightMacBmtMacPending rather than in
+    // outstandingMetadataRequests at macNode, so widen the assertion to
+    // tolerate those responses too.
     assert(outstandingMetadataRequests.find(pkt->getMetadataNode()) !=
-           outstandingMetadataRequests.end());
+               outstandingMetadataRequests.end() ||
+           bmtStrippedCounterReqs.find(pkt->req) !=
+               bmtStrippedCounterReqs.end() ||
+           counterLightMacBmtMacReqs.find(pkt->req) !=
+               counterLightMacBmtMacReqs.end());
 
     DPRINTF(AbstractIntegrityVerifierResps,
         "%s: Recv metadata resp %s (pkt addr %p, req addr %p)\n",
@@ -581,6 +560,143 @@ AbstractIntegrityVerifier::processMetadataResp(PacketPtr pkt)
         notifyParentReceived(waitingPkt, pkt->getMetadataNode());
     }
 
+    // Phase 3b.2 — BmtStripped bridge. When a Counter response we pre-issued
+    // in 3a arrives, the existing equal_range(counterNode) above didn't find
+    // our waiters (they're registered at macNode, not counterNode). Drain the
+    // counterNode -> RequestPtr bridge map and fire notifyParentReceived at
+    // macNode for each waiter — this removes the macNode entry and kicks
+    // attemptXor through the existing pipeline.
+    //
+    // Two hazards to guard:
+    //   (1) Counter-arrives-before-data race: the data packet is still a
+    //       request packet in-flight to DRAM, with no hash scheduled. Calling
+    //       notifyParentReceived would kick attemptXor, which can't
+    //       distinguish "hash never scheduled" from "hash done" and would
+    //       schedule XOR on a still-in-flight request packet (same bug class
+    //       as the original Phase 3 diagnosis). Guard: only call
+    //       notifyParentReceived if the data response has arrived (hash is
+    //       scheduled/in-progress OR packet is in
+    //       outstandingIntegrityVerification). Otherwise just remove the
+    //       macNode dependency and let the later handlePacket flow resume.
+    //   (2) Pathologically-late Counter arrival: the data packet has already
+    //       completed and been drained from packetLookup. packetLookup.find
+    //       returns end(); dereferencing would crash. Guard: skip with a
+    //       DPRINTF; don't assert.
+    if (readPathMode == enums::ReadPathMode::BmtStripped &&
+        bmtStrippedCounterReqs.find(pkt->req) !=
+            bmtStrippedCounterReqs.end())
+    {
+        uint64_t counterNode = pkt->getMetadataNode();
+        auto bmt_range = bmtStrippedCounterWaiters.equal_range(counterNode);
+        std::vector<RequestPtr> waitingReqs;
+        for (auto it = bmt_range.first; it != bmt_range.second; ++it) {
+            waitingReqs.push_back(it->second);
+        }
+        bmtStrippedCounterWaiters.erase(counterNode);
+        bmtStrippedCounterReqs.erase(pkt->req);
+
+        for (auto req : waitingReqs) {
+            auto pl_it = packetLookup.find(req);
+            if (pl_it == packetLookup.end()) {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: BmtStripped late Counter arrival (counterNode "
+                    "%llu): data packet for req %p already completed and "
+                    "left packetLookup. Skipping.\n",
+                    __func__, counterNode, req.get());
+                continue;
+            }
+            PacketPtr dataPkt = pl_it->second;
+            uint64_t macNode =
+                integrityTree->addressToBlockIndex(dataPkt->getAddr());
+
+            bool dataResponseArrived =
+                outstandingIntegrityHashes.count(dataPkt->req) > 0 ||
+                outstandingIntegrityVerification.count(dataPkt) > 0;
+            if (dataResponseArrived) {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: BmtStripped bridge notify for pkt %s "
+                    "(counterNode %llu -> macNode %llu)\n",
+                    __func__, dataPkt->print(), counterNode, macNode);
+                notifyParentReceived(dataPkt, macNode);
+            } else {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: BmtStripped bridge (early Counter) for pkt %s "
+                    "(counterNode %llu): data response not yet arrived; "
+                    "clearing macNode %llu dependency without attemptXor\n",
+                    __func__, dataPkt->print(), counterNode, macNode);
+                removeFromOutstandingMetadataRequests(macNode, dataPkt);
+            }
+        }
+    }
+
+    // Phase 3.6 — CounterLightMacBmt MAC bridge. A data read under
+    // CounterLightMacBmt has two independent dependencies: the BMT walk at
+    // treeLeafNode (tracked via outstandingMetadataRequests, handled above
+    // like CounterLightBmt) AND a separate MAC-block fetch tracked here.
+    // When the pre-issued MAC response arrives we (a) unconditionally clear
+    // counterLightMacBmtMacPending for every waiter — that is the stall bit
+    // attemptXor checks — and (b) kick attemptXor only if the data response
+    // has already arrived. Hazards (mirror the BmtStripped bridge):
+    //   (1) MAC-before-data: data packet still in flight to DRAM, no hash
+    //       scheduled. Calling attemptXor would misread "hash never
+    //       scheduled" as "hash done". Guard: only call attemptXor when the
+    //       data packet is in outstandingIntegrityHashes or
+    //       outstandingIntegrityVerification. The MAC-pending bit is still
+    //       cleared, so the later hash-completion attemptXor will pass the
+    //       new MAC check.
+    //   (2) Pathologically-late MAC arrival: data packet already drained
+    //       from packetLookup. Skip with a DPRINTF — in a well-formed run
+    //       this cannot happen (attemptXor would have stalled until MAC
+    //       pending cleared), but the guard is defense-in-depth.
+    if (readPathMode == enums::ReadPathMode::CounterLightMacBmt &&
+        counterLightMacBmtMacReqs.find(pkt->req) !=
+            counterLightMacBmtMacReqs.end())
+    {
+        uint64_t macNode = pkt->getMetadataNode();
+        auto mac_range = counterLightMacBmtMacWaiters.equal_range(macNode);
+        std::vector<RequestPtr> waitingReqs;
+        for (auto it = mac_range.first; it != mac_range.second; ++it) {
+            waitingReqs.push_back(it->second);
+        }
+        counterLightMacBmtMacWaiters.erase(macNode);
+        counterLightMacBmtMacReqs.erase(pkt->req);
+
+        for (auto req : waitingReqs) {
+            // Clear the stall bit unconditionally — attemptXor's MAC check
+            // is a set-membership test on this req.
+            counterLightMacBmtMacPending.erase(req);
+
+            auto pl_it = packetLookup.find(req);
+            if (pl_it == packetLookup.end()) {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: CounterLightMacBmt late MAC arrival (macNode "
+                    "%llu): data packet for req %p already completed and "
+                    "left packetLookup. Skipping.\n",
+                    __func__, macNode, req.get());
+                continue;
+            }
+            PacketPtr dataPkt = pl_it->second;
+
+            bool dataResponseArrived =
+                outstandingIntegrityHashes.count(dataPkt->req) > 0 ||
+                outstandingIntegrityVerification.count(dataPkt) > 0;
+            if (dataResponseArrived) {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: CounterLightMacBmt MAC bridge attemptXor for pkt "
+                    "%s (macNode %llu)\n",
+                    __func__, dataPkt->print(), macNode);
+                attemptXor(dataPkt);
+            } else {
+                DPRINTF(AbstractIntegrityVerifier,
+                    "%s: CounterLightMacBmt MAC bridge (early MAC) for pkt "
+                    "%s (macNode %llu): data response not yet arrived; "
+                    "MAC-pending cleared, deferring attemptXor to "
+                    "hash-completion path\n",
+                    __func__, dataPkt->print(), macNode);
+            }
+        }
+    }
+
     removeFromPacketLookup(pkt);
 
     delete pkt;
@@ -603,9 +719,30 @@ AbstractIntegrityVerifier::getParentNode(PacketPtr pkt)
         assert(pkt->getMetadataNode() != 0);
 
         return integrityTree->parentBlockIndex(pkt->getMetadataNode());
-    } else {
-        return integrityTree->addressToBlockIndex(pkt->getAddr());
     }
+
+    // Config 4 / 5 — CounterLightBmt & CounterLightMacBmt redirect. For read
+    // data packets, the "parent" the pipeline keys on is TreeLeaf (MAC +
+    // Counter are skipped for the walk; counter rides in parity). The data
+    // packet is registered on treeLeafNode by the matching handlePacket
+    // branch; attemptXor, hasOutstandingMetadataRequest, and
+    // parentNodeIsPendingEviction all call getParentNode(pkt) to look up the
+    // same node, so they must agree. Triple-guarded on mode + isRead() +
+    // !isMetadataRequest() so metadata and write packets never land here.
+    // CounterLightMacBmt adds a separate MAC-fetch dependency, tracked
+    // out-of-band via counterLightMacBmtMacPending — so the redirected
+    // treeLeafNode remains the single "parent" the generic pipeline sees.
+    if ((readPathMode == enums::ReadPathMode::CounterLightBmt ||
+         readPathMode == enums::ReadPathMode::CounterLightMacBmt) &&
+        pkt->isRead() &&
+        !pkt->isMetadataRequest())
+    {
+        size_t macNode = integrityTree->addressToBlockIndex(pkt->getAddr());
+        size_t counterNode = integrityTree->parentBlockIndex(macNode);
+        return integrityTree->parentBlockIndex(counterNode);
+    }
+
+    return integrityTree->addressToBlockIndex(pkt->getAddr());
 }
 
 
@@ -634,67 +771,18 @@ AbstractIntegrityVerifier::getIntegrityNodeLocation(size_t node)
 {
     Addr addr;
 
-    if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::DramOnly) {
-        // All integrity data should be in DRAM
-        auto offset = integrityTree->simulatedBlockOffset(node);
-        for (auto range : dramIntegrityRanges) {
-            if (offset > range.size()) {
-                // This should be in a following range in the list.
-                // We will "eat" the offset amount corresponding to the range
-                // being skipped over.
-                offset -= range.size();
-                continue;
-            }
-            addr = range.start() + offset;
-            break;
+    // All integrity data is in DRAM.
+    auto offset = integrityTree->simulatedBlockOffset(node);
+    for (auto range : dramIntegrityRanges) {
+        if (offset > range.size()) {
+            // This should be in a following range in the list.
+            // We will "eat" the offset amount corresponding to the range
+            // being skipped over.
+            offset -= range.size();
+            continue;
         }
-    } else if (integrityAllocationMode ==
-            enums::IntegrityAllocationMode::CxlOnly) {
-        // All integrity data should be in CXL
-        auto offset = integrityTree->simulatedBlockOffset(node);
-        for (auto range : cxlIntegrityRanges) {
-            if (offset > range.size()) {
-                // This should be in a following range in the list.
-                // We will "eat" the offset amount corresponding to the range
-                // being skipped over.
-                offset -= range.size();
-                continue;
-            }
-            addr = range.start() + offset;
-            break;
-        }
-    } else if (integrityAllocationMode ==
-        enums::IntegrityAllocationMode::BasicMix) {
-        // Basic mixture. DRAM data is protected with data in DRAM, CXL data is
-        // protected with data in CXL.
-        panic("Basic mix not implemented.");  // TODO
-
-        /////////////// For leaves
-        // if (dramOsRange.contains(pkt->getAddr())) {
-        //     // This request is for data in DRAM. Thus, the leaf should also
-        //     // be in DRAM.
-        //     reqAddr = dramIntegrityRange.start() +
-        //                 integrityTree.simulatedBlockOffset(parentNode);
-        // } else if (cxlOsRange.contains(pkt->getAddr())) {
-        //     // This request is for data in CXL memory. Thus, the leaf should
-        //     // also be in CXL memory.
-        //     reqAddr = cxlIntegrityRange.start() +
-        //                 integrityTree.simulatedBlockOffset(parentNode,
-        //                                                 cxlOsRange.start());
-        // } else {
-        //     panic("Packet %s is expected in neither DRAM or CXL.",
-        //             pkt->print());
-        // }
-        //
-        //////////////// For non-leaves
-        // Todo For now, assume that all non-leaf nodes are in DRAM.
-        // assert(!integrityTree.isLeaf(node));
-        //
-        // reqAddr = dramIntegrityRange.start() +
-        //                 integrityTree.simulatedBlockOffset(node);
-    } else {
-        panic("Integrity allocation mode unimplemented.");
+        addr = range.start() + offset;
+        break;
     }
 
     DPRINTF(IntegrityNodeLocationMap,
@@ -807,6 +895,183 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         return true;
     }
 
+    // Config 3 — CounterLight (ISCA 2024). For data read responses, skip all
+    // read-side metadata traffic. Charge parityDecodeLatency (§IV-D, decoding
+    // the counter from ECC parity bits) + integrityHashingLatency (reused as
+    // the per-block MAC-check cost — same role it plays for the data packet
+    // in FullBmt; adding a separate macCheckLatency would double-charge).
+    // Writes are excluded by isRead() and fall through to the Full-BMT path.
+    if (readPathMode == enums::ReadPathMode::CounterLight &&
+        !pkt->isMetadataRequest() &&
+        pkt->isRead() &&
+        pkt->isResponse())
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CounterLight short-circuit for pkt %s (parity-decode + "
+            "MAC-check, no metadata fetch)\n",
+            __func__, pkt->print());
+        schedule(
+            new HashCompletionEvent(this, pkt),
+            clockEdge(parityDecodeLatency + integrityHashingLatency)
+        );
+        assert(outstandingIntegrityHashes.find(pkt->req) ==
+                outstandingIntegrityHashes.end());
+        assert(outstandingIntegrityVerification.find(pkt) ==
+                outstandingIntegrityVerification.end());
+        outstandingIntegrityHashes.insert(pkt->req);
+        outstandingIntegrityVerification.insert(pkt);
+        assert(packetLookup[pkt->req] == pkt);
+        // No metadata request, no parent dependency. XOR fires from
+        // completeIntegrityHash → attemptXor → completeXor →
+        // completeIntegrityVerification → schedResp.
+        return true;
+    }
+
+    // Config 4 — CounterLightBmt. Layers the full BMT walk back on top of the
+    // CounterLight read path to price the cost of adding replay protection to
+    // Counter-light. Same parity-decode + MAC-check hash timing as
+    // CounterLight (no MAC/Counter DRAM fetch — counter rides in parity), but
+    // we register the data packet on the TreeLeaf node and kick off a walk
+    // starting there. MAC and Counter levels are skipped; the walk proceeds
+    // TreeLeaf → ... → TreeRoot through the normal metadata response path
+    // (when a TreeLeaf response re-enters handlePacket, pkt->isMetadataRequest
+    // is true and getParentNode returns parentBlockIndex as usual).
+    //
+    // The data packet's parent-node abstraction (getParentNode) is redirected
+    // to treeLeafNode for this mode below, so attemptXor /
+    // hasOutstandingMetadataRequest / parentNodeIsPendingEviction all see the
+    // same node we registered on here. Writes fall through to Full-BMT.
+    if (readPathMode == enums::ReadPathMode::CounterLightBmt &&
+        !pkt->isMetadataRequest() &&
+        pkt->isRead() &&
+        pkt->isResponse())
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CounterLightBmt hash + TreeLeaf walk for pkt %s\n",
+            __func__, pkt->print());
+        schedule(
+            new HashCompletionEvent(this, pkt),
+            clockEdge(parityDecodeLatency + integrityHashingLatency)
+        );
+        assert(outstandingIntegrityHashes.find(pkt->req) ==
+                outstandingIntegrityHashes.end());
+        assert(outstandingIntegrityVerification.find(pkt) ==
+                outstandingIntegrityVerification.end());
+        outstandingIntegrityHashes.insert(pkt->req);
+        outstandingIntegrityVerification.insert(pkt);
+        assert(packetLookup[pkt->req] == pkt);
+
+        size_t macNode = integrityTree->addressToBlockIndex(pkt->getAddr());
+        size_t counterNode = integrityTree->parentBlockIndex(macNode);
+        size_t treeLeafNode = integrityTree->parentBlockIndex(counterNode);
+
+        // Batch against any in-flight request for the same TreeLeaf (H6).
+        bool needsRequest =
+            outstandingMetadataRequests.find(treeLeafNode) ==
+            outstandingMetadataRequests.end();
+        addToOutstandingMetadataRequests(treeLeafNode, pkt);
+        if (needsRequest) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightBmt issuing TreeLeaf request for node "
+                "%llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+            PacketPtr md_pkt = generateMetadataRequest(treeLeafNode);
+            schedMetadataReq(md_pkt);
+        } else {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightBmt batching on outstanding TreeLeaf "
+                "node %llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+        }
+        return true;
+    }
+
+    // Config 5 — CounterLightMacBmt. Hypothetical hybrid: counter rides in
+    // parity (CounterLight-style, no Counter fetch) but MAC is stored in a
+    // separate DRAM block (FullBmt-style MAC fetch) AND the counter's
+    // integrity is backstopped by a BMT walk from TreeLeaf (CounterLightBmt-
+    // style). Two independent dependencies must complete before XOR:
+    //   (1) TreeLeaf walk — registered at treeLeafNode via the widened
+    //       getParentNode redirect; released through notifyParentReceived on
+    //       the generic metadata-response path.
+    //   (2) MAC fetch — tracked out-of-band via
+    //       counterLightMacBmtMacPending; released through the MAC bridge
+    //       in processMetadataResp, which clears the pending bit and kicks
+    //       attemptXor.
+    // Insert order of the three bookkeeping containers matters (H5,
+    // synchronous cache-hit re-entry): pending bit → waiters map → reqs set,
+    // all BEFORE schedMetadataReq so a same-tick re-entry into
+    // processMetadataResp finds a consistent view.
+    if (readPathMode == enums::ReadPathMode::CounterLightMacBmt &&
+        !pkt->isMetadataRequest() &&
+        pkt->isRead() &&
+        pkt->isResponse())
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CounterLightMacBmt hash + TreeLeaf walk + MAC fetch for "
+            "pkt %s\n",
+            __func__, pkt->print());
+        schedule(
+            new HashCompletionEvent(this, pkt),
+            clockEdge(parityDecodeLatency + integrityHashingLatency)
+        );
+        assert(outstandingIntegrityHashes.find(pkt->req) ==
+                outstandingIntegrityHashes.end());
+        assert(outstandingIntegrityVerification.find(pkt) ==
+                outstandingIntegrityVerification.end());
+        outstandingIntegrityHashes.insert(pkt->req);
+        outstandingIntegrityVerification.insert(pkt);
+        assert(packetLookup[pkt->req] == pkt);
+
+        size_t macNode = integrityTree->addressToBlockIndex(pkt->getAddr());
+        size_t counterNode = integrityTree->parentBlockIndex(macNode);
+        size_t treeLeafNode = integrityTree->parentBlockIndex(counterNode);
+
+        // --- (1) BMT walk dependency (treeLeafNode). Identical shape to
+        //         the CounterLightBmt branch above; see H6/H7/H10/H11. ---
+        bool needsTreeRequest =
+            outstandingMetadataRequests.find(treeLeafNode) ==
+            outstandingMetadataRequests.end();
+        addToOutstandingMetadataRequests(treeLeafNode, pkt);
+        if (needsTreeRequest) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt issuing TreeLeaf request for node "
+                "%llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+            PacketPtr tree_pkt = generateMetadataRequest(treeLeafNode);
+            schedMetadataReq(tree_pkt);
+        } else {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt batching on outstanding TreeLeaf "
+                "node %llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+        }
+
+        // --- (2) MAC fetch dependency (macNode). Pre-issue bookkeeping in
+        //         insert-order required by H5; inserts MUST precede
+        //         schedMetadataReq. ---
+        counterLightMacBmtMacPending.insert(pkt->req);
+        bool needsMacRequest =
+            counterLightMacBmtMacWaiters.find(macNode) ==
+            counterLightMacBmtMacWaiters.end();
+        counterLightMacBmtMacWaiters.emplace(macNode, pkt->req);
+        if (needsMacRequest) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt issuing MAC request for node "
+                "%llu (pkt %s)\n",
+                __func__, macNode, pkt->print());
+            PacketPtr mac_pkt = generateMetadataRequest(macNode);
+            counterLightMacBmtMacReqs.insert(mac_pkt->req);
+            schedMetadataReq(mac_pkt);
+        } else {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt batching on outstanding MAC "
+                "node %llu (pkt %s)\n",
+                __func__, macNode, pkt->print());
+        }
+        return true;
+    }
+
     // We are either getting a read response from memory or a writeback request
     // from the LLC. Integrity metadata (at least in the cache) should be
     // updated for this data's parent node first before being allowed to be
@@ -831,6 +1096,60 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
     outstandingIntegrityVerification.insert(pkt);
     assert(packetLookup[pkt->req] == pkt);
 
+
+    // Config 2b — BmtStripped (3b.1). Two walk-termination paths:
+    //
+    //   (a) Data packet: its hash has been scheduled above. The macNode
+    //       dependency was registered in processReq (3a), so attemptXor
+    //       will stall until 3b.2 fires notifyParentReceived(macNode).
+    //       Skip the MAC-level request that FullBmt would issue below.
+    //
+    //   (b) Counter metadata packet we pre-issued in 3a, returning from
+    //       DRAM on a cache miss. Its own hash is scheduled; getParentNode
+    //       for metadata returns parentBlockIndex (TreeLeaf), which we
+    //       never register, so attemptXor proceeds and the Counter flows
+    //       through completeIntegrityVerification -> schedMetadataResp
+    //       back to the metadata cache. No TreeLeaf request issued.
+    //
+    // Any other metadata packet (FullBmt-path write walks, etc.) falls
+    // through to the normal Full-BMT logic.
+    if (readPathMode == enums::ReadPathMode::BmtStripped) {
+        if (!pkt->isMetadataRequest()) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: BmtStripped data-packet short-circuit for pkt %s "
+                "(macNode dependency pre-registered in processReq; "
+                "awaiting Counter response via 3b.2)\n",
+                __func__, pkt->print());
+            return true;
+        }
+        if (bmtStrippedCounterReqs.find(pkt->req) !=
+            bmtStrippedCounterReqs.end())
+        {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: BmtStripped Counter walk-termination for pkt %s "
+                "(3a-originated; no TreeLeaf request)\n",
+                __func__, pkt->print());
+            return true;
+        }
+    }
+
+    // Config 5 — CounterLightMacBmt defensive MAC walk-termination arm.
+    // processMetadataResp should handle the MAC response entirely (drain +
+    // delete, no handlePacket call), so this arm is expected to be
+    // unreachable. But the existing BmtStripped branch has a symmetric
+    // Counter-termination that demonstrably IS reached under some pipeline
+    // configurations, so we mirror the defense: if a MAC-fetch we
+    // pre-issued ever arrives here, don't walk up to Counter — terminate.
+    if (readPathMode == enums::ReadPathMode::CounterLightMacBmt &&
+        counterLightMacBmtMacReqs.find(pkt->req) !=
+            counterLightMacBmtMacReqs.end())
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CounterLightMacBmt MAC walk-termination for pkt %s "
+            "(pre-issued MAC fetch; no Counter request)\n",
+            __func__, pkt->print());
+        return true;
+    }
 
     // Check for the parent node in the metadata cache.
     size_t parentNode;
@@ -929,6 +1248,22 @@ AbstractIntegrityVerifier::attemptXor(PacketPtr pkt)
         // The parent node is not yet available. We are not ready to verify.
         DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
             "parent unavailable\n",
+            __func__, pkt->print());
+        return false;
+    } else if (readPathMode == enums::ReadPathMode::CounterLightMacBmt &&
+               pkt->isRead() &&
+               !pkt->isMetadataRequest() &&
+               counterLightMacBmtMacPending.find(pkt->req) !=
+                   counterLightMacBmtMacPending.end()) {
+        // Config 5 — CounterLightMacBmt second dependency. The BMT walk at
+        // treeLeafNode is already covered by hasOutstandingMetadataRequest
+        // above; the MAC fetch is tracked separately and stalls XOR until
+        // the MAC response arrives and the bridge in processMetadataResp
+        // clears this set. Triple-guarded on mode + isRead() +
+        // !isMetadataRequest() so writes and metadata packets never hit
+        // this check — other modes are unaffected.
+        DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
+            "CounterLightMacBmt MAC still pending\n",
             __func__, pkt->print());
         return false;
     }
@@ -1207,12 +1542,10 @@ AbstractIntegrityVerifier::sendReqToMem(PacketPtr pkt)
     // Verify requests are going to places that make sense.
     if (pkt->isMetadataRequest()) {
         // This is integrity metadata.
-        assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
-               rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+        assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()));
     } else if (needsVerification(pkt)) {
         // This is application data.
-        assert(rangeListContains(dramOsRanges, pkt->getAddr()) ||
-               rangeListContains(cxlOsRanges, pkt->getAddr()));
+        assert(rangeListContains(dramOsRanges, pkt->getAddr()));
     }
 
     DPRINTF(AbstractIntegrityVerifier, "%s: Scheduling req %s to memory\n",
@@ -1246,8 +1579,7 @@ AbstractIntegrityVerifier::sendReqToMetadataCache(PacketPtr pkt)
 {
     assert(pkt->isMetadataRequest());
     assert(pkt->needsResponse());
-    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()) ||
-           rangeListContains(cxlIntegrityRanges, pkt->getAddr()));
+    assert(rangeListContains(dramIntegrityRanges, pkt->getAddr()));
 
     addToPacketLookup(pkt);
 
@@ -1327,113 +1659,29 @@ AbstractIntegrityVerifier::markReqEnd(PacketPtr pkt)
             stats.metadataBytesHandled += pkt->getSize();
             stats.totalMetadataReqTime += curTick() - arrivalTime[pkt->req];
 
-            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
-                // Integrity data for DRAM
-                stats.reqHandledDramIntegrity++;
-                stats.bytesHandledDramIntegrity += pkt->getSize();
-                stats.totalReqTimeDramIntegrity +=
-                    curTick() - arrivalTime[pkt->req];
-            } else {
-                // Integrity data for CXL
-                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
-
-                stats.reqHandledCxlIntegrity++;
-                stats.bytesHandledCxlIntegrity += pkt->getSize();
-                stats.totalReqTimeCxlIntegrity +=
-                    curTick() - arrivalTime[pkt->req];
-            }
+            assert(rangeListContains(dramFullRanges, pkt->getAddr()));
+            stats.reqHandledDramIntegrity++;
+            stats.bytesHandledDramIntegrity += pkt->getSize();
+            stats.totalReqTimeDramIntegrity +=
+                curTick() - arrivalTime[pkt->req];
         } else {
             // Non-metadata request.
             stats.dataReqHandled++;
             stats.dataBytesHandled += pkt->getSize();
             stats.totalDataReqTime += curTick() - arrivalTime[pkt->req];
 
-            if (rangeListContains(dramFullRanges, pkt->getAddr())) {
-                // Application data for DRAM
-                stats.reqHandledDramOs++;
-                stats.bytesHandledDramOs += pkt->getSize();
-                stats.totalReqTimeDramOs +=
-                    curTick() - arrivalTime[pkt->req];
-            } else {
-                // Application data for CXL
-                assert(rangeListContains(cxlFullRanges, pkt->getAddr()));
-
-                stats.reqHandledCxlOs++;
-                stats.bytesHandledCxlOs += pkt->getSize();
-                stats.totalReqTimeCxlOs +=
-                    curTick() - arrivalTime[pkt->req];
-            }
-        }
-
-        if (rangeListContains(dramFullRanges, pkt->getAddr())) {
-            stats.reqHandledDram++;
-            stats.bytesHandledDram += pkt->getSize();
-            stats.totalReqTimeDram +=
-                curTick() - arrivalTime[pkt->req];
-        } else if (rangeListContains(cxlFullRanges, pkt->getAddr())) {
-            stats.reqHandledCxl++;
-            stats.bytesHandledCxl += pkt->getSize();
-            stats.totalReqTimeCxl +=
+            assert(rangeListContains(dramFullRanges, pkt->getAddr()));
+            stats.reqHandledDramOs++;
+            stats.bytesHandledDramOs += pkt->getSize();
+            stats.totalReqTimeDramOs +=
                 curTick() - arrivalTime[pkt->req];
         }
 
-        // Stats for translated address.
-        Addr translatedAddr;
-        if (pkt->hasBeenTranslated()) {
-            translatedAddr = pkt->getPageSwapAddr();
-        } else {
-            // Use the original address as the "translated" address.
-            translatedAddr = pkt->getAddr();
-        }
-
-        if (pkt->isMetadataRequest()) {
-            if (rangeListContains(dramFullRanges, translatedAddr)) {
-                // Post translation, metadata request for DRAM
-                stats.reqHandledTransDramIntegrity++;
-                stats.bytesHandledTransDramIntegrity += pkt->getSize();
-                stats.totalReqTimeTransDramIntegrity +=
-                    curTick() - arrivalTime[pkt->req];
-            } else {
-                // Post translation, metadata request for CXL
-                assert(rangeListContains(cxlFullRanges, translatedAddr));
-
-                stats.reqHandledTransCxlIntegrity++;
-                stats.bytesHandledTransCxlIntegrity += pkt->getSize();
-                stats.totalReqTimeTransCxlIntegrity +=
-                    curTick() - arrivalTime[pkt->req];
-            }
-        } else {
-            // Non-metadata request
-
-            if (rangeListContains(dramFullRanges, translatedAddr)) {
-                // Post translation, application data request for DRAM
-                stats.reqHandledTransDramOs++;
-                stats.bytesHandledTransDramOs += pkt->getSize();
-                stats.totalReqTimeTransDramOs +=
-                    curTick() - arrivalTime[pkt->req];
-            } else {
-                // Post translation, application data request for CXL
-                assert(rangeListContains(cxlFullRanges, translatedAddr));
-
-                stats.reqHandledTransCxlOs++;
-                stats.bytesHandledTransCxlOs += pkt->getSize();
-                stats.totalReqTimeTransCxlOs +=
-                    curTick() - arrivalTime[pkt->req];
-            }
-        }
-
-        if (rangeListContains(dramFullRanges, translatedAddr)) {
-            stats.reqHandledTransDram++;
-            stats.bytesHandledTransDram += pkt->getSize();
-            stats.totalReqTimeTransDram +=
-                curTick() - arrivalTime[pkt->req];
-        } else if (rangeListContains(cxlFullRanges, translatedAddr)) {
-            stats.reqHandledTransCxl++;
-            stats.bytesHandledTransCxl += pkt->getSize();
-            stats.totalReqTimeTransCxl +=
-                curTick() - arrivalTime[pkt->req];
-        }
-
+        assert(rangeListContains(dramFullRanges, pkt->getAddr()));
+        stats.reqHandledDram++;
+        stats.bytesHandledDram += pkt->getSize();
+        stats.totalReqTimeDram +=
+            curTick() - arrivalTime[pkt->req];
     }
 
     arrivalTime.erase(pkt->req);
@@ -1656,12 +1904,6 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Sum of DRAM application data regions accessed"),
     ADD_STAT(dataUsedDramIntegrity, statistics::units::Byte::get(),
             "Sum of DRAM integrity data regions accessed"),
-    ADD_STAT(dataUsedCxl, statistics::units::Byte::get(),
-            "Sum of CXL data regions accessed"),
-    ADD_STAT(dataUsedCxlOs, statistics::units::Byte::get(),
-            "Sum of CXL application data regions accessed"),
-    ADD_STAT(dataUsedCxlIntegrity, statistics::units::Byte::get(),
-            "Sum of CXL integrity data regions accessed"),
     ADD_STAT(dataUsedOs, statistics::units::Byte::get(),
             "Sum of application data regions accessed"),
     ADD_STAT(dataUsedIntegrity, statistics::units::Byte::get(),
@@ -1686,31 +1928,6 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Total number of requests to (non-integrity) memory in DRAM"),
     ADD_STAT(reqHandledDramIntegrity, statistics::units::Count::get(),
             "Total number of requests to integrity memory in DRAM"),
-    ADD_STAT(reqHandledCxl, statistics::units::Count::get(),
-            "Total number of requests to memory in CXL"),
-    ADD_STAT(reqHandledCxlOs, statistics::units::Count::get(),
-            "Total number of requests to (non-integrity) memory in CXL"),
-    ADD_STAT(reqHandledCxlIntegrity, statistics::units::Count::get(),
-            "Total number of requests to integrity memory in CXL"),
-
-    ADD_STAT(reqHandledTransDram, statistics::units::Count::get(),
-            "Total number of requests to memory in DRAM (location "
-            "post-translation)"),
-    ADD_STAT(reqHandledTransDramOs, statistics::units::Count::get(),
-            "Total number of (non-integrity) requests to memory in DRAM "
-            "(location post-translation)"),
-    ADD_STAT(reqHandledTransDramIntegrity, statistics::units::Count::get(),
-            "Total number of integrity requests to memory in DRAM "
-            "(location post-translation)"),
-    ADD_STAT(reqHandledTransCxl, statistics::units::Count::get(),
-            "Total number of requests to memory in CXL (location "
-            "post-translation)"),
-    ADD_STAT(reqHandledTransCxlOs, statistics::units::Count::get(),
-            "Total number of (non-integrity) requests to memory in CXL "
-            "(location post-translation)"),
-    ADD_STAT(reqHandledTransCxlIntegrity, statistics::units::Count::get(),
-            "Total number of integrity requests to memory in CXL "
-            "(location post-translation)"),
 
     ADD_STAT(bytesHandledDram, statistics::units::Byte::get(),
             "Total number of bytes to memory in DRAM"),
@@ -1718,31 +1935,6 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "Total number of bytes to (non-integrity) memory in DRAM"),
     ADD_STAT(bytesHandledDramIntegrity, statistics::units::Byte::get(),
             "Total number of bytes to integrity memory in DRAM"),
-    ADD_STAT(bytesHandledCxl, statistics::units::Byte::get(),
-            "Total number of bytes to memory in CXL"),
-    ADD_STAT(bytesHandledCxlOs, statistics::units::Byte::get(),
-            "Total number of bytes to (non-integrity) memory in CXL"),
-    ADD_STAT(bytesHandledCxlIntegrity, statistics::units::Byte::get(),
-            "Total number of bytes to integrity memory in CXL"),
-
-    ADD_STAT(bytesHandledTransDram, statistics::units::Byte::get(),
-            "Total number of bytes to memory in DRAM (location "
-            "post-translation)"),
-    ADD_STAT(bytesHandledTransDramOs, statistics::units::Byte::get(),
-            "Total number of (non-integrity) bytes to memory in DRAM "
-            "(location post-translation)"),
-    ADD_STAT(bytesHandledTransDramIntegrity, statistics::units::Byte::get(),
-            "Total number of integrity bytes to memory in DRAM (location "
-            "post-translation)"),
-    ADD_STAT(bytesHandledTransCxl, statistics::units::Byte::get(),
-            "Total number of bytes to memory in CXL (location "
-            "post-translation)"),
-    ADD_STAT(bytesHandledTransCxlOs, statistics::units::Byte::get(),
-            "Total number of (non-integrity) bytes to memory in CXL "
-            "(location post-translation)"),
-    ADD_STAT(bytesHandledTransCxlIntegrity, statistics::units::Byte::get(),
-            "Total number of integrity bytes to memory in CXL "
-            "(location post-translation)"),
 
     ADD_STAT(totalRequestingTime, statistics::units::Tick::get(),
             "Total amount of time where a request is out then in"),
@@ -1760,34 +1952,6 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
     ADD_STAT(totalReqTimeDramIntegrity, statistics::units::Tick::get(),
             "Total amount of time where a data request is out then in, "
             "for integrity memory in DRAM"),
-    ADD_STAT(totalReqTimeCxl, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for memory in CXL"),
-    ADD_STAT(totalReqTimeCxlOs, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for (non-integrity) memory in CXL"),
-    ADD_STAT(totalReqTimeCxlIntegrity, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for integrity memory in CXL"),
-
-    ADD_STAT(totalReqTimeTransDram, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for data in DRAM (location post-translation)"),
-    ADD_STAT(totalReqTimeTransDramOs, statistics::units::Tick::get(),
-            "Total amount of time where a (non-integrity) request is out then "
-            "in, for data in DRAM (location post-translation)"),
-    ADD_STAT(totalReqTimeTransDramIntegrity, statistics::units::Tick::get(),
-            "Total amount of time where an integrity request is out then in, "
-            "for data in DRAM (location post-translation)"),
-    ADD_STAT(totalReqTimeTransCxl, statistics::units::Tick::get(),
-            "Total amount of time where a data request is out then in, "
-            "for data in CXL (location post-translation)"),
-    ADD_STAT(totalReqTimeTransCxlOs, statistics::units::Tick::get(),
-            "Total amount of time where a (non-integrity) request is out then "
-            "in, for data in CXL (location post-translation)"),
-    ADD_STAT(totalReqTimeTransCxlIntegrity, statistics::units::Tick::get(),
-            "Total amount of time where an integrity request is out then in, "
-            "for data in CXL (location post-translation)"),
 
     ADD_STAT(avgReqLatency, statistics::units::Tick::get(),
             "Average request latency from leaving to entering "
@@ -1807,41 +1971,7 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
             "IntegrityVerifier, for (non-integrity) memory in DRAM"),
     ADD_STAT(avgReqTimeDramIntegrity, statistics::units::Tick::get(),
             "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for integrity memory in DRAM"),
-    ADD_STAT(avgReqTimeCxl, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for memory in CXL"),
-    ADD_STAT(avgReqTimeCxlOs, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for (non-integrity) memory in CXL"),
-    ADD_STAT(avgReqTimeCxlIntegrity, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for integrity memory in CXL"),
-
-    ADD_STAT(avgReqTimeTransDram, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for data in DRAM "
-            "(location post-translation)"),
-    ADD_STAT(avgReqTimeTransDramOs, statistics::units::Tick::get(),
-            "Average (non-integrity) request latency from leaving to entering "
-            "IntegrityVerifier, for data in DRAM "
-            "(location post-translation)"),
-    ADD_STAT(avgReqTimeTransDramIntegrity, statistics::units::Tick::get(),
-            "Average integrity request latency from leaving to entering "
-            "IntegrityVerifier, for data in DRAM "
-            "(location post-translation)"),
-    ADD_STAT(avgReqTimeTransCxl, statistics::units::Tick::get(),
-            "Average data request latency from leaving to entering "
-            "IntegrityVerifier, for data in CXL "
-            "(location post-translation)"),
-    ADD_STAT(avgReqTimeTransCxlOs, statistics::units::Tick::get(),
-            "Average (non-integrity) request latency from leaving to entering "
-            "IntegrityVerifier, for data in CXL "
-            "(location post-translation)"),
-    ADD_STAT(avgReqTimeTransCxlIntegrity, statistics::units::Tick::get(),
-            "Average integrity request latency from leaving to entering "
-            "IntegrityVerifier, for data in CXL "
-            "(location post-translation)")
+            "IntegrityVerifier, for integrity memory in DRAM")
 {
     avgReqLatency = totalRequestingTime / requestsHandled;
     avgMetadataReqLatency = totalMetadataReqTime / metadataReqHandled;
@@ -1851,18 +1981,6 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::IntegrityVerifierStats(
     avgReqTimeDramOs = totalReqTimeDramOs / reqHandledDramOs;
     avgReqTimeDramIntegrity =
         totalReqTimeDramIntegrity / reqHandledDramIntegrity;
-    avgReqTimeCxl = totalReqTimeCxl / reqHandledCxl;
-    avgReqTimeCxlOs = totalReqTimeCxlOs / reqHandledCxlOs;
-    avgReqTimeCxlIntegrity = totalReqTimeCxlIntegrity / reqHandledCxlIntegrity;
-
-    avgReqTimeTransDram = totalReqTimeTransDram / reqHandledTransDram;
-    avgReqTimeTransDramOs = totalReqTimeTransDramOs / reqHandledTransDramOs;
-    avgReqTimeTransDramIntegrity =
-        totalReqTimeTransDramIntegrity / reqHandledTransDramIntegrity;
-    avgReqTimeTransCxl = totalReqTimeTransCxl / reqHandledTransCxl;
-    avgReqTimeTransCxlOs = totalReqTimeTransCxlOs / reqHandledTransCxlOs;
-    avgReqTimeTransCxlIntegrity =
-        totalReqTimeTransCxlIntegrity / reqHandledTransCxlIntegrity;
 }
 
 void
@@ -1883,37 +2001,20 @@ AbstractIntegrityVerifier::IntegrityVerifierStats::preDumpStats()
     dataUsedDram = 0;
     dataUsedDramOs = 0;
     dataUsedDramIntegrity = 0;
-    dataUsedCxl = 0;
-    dataUsedCxlOs = 0;
-    dataUsedCxlIntegrity = 0;
     dataUsedOs = 0;
     dataUsedIntegrity = 0;
 
     for (auto line : accessedCacheLines) {
-        if (rangeListContains(parent->dramFullRanges, line)) {
-            dataUsedDram += cacheLineSize;
+        assert(rangeListContains(parent->dramFullRanges, line));
+        dataUsedDram += cacheLineSize;
 
-            if (rangeListContains(parent->dramOsRanges, line)) {
-                dataUsedDramOs += cacheLineSize;
-                dataUsedOs += cacheLineSize;
-            } else {
-                assert(rangeListContains(parent->dramIntegrityRanges, line));
-                dataUsedDramIntegrity += cacheLineSize;
-                dataUsedIntegrity += cacheLineSize;
-            }
+        if (rangeListContains(parent->dramOsRanges, line)) {
+            dataUsedDramOs += cacheLineSize;
+            dataUsedOs += cacheLineSize;
         } else {
-            assert(rangeListContains(parent->cxlFullRanges, line));
-
-            dataUsedCxl += cacheLineSize;
-
-            if (rangeListContains(parent->cxlOsRanges, line)) {
-                dataUsedCxlOs += cacheLineSize;
-                dataUsedOs += cacheLineSize;
-            } else {
-                assert(rangeListContains(parent->cxlIntegrityRanges, line));
-                dataUsedCxlIntegrity += cacheLineSize;
-                dataUsedIntegrity += cacheLineSize;
-            }
+            assert(rangeListContains(parent->dramIntegrityRanges, line));
+            dataUsedDramIntegrity += cacheLineSize;
+            dataUsedIntegrity += cacheLineSize;
         }
     }
 }

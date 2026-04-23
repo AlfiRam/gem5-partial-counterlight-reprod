@@ -40,7 +40,6 @@ from m5.objects import (
     L1XBar,
     L2XBar,
     L3XBar,
-    PageSwapper,
     Port,
     SystemXBar,
     WayPartitioningPolicy,
@@ -114,11 +113,8 @@ class PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier(
         metadata_cache_assoc: Optional[int] = 0,
         unified_upstream_cache: Optional[bool] = False,
         enable_partition_manager: Optional[bool] = False,
-        integrity_allocation_mode: Optional[str] = None,
         integrity_tree_type: Optional[str] = None,
         integrity_tree_arity: Optional[int] = 0,
-        use_page_swapper: Optional[bool] = False,
-        page_swap_epoch: Optional[int] = 200,
     ) -> None:
         # TODO Update documentation
         """
@@ -184,8 +180,6 @@ class PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier(
 
         self._enable_partition_manager = enable_partition_manager
 
-        self._integrity_allocation_mode = integrity_allocation_mode
-
         if integrity_tree_type == "None":
             integrity_tree_type = None
         self._integrity_tree_type = integrity_tree_type
@@ -193,10 +187,6 @@ class PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier(
         if integrity_tree_arity:
             assert integrity_tree_arity >= 0
             self._integrity_tree_arity = integrity_tree_arity
-
-        self._use_page_swapper = use_page_swapper
-
-        self._page_swap_epoch = page_swap_epoch
 
     @overrides(AbstractClassicCacheHierarchy)
     def get_mem_side_port(self) -> Port:
@@ -395,48 +385,20 @@ class PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier(
             self.metadata_cache.cpu_side = self.verifier.metadata_req_port
             self.verifier.metadata_resp_port = self.metadata_cache.mem_side
 
-        if board.use_ncx():
-            if self._use_page_swapper:
-                # If using the page swaper, place it between memory bus and NCX.
-                self.page_swapper = PageSwapper(
-                    swap_epoch=self._page_swap_epoch,
-                )
-                self.page_swapper.cpu_side_port = self.membus.mem_side_ports
-                board.get_ncx().cpu_side_ports = (
-                    self.page_swapper.mem_side_port
-                )
-            else:
-                # If not using the page swapper, connect the NCX to the
-                # memory bus directly.
-                self.membus.mem_side_ports = board.get_ncx().cpu_side_ports
-
-            # Connect memory to NCX
-            for _, port in board.get_mem_ports():
-                board.get_ncx().mem_side_ports = port
-
         # Memory <--> membus
-        else:
-            # The page swapper cannot work without NCX, as it does not have multiple ports implemented.
-            assert not self._use_page_swapper
-
-            # Do not use NCX. Connect memory directly to membus.
-            for _, port in board.get_mem_ports():
-                self.membus.mem_side_ports = port
+        for _, port in board.get_mem_ports():
+            self.membus.mem_side_ports = port
 
         # Retrieve/compute memory ranges.
-        assert board._main_memory_type == "DRAM"
-
-        dram_memory = None
-        cxl_memory = None
         primary_memory = board.get_memory()
-        primary_full_ranges = [
+        dram_full_ranges = [
             AddrRange(
                 start=board.get_starting_memory_addr(i),
                 size=primary_memory[i].get_size(),
             )
             for i in range(len(primary_memory))
         ]
-        primary_os_ranges = [
+        dram_os_ranges = [
             AddrRange(
                 start=board.get_starting_memory_addr(i),
                 size=primary_memory[i].get_os_size(),
@@ -444,85 +406,18 @@ class PrivateL1PrivateL2SharedL3CacheHierarchyIntegrityVerifier(
             for i in range(len(primary_memory))
             if primary_memory[i].get_os_size() > 0
         ]
-        match board._main_memory_type:
-            case "DRAM":
-                dram_memory = primary_memory
-                dram_full_ranges = primary_full_ranges
-                dram_os_ranges = primary_os_ranges
 
-            case "CXL":
-                cxl_memory = primary_memory
-                cxl_full_ranges = primary_full_ranges
-                cxl_os_ranges = primary_os_ranges
+        # Configure verifier
+        self.verifier.dram_full_ranges = dram_full_ranges
+        self.verifier.dram_os_ranges = dram_os_ranges
 
-            case _:
+        # Advertise address ranges if applicable to partition manager
+        if partition_manager is not None:
+            try:
+                partition_manager.dram_full_ranges = dram_full_ranges
+                partition_manager.dram_os_ranges = dram_os_ranges
+            except Exception:
                 pass
-
-        secondary_memory = board.get_indexed_memory(len(primary_memory))
-        if secondary_memory:
-            secondary_full_range = AddrRange(
-                start=board.get_starting_memory_addr(len(primary_memory)),
-                size=secondary_memory.get_size(),
-            )
-            secondary_os_range = AddrRange(
-                start=board.get_starting_memory_addr(len(primary_memory)),
-                size=secondary_memory.get_os_size(),
-            )
-            match board._secondary_memory_type:
-                case "DRAM":
-                    # The case where there are two DRAMs is not yet handled.
-                    assert dram_memory is None
-                    dram_memory = secondary_memory
-                    dram_full_ranges = [secondary_full_range]
-                    dram_os_ranges = [secondary_os_range]
-
-                case "CXL":
-                    # The case where there are two CXL memories is not yet handled.
-                    assert cxl_memory is None
-                    cxl_memory = secondary_memory
-                    cxl_full_ranges = [secondary_full_range]
-                    cxl_os_ranges = [secondary_os_range]
-
-                case _:
-                    pass
-
-        # Configure verifier and page swapper (if applicable)
-        if dram_memory is not None:
-            self.verifier.dram_full_ranges = dram_full_ranges
-            self.verifier.dram_os_ranges = dram_os_ranges
-
-            if self._use_page_swapper:
-                self.page_swapper.dram_full_ranges = dram_full_ranges
-                self.page_swapper.dram_os_ranges = dram_os_ranges
-
-            # Advertise address ranges if applicable to partition manager
-            if partition_manager is not None:
-                try:
-                    partition_manager.dram_full_ranges = dram_full_ranges
-                    partition_manager.dram_os_ranges = dram_os_ranges
-                except Exception:
-                    pass
-
-        if cxl_memory is not None:
-            self.verifier.cxl_full_ranges = cxl_full_ranges
-            self.verifier.cxl_os_ranges = cxl_os_ranges
-
-            if self._use_page_swapper:
-                self.page_swapper.cxl_full_ranges = cxl_full_ranges
-                self.page_swapper.cxl_os_ranges = cxl_os_ranges
-
-            # Advertise address ranges if applicable to partition manager
-            if partition_manager is not None:
-                try:
-                    partition_manager.cxl_full_ranges = cxl_full_ranges
-                    partition_manager.cxl_os_ranges = cxl_os_ranges
-                except Exception:
-                    pass
-
-        if self._integrity_allocation_mode:
-            self.verifier.integrity_allocation_mode = (
-                self._integrity_allocation_mode
-            )
 
         if self._integrity_tree_type:
             self.verifier.integrity_tree_type = self._integrity_tree_type

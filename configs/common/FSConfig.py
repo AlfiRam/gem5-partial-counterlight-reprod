@@ -45,7 +45,6 @@ import m5
 import m5.defines
 from m5.objects import *
 from m5.util import *
-import math
 
 # Populate to reflect supported os types per target ISA
 os_types = set()
@@ -454,7 +453,7 @@ def x86IOAddress(port):
     return IO_address_space_base + port
 
 
-def connectX86ClassicSystem(x86_sys, numCPUs, cxl_mem_size):
+def connectX86ClassicSystem(x86_sys, numCPUs):
     # Constants similar to x86_traits.hh
     IO_address_space_base = 0x8000000000000000
     pci_config_address_space_base = 0xC000000000000000
@@ -465,10 +464,7 @@ def connectX86ClassicSystem(x86_sys, numCPUs, cxl_mem_size):
 
     # North Bridge
     x86_sys.iobus = IOXBar()
-    if x86_sys.enable_cxl:
-        x86_sys.bridge = CXLBridge(bridge_lat="50ns", host_proto_proc_lat="14ns", req_fifo_depth=52, resp_fifo_depth=52)
-    else:
-        x86_sys.bridge = Bridge(delay="50ns", cxl_delay="25ns")
+    x86_sys.bridge = Bridge(delay="50ns")
     x86_sys.bridge.mem_side_port = x86_sys.iobus.cpu_side_ports
     x86_sys.bridge.cpu_side_port = x86_sys.membus.mem_side_ports
     # Allow the bridge to pass through:
@@ -477,30 +473,19 @@ def connectX86ClassicSystem(x86_sys, numCPUs, cxl_mem_size):
     #  2) the bridge to pass through the IO APIC (two pages, already contained in 1),
     #  3) everything in the IO address range up to the local APIC, and
     #  4) then the entire PCI address space and beyond.
-    if x86_sys.enable_cxl:
-        cxl_mem_start = 0x100000000
-        cxl_mem_size_ = AddrRange(cxl_mem_size).size()
-        if len(x86_sys.mem_ranges) == 2:
-            cxl_mem_start = math.ceil((x86_sys.mem_ranges[1].size() + 0x100000000) / 0x100000000) * 0x100000000
-        cxl_mem_end = cxl_mem_start + cxl_mem_size_
-        # 0x100000000=4GB 0x300000000=12GB
     x86_sys.bridge.ranges = [
-        AddrRange(0xC0000000, 0xFFFF0000),      # (3GB,4GB-64kB)
+        AddrRange(0xC0000000, 0xFFFF0000),  # (3GB,4GB-64kB)
     ]
-    if x86_sys.enable_cxl:
-        x86_sys.bridge.ranges.append(AddrRange(cxl_mem_start, cxl_mem_end))
     x86_sys.bridge.ranges.append(
         AddrRange(IO_address_space_base, interrupts_address_space_base - 1)
     )
     x86_sys.bridge.ranges.append(
         AddrRange(pci_config_address_space_base, Addr.max)
     )
-    if x86_sys.enable_cxl:
-        x86_sys.pc.south_bridge.cxlmemory.cxl_mem_range = AddrRange(cxl_mem_start, cxl_mem_end)
 
     # Create a bridge from the IO bus to the memory bus to allow access to
     # the local APIC (two pages)
-    x86_sys.apicbridge = Bridge(delay="50ns", enable_cxl=x86_sys.enable_cxl)
+    x86_sys.apicbridge = Bridge(delay="50ns")
     x86_sys.apicbridge.cpu_side_port = x86_sys.iobus.mem_side_ports
     x86_sys.apicbridge.mem_side_port = x86_sys.membus.cpu_side_ports
     x86_sys.apicbridge.ranges = [
@@ -528,16 +513,12 @@ def connectX86RubySystem(x86_sys):
 
 def makeX86System(
     mem_mode,
-    cxl_mem_size,
     numCPUs=1,
     mdesc=None,
     workload=None,
     Ruby=False,
-    enable_cxl=False,
 ):
     self = System()
-
-    self.enable_cxl = enable_cxl
 
     self.m5ops_base = 0xFFFF0000
 
@@ -580,7 +561,7 @@ def makeX86System(
     if Ruby:
         connectX86RubySystem(self)
     else:
-        connectX86ClassicSystem(self, numCPUs, cxl_mem_size)
+        connectX86ClassicSystem(self, numCPUs)
 
     # Disks
     disks = makeCowDisks(mdesc.disks())
@@ -687,13 +668,14 @@ def makeX86System(
 
 
 def makeLinuxX86System(
-    mem_mode, cxl_mem_size, numCPUs=1, mdesc=None, Ruby=False, cmdline=None,
-    enable_cxl=False
+    mem_mode,
+    numCPUs=1,
+    mdesc=None,
+    Ruby=False,
+    cmdline=None,
 ):
     # Build up the x86 system and then specialize it for Linux
-    self = makeX86System(
-        mem_mode, cxl_mem_size, numCPUs, mdesc, X86FsLinux(), Ruby, enable_cxl
-    )
+    self = makeX86System(mem_mode, numCPUs, mdesc, X86FsLinux(), Ruby)
 
     # We assume below that there's at least 1MiB of memory. We'll require 2
     # just to avoid corner cases.
@@ -713,15 +695,6 @@ def makeLinuxX86System(
         ),
     ]
 
-    # if enable_cxl:
-    #     entries.append(
-    #         X86E820Entry(
-    #             addr=0x100000000,
-    #             size='2GB',
-    #             range_type=1,
-    #         ),
-    #     )
-
     # Mark [mem_size, 3iB) as reserved if memory less than 3GiB, which force
     # IO devices to be mapped to [0xC0000000, 0xFFFF0000). Requests to this
     # specific range can pass though bridge to iobus.
@@ -733,8 +706,6 @@ def makeLinuxX86System(
                 range_type=2,
             )
         )
-        if enable_cxl:
-            entries.append(X86E820Entry(addr=0x100000000, size=cxl_mem_size, range_type=1))
 
     # Reserve the last 16KiB of the 32-bit address space for the m5op interface
     entries.append(X86E820Entry(addr=0xFFFF0000, size="64KiB", range_type=2))
@@ -747,13 +718,10 @@ def makeLinuxX86System(
         entries.append(
             X86E820Entry(
                 addr=0x100000000,
-                size="%dB" % (self.mem_ranges[1].size()-1),
+                size="%dB" % (self.mem_ranges[1].size() - 1),
                 range_type=1,
             )
         )
-        if enable_cxl:
-            cxl_addr_start = math.ceil((self.mem_ranges[1].size() + 0x100000000) / 0x100000000) * 0x100000000
-            entries.append(X86E820Entry(addr=cxl_addr_start, size=cxl_mem_size, range_type=1))
 
     self.workload.e820_table.entries = entries
 

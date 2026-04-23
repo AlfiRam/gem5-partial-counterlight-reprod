@@ -70,10 +70,6 @@ class DataLocationPartitionManager(PartitionManager):
         [], "Full available range(s) of DRAM"
     )
     dram_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
-    cxl_full_ranges = VectorParam.AddrRange(
-        [], "Full available range(s) of CXL"
-    )
-    cxl_os_ranges = VectorParam.AddrRange([], "OS-visible range(s) of DRAM")
 
 
 class BasePartitioningPolicy(SimObject):

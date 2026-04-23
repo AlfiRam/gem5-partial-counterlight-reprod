@@ -39,10 +39,14 @@ configs/dram/lowp_sweep.cfg
 typings
 .DS_Store
 
-# CXL-DMSim
 /fs_result
 /full-system-image
 Doxygen.config
-/include/cxl_kvs/viper/build
 /accel_result
 /output
+ANALYSIS_REPORT.md
+BMT_STATE_MODEL_ANALYSIS.md
+COUNTER_LIGHT_DESIGN.md
+READ_MISS_METADATA_REQUESTS.md
+SECURE_PROCESSOR_101.md
+split_counter_bmt_explanation.txt

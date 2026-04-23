@@ -40,9 +40,9 @@
 
 #include <queue>
 
-#include "enums/IntegrityAllocationMode.hh"
 #include "enums/IntegrityTreeType.hh"
 #include "enums/MetadataCacheType.hh"
+#include "enums/ReadPathMode.hh"
 #include "mem/cache/metadata_cache.hh"
 #include "mem/qport.hh"
 #include "params/AbstractIntegrityVerifier.hh"
@@ -85,8 +85,6 @@ class AbstractIntegrityVerifier : public ClockedObject
 
     enums::IntegrityTreeType integrityTreeType;
 
-    enums::IntegrityAllocationMode integrityAllocationMode;
-
     /**
      * Used if a new metadata request is generated.
      */
@@ -101,6 +99,17 @@ class AbstractIntegrityVerifier : public ClockedObject
      * Time (in cycles) to complete an XOR.
      */
     Cycles xorLatency;
+
+    /**
+     * Read-path timing model selector.
+     */
+    enums::ReadPathMode readPathMode;
+
+    /**
+     * Counter-light §IV-D parity-decode latency. Only applied when
+     * readPathMode == CounterLight.
+     */
+    Cycles parityDecodeLatency;
 
     /**
      * Keep a pointer to the system to allow querying memory properties.
@@ -120,9 +129,6 @@ class AbstractIntegrityVerifier : public ClockedObject
     AddrRangeList dramFullRanges;
     AddrRangeList dramOsRanges;
     AddrRangeList dramIntegrityRanges;
-    AddrRangeList cxlFullRanges;
-    AddrRangeList cxlOsRanges;
-    AddrRangeList cxlIntegrityRanges;
 
     /**
      * Convienence range list for all integrity ranges.
@@ -163,8 +169,7 @@ class AbstractIntegrityVerifier : public ClockedObject
 
 
     /**
-     * Return if this integrity verifier has valid DRAM and CXL ranges stored,
-     * based on the integrity allocation mode.
+     * Return if this integrity verifier has a valid DRAM integrity range.
      */
     bool hasValidRanges();
 
@@ -724,6 +729,39 @@ class AbstractIntegrityVerifier : public ClockedObject
     bool hasOutstandingMetadataRequest(uint64_t node, PacketPtr pkt);
 
     /**
+     * Phase 3 (BmtStripped) bridge structures. 3a pre-issues a Counter
+     * metadata request in parallel with the data DRAM read, but registers
+     * the waiting data packet at macNode in outstandingMetadataRequests
+     * (so the existing attemptXor/getParentNode pipeline finds it). The
+     * Counter response later arrives keyed by counterNode, so these two
+     * members bridge back: counterNode -> waiting data RequestPtrs, and a
+     * set of the Counter-fetch RequestPtrs we ourselves pre-issued (used
+     * to distinguish 3a-originated Counter walks from write-path FullBmt
+     * walks, which must be unaffected).
+     */
+    std::unordered_multimap<uint64_t, RequestPtr> bmtStrippedCounterWaiters;
+    std::unordered_set<RequestPtr> bmtStrippedCounterReqs;
+
+    /**
+     * Phase 3.6 (CounterLightMacBmt) bridge structures. The data packet
+     * waits on two independent dependencies: the BMT walk at treeLeafNode
+     * (handled by the CounterLightBmt-style redirect in getParentNode /
+     * outstandingMetadataRequests) AND a separate MAC block fetch (handled
+     * here). On LLC read miss we pre-issue a metadata request for the MAC
+     * block; its response lands in processMetadataResp, where a bridge
+     * drains `counterLightMacBmtMacWaiters[macNode]` and clears each
+     * waiter's entry in `counterLightMacBmtMacPending`, then kicks
+     * attemptXor. `counterLightMacBmtMacReqs` tags the MAC-fetch request
+     * ids so processMetadataResp can distinguish them from FullBmt-path
+     * walks. `counterLightMacBmtMacPending` is the O(1) stall bit
+     * attemptXor checks for the MAC-still-outstanding dependency.
+     */
+    std::unordered_multimap<uint64_t, RequestPtr>
+        counterLightMacBmtMacWaiters;
+    std::unordered_set<RequestPtr> counterLightMacBmtMacReqs;
+    std::unordered_set<RequestPtr> counterLightMacBmtMacPending;
+
+    /**
      * Store the outstanding evictions for integrity metadata. This associates
      * a (parent) tree ID with a tree ID to be evicted and the request that
      * will have metadata to cache that takes the place of the evicted entry.
@@ -799,9 +837,6 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Scalar dataUsedDram;
       statistics::Scalar dataUsedDramOs;
       statistics::Scalar dataUsedDramIntegrity;
-      statistics::Scalar dataUsedCxl;
-      statistics::Scalar dataUsedCxlOs;
-      statistics::Scalar dataUsedCxlIntegrity;
       statistics::Scalar dataUsedOs;
       statistics::Scalar dataUsedIntegrity;
 
@@ -815,30 +850,10 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Scalar reqHandledDram;
       statistics::Scalar reqHandledDramOs;
       statistics::Scalar reqHandledDramIntegrity;
-      statistics::Scalar reqHandledCxl;
-      statistics::Scalar reqHandledCxlOs;
-      statistics::Scalar reqHandledCxlIntegrity;
-
-      statistics::Scalar reqHandledTransDram;
-      statistics::Scalar reqHandledTransDramOs;
-      statistics::Scalar reqHandledTransDramIntegrity;
-      statistics::Scalar reqHandledTransCxl;
-      statistics::Scalar reqHandledTransCxlOs;
-      statistics::Scalar reqHandledTransCxlIntegrity;
 
       statistics::Scalar bytesHandledDram;
       statistics::Scalar bytesHandledDramOs;
       statistics::Scalar bytesHandledDramIntegrity;
-      statistics::Scalar bytesHandledCxl;
-      statistics::Scalar bytesHandledCxlOs;
-      statistics::Scalar bytesHandledCxlIntegrity;
-
-      statistics::Scalar bytesHandledTransDram;
-      statistics::Scalar bytesHandledTransDramOs;
-      statistics::Scalar bytesHandledTransDramIntegrity;
-      statistics::Scalar bytesHandledTransCxl;
-      statistics::Scalar bytesHandledTransCxlOs;
-      statistics::Scalar bytesHandledTransCxlIntegrity;
 
       statistics::Scalar totalRequestingTime;
       statistics::Scalar totalMetadataReqTime;
@@ -847,16 +862,6 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Scalar totalReqTimeDram;
       statistics::Scalar totalReqTimeDramOs;
       statistics::Scalar totalReqTimeDramIntegrity;
-      statistics::Scalar totalReqTimeCxl;
-      statistics::Scalar totalReqTimeCxlOs;
-      statistics::Scalar totalReqTimeCxlIntegrity;
-
-      statistics::Scalar totalReqTimeTransDram;
-      statistics::Scalar totalReqTimeTransDramOs;
-      statistics::Scalar totalReqTimeTransDramIntegrity;
-      statistics::Scalar totalReqTimeTransCxl;
-      statistics::Scalar totalReqTimeTransCxlOs;
-      statistics::Scalar totalReqTimeTransCxlIntegrity;
 
       statistics::Formula avgReqLatency;
       statistics::Formula avgMetadataReqLatency;
@@ -865,16 +870,6 @@ class AbstractIntegrityVerifier : public ClockedObject
       statistics::Formula avgReqTimeDram;
       statistics::Formula avgReqTimeDramOs;
       statistics::Formula avgReqTimeDramIntegrity;
-      statistics::Formula avgReqTimeCxl;
-      statistics::Formula avgReqTimeCxlOs;
-      statistics::Formula avgReqTimeCxlIntegrity;
-
-      statistics::Formula avgReqTimeTransDram;
-      statistics::Formula avgReqTimeTransDramOs;
-      statistics::Formula avgReqTimeTransDramIntegrity;
-      statistics::Formula avgReqTimeTransCxl;
-      statistics::Formula avgReqTimeTransCxlOs;
-      statistics::Formula avgReqTimeTransCxlIntegrity;
     } stats;
 
 

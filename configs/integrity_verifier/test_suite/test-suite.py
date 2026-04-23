@@ -179,32 +179,9 @@ def add_arguments(parser):
         nargs="+",
         choices=[
             "app-dram-integrity-dram",
-            "app-dram-integrity-cxl",
-            "app-cxl-integrity-dram",
-            "app-cxl-integrity-cxl",
             "app-dram-only",
-            "app-cxl-only",
         ],
         help="System configuration to use.",
-    )
-
-    parser.add_argument(
-        "--cxl-latency",
-        type=str,
-        required=False,
-        nargs="+",
-        help="Manual added latency for CXL memory (latency added twice, for request and response).",
-    )
-
-    parser.add_argument(
-        "--cxl-memory-type",
-        type=str,
-        required=False,
-        nargs="+",
-        choices=[
-            "DRAM",
-            "Flash",
-        ],
     )
 
     parser.add_argument(
@@ -253,25 +230,6 @@ def add_arguments(parser):
     )
 
     parser.add_argument(
-        "--page-swap",
-        type=str,
-        required=False,
-        default="No",
-        nargs="+",
-        choices=[
-            "Yes",
-            "No",
-        ],
-    )
-
-    parser.add_argument(
-        "--page-swap-epoch",
-        type=int,
-        required=False,
-        nargs="+",
-    )
-
-    parser.add_argument(
         "--debug-flags",
         type=str,
         required=False,
@@ -304,10 +262,6 @@ def compile_command(
     metadata_cache_type: str = None,
     metadata_cache_size: int = None,
     enable_partition_manager: str = None,
-    page_swap: str = None,
-    page_swap_epoch: int = None,
-    cxl_latency: str = None,
-    cxl_memory_type: str = None,
     extra_arguments: str = "",
 ):
     match args.gem5:
@@ -443,38 +397,18 @@ def compile_command(
     common_config_params = ""
     match configuration:
         case "app-dram-integrity-dram":
-            # configuration_params = "--use-integrity-verifier --dram-size=3GiB --integrity-allocation-mode=DramOnly"
-            configuration_params = "--use-integrity-verifier --dram-size=16GiB --cxl-mode=DRAM --cxl-size=16GiB --integrity-allocation-mode=DramOnly --app-on-device=DRAM"
-        case "app-dram-integrity-cxl":
-            # configuration_params = "--use-integrity-verifier --dram-size=3GiB --cxl-mode=DRAM --cxl-size=2GiB --integrity-allocation-mode=CxlOnly --no-apps-on-secondary-memory"
-            configuration_params = "--use-integrity-verifier --dram-size=16GiB --cxl-mode=DRAM --cxl-size=16GiB --integrity-allocation-mode=CxlOnly --app-on-device=DRAM"
-        case "app-cxl-integrity-dram":
-            # configuration_params = "--use-integrity-verifier --dram-size=3GiB --dram-os-size=256MiB --cxl-mode=DRAM --cxl-size=2GiB --integrity-allocation-mode=DramOnly"
-            configuration_params = "--use-integrity-verifier --dram-size=16GiB --cxl-mode=DRAM --cxl-size=16GiB --integrity-allocation-mode=DramOnly --app-on-device=CXL"
-        case "app-cxl-integrity-cxl":
-            # configuration_params = "--use-integrity-verifier --dram-size=256MiB --dram-os-size=256MiB --cxl-mode=DRAM --cxl-size=2GiB --integrity-allocation-mode=CxlOnly"
-            configuration_params = "--use-integrity-verifier --dram-size=16GiB --cxl-mode=DRAM --cxl-size=16GiB --integrity-allocation-mode=CxlOnly --app-on-device=CXL"
+            configuration_params = "--use-integrity-verifier --dram-size=16GiB"
         case "app-dram-only":
-            # configuration_params = "--dram-size=3GiB"
-            configuration_params = "--dram-size=16GiB --cxl-mode=DRAM --cxl-size=16GiB --app-on-device=DRAM"
-        case "app-cxl-only":
-            # configuration_params = "--dram-size=256MiB --dram-os-size=256MiB --cxl-mode=DRAM --cxl-size=2GiB"
-            configuration_params = "--dram-size=16GiB --cxl-mode=DRAM --cxl-size=16GiB --app-on-device=CXL"
+            configuration_params = "--dram-size=16GiB"
         case _:
             print(f"Unknown configuration '{configuration}'")
             exit(1)
-
-    if "cxl" in configuration and cxl_memory_type is not None:
-        configuration_params += f" --cxl-memory-type={cxl_memory_type}"
 
     outdir = f"output/{args.test_group}/{benchmark}_{configuration}"
 
     if "integrity-" not in configuration:
         # This configuration must have no integrity capability. Nullify the integrity-related parameters.
         tree_type = None
-
-        # No page swap parameters as well.
-        page_swap = None
 
     if tree_type is not None:
         tree_type_param = f"--integrity-tree-type={tree_type}"
@@ -536,33 +470,7 @@ def compile_command(
         case _:
             pass
 
-    if page_swap is not None:
-        outdir += f"_PageSwap{page_swap}"
-    else:
-        page_swap_type_param = ""
-
-    match page_swap:
-        case "No":
-            page_swap_type_param = ""
-            page_swap_epoch = None
-        case "Yes":
-            page_swap_type_param = "--use-ncx --use-page-swapper"
-        case _:
-            pass
-
-    if page_swap_epoch is not None:
-        outdir += f"_SwapEpoch{page_swap_epoch}"
-        page_swap_type_param += f" --page-swap-epoch={page_swap_epoch}"
-
-    if "cxl" not in configuration:
-        # CXL latency does not apply if CXL is not used.
-        cxl_latency = None
-
-    if cxl_latency is not None:
-        outdir += f"_CxlLat{cxl_latency}"
-        configuration_params += f" --cxl-latency={cxl_latency}"
-
-    command = f"{gem5_binary} {gem5_params} --outdir {outdir} {config_file} {benchmark_params} {common_config_params} {configuration_params} {tree_type_param} {metadata_cache_type_param} {enable_partition_manager_param} {page_swap_type_param} {extra_arguments}"
+    command = f"{gem5_binary} {gem5_params} --outdir {outdir} {config_file} {benchmark_params} {common_config_params} {configuration_params} {tree_type_param} {metadata_cache_type_param} {enable_partition_manager_param} {extra_arguments}"
 
     return command
 
@@ -780,10 +688,6 @@ if __name__ == "__main__":
     cache_types = args.cache_type or [None]
     metadata_cache_sizes = args.metadata_cache_size or [None]
     enable_partition_manager_types = args.enable_partition_manager or [None]
-    page_swap_types = args.page_swap or [None]
-    page_swap_epochs = args.page_swap_epoch or [None]
-    cxl_latencies = args.cxl_latency or [None]
-    cxl_memory_types = args.cxl_memory_type or [None]
 
     # Generate variations of tests
     commands_to_run = []
@@ -810,25 +714,17 @@ if __name__ == "__main__":
                             for (
                                 enable_partition_manager
                             ) in enable_partition_manager_types:
-                                for p in page_swap_types:
-                                    for epoch in page_swap_epochs:
-                                        for l in cxl_latencies:
-                                            for cmt in cxl_memory_types:
-                                                command = compile_command(
-                                                    args,
-                                                    benchmark=b,
-                                                    configuration=c,
-                                                    tree_type=t,
-                                                    metadata_cache_type=cache,
-                                                    metadata_cache_size=metadata_cache_size,
-                                                    enable_partition_manager=enable_partition_manager,
-                                                    page_swap=p,
-                                                    page_swap_epoch=epoch,
-                                                    cxl_latency=l,
-                                                    cxl_memory_type=cmt,
-                                                    extra_arguments=args.extra_arguments,
-                                                )
-                                                commands_to_run.append(command)
+                                command = compile_command(
+                                    args,
+                                    benchmark=b,
+                                    configuration=c,
+                                    tree_type=t,
+                                    metadata_cache_type=cache,
+                                    metadata_cache_size=metadata_cache_size,
+                                    enable_partition_manager=enable_partition_manager,
+                                    extra_arguments=args.extra_arguments,
+                                )
+                                commands_to_run.append(command)
 
     # Set the maximum number of concurrent commands
     max_concurrent_commands = args.threads

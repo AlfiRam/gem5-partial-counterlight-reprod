@@ -84,16 +84,6 @@ class AbstractBoard:
         processor: "AbstractProcessor",
         memory: Optional[List["AbstractMemorySystem"]] = [],
         cache_hierarchy: Optional["AbstractCacheHierarchy"] = None,
-        cxl_mode: Optional[str] = "Disabled",
-        cxl_memory: Optional["AbstractMemorySystem"] = None,
-        is_asic: Optional[bool] = False,
-        main_memory_type: Optional[str] = "DRAM",
-        use_ncx: Optional[bool] = False,
-        cxl_latency: Optional[str] = "35ns",
-        cxl_latency_read_req: Optional[str] = None,
-        cxl_latency_read_resp: Optional[str] = None,
-        cxl_latency_write_req: Optional[str] = None,
-        cxl_latency_write_resp: Optional[str] = None,
     ) -> None:
         """
         :param clk_freq: The clock frequency for this board.
@@ -115,66 +105,18 @@ class AbstractBoard:
         # Set the processor, memory, and cache hierarchy.
         self.processor = processor
 
-        assert cxl_mode in ["Disabled", "PCIe", "DRAM"]
-        self._cxl_mode = cxl_mode
-
-        self._is_asic = is_asic
-
-        assert main_memory_type in ["DRAM", "CXL"]
-        self._main_memory_type = main_memory_type
-
-        # Sanity checking arguments.
-        if self._cxl_mode == "Disabled":
-            assert cxl_memory is None
-        else:
-            assert cxl_memory is not None
-
         self._indexed_memory = []
 
         if len(memory) > 0:
             self.memory = memory
             self._has_memory = True
+            self._indexed_memory.extend(self.memory)
         else:
             self._has_memory = False
-
-        if cxl_memory:
-            self.cxl_memory = cxl_memory
-
-        # Set the primary memory type.
-        match self._main_memory_type:
-            case "DRAM":
-                assert len(self.memory) > 0
-                self._indexed_memory.extend(self.memory)
-            case "CXL":
-                assert self.cxl_memory is not None
-                self._indexed_memory.append(self.cxl_memory)
-
-        # Set the secondary memory type, if it exists.
-        match self._main_memory_type:
-            case "DRAM":
-                # CXL may be secondary memory.
-                if cxl_memory:
-                    self._indexed_memory.append(self.cxl_memory)
-                    self._secondary_memory_type = "CXL"
-            case "CXL":
-                # DRAM may be secondary memory.
-                if memory:
-                    self._indexed_memory.extend(self.memory)
-                    self._secondary_memory_type = "DRAM"
 
         self._cache_hierarchy = cache_hierarchy
         if cache_hierarchy is not None:
             self.cache_hierarchy = cache_hierarchy
-
-        self._use_ncx = use_ncx
-        if use_ncx:
-            self.ncx = InstrumentedNoncoherentXBar()
-
-        self._cxl_latency = cxl_latency
-        self._cxl_latency_read_req = cxl_latency_read_req
-        self._cxl_latency_read_resp = cxl_latency_read_resp
-        self._cxl_latency_write_req = cxl_latency_write_req
-        self._cxl_latency_write_resp = cxl_latency_write_resp
 
         # This variable determines whether the board is to be executed in
         # full-system or syscall-emulation mode. This is set when the workload
@@ -207,18 +149,8 @@ class AbstractBoard:
         return self.memory
 
     def has_memory(self) -> bool:
-        """Get whether or not this board has memory (DRAM).
-
-        This may be the case if CXL memory is used as primary memory.
-        """
+        """Get whether or not this board has memory (DRAM)."""
         return self._has_memory
-
-    def get_cxl_memory(self) -> "AbstractMemory":
-        """Get the cxl memory (RAM) connected to the board.
-
-        :returns: The memory system.
-        """
-        return self.cxl_memory
 
     def get_indexed_memory(self, index: int) -> "AbstractMemory":
         """Get the memory based on the index provided.
@@ -255,15 +187,13 @@ class AbstractBoard:
                 ports.extend(m.get_mem_ports())
             return ports
         else:
-            # There are no applicable memory ports if CXL is used as the
-            # main form of memory.
             return []
 
     def use_ncx(self) -> bool:
-        return self._use_ncx
+        return False
 
     def get_ncx(self) -> Optional["NoncoherentXBar"]:
-        return self.ncx
+        return None
 
     def get_cache_hierarchy(self) -> Optional["AbstractCacheHierarchy"]:
         """Get the cache hierarchy connected to the board.
@@ -513,8 +443,6 @@ class AbstractBoard:
         if self.has_memory():
             for m in self.get_memory():
                 m.incorporate_memory(self)
-        if self._cxl_mode == "DRAM":
-            self.get_cxl_memory().incorporate_memory(self)
 
         # Incorporate the cache hierarchy for the motherboard.
         if self.get_cache_hierarchy():
@@ -533,8 +461,6 @@ class AbstractBoard:
         if self.has_memory():
             for m in self.get_memory():
                 m._post_instantiate()
-        if self._cxl_mode == "DRAM":
-            self.get_cxl_memory()._post_instantiate()
 
     def _pre_instantiate(self, full_system: Optional[bool] = None) -> Root:
         """To be called immediately before ``m5.instantiate``. This is where
@@ -568,8 +494,6 @@ class AbstractBoard:
         if self.has_memory():
             for m in self.get_memory():
                 m._pre_instantiate(root)
-        if self._cxl_mode == "DRAM":
-            self.get_cxl_memory()._pre_instantiate(root)
         if self.get_cache_hierarchy():
             self.get_cache_hierarchy()._pre_instantiate(root)
 
