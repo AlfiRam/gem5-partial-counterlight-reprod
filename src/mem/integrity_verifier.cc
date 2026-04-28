@@ -721,20 +721,24 @@ AbstractIntegrityVerifier::getParentNode(PacketPtr pkt)
         return integrityTree->parentBlockIndex(pkt->getMetadataNode());
     }
 
-    // Config 4 / 5 — CounterLightBmt & CounterLightMacBmt redirect. For read
-    // data packets, the "parent" the pipeline keys on is TreeLeaf (MAC +
-    // Counter are skipped for the walk; counter rides in parity). The data
+    // Config 4 / 5 — CounterLightBmt & CounterLightMacBmt redirect. For both
+    // read and write data packets, the "parent" the pipeline keys on is
+    // TreeLeaf (MAC + Counter are skipped for the walk; counter rides in
+    // parity, and for CounterLightBmt MAC also rides in parity). The data
     // packet is registered on treeLeafNode by the matching handlePacket
     // branch; attemptXor, hasOutstandingMetadataRequest, and
     // parentNodeIsPendingEviction all call getParentNode(pkt) to look up the
-    // same node, so they must agree. Triple-guarded on mode + isRead() +
-    // !isMetadataRequest() so metadata and write packets never land here.
-    // CounterLightMacBmt adds a separate MAC-fetch dependency, tracked
-    // out-of-band via counterLightMacBmtMacPending — so the redirected
-    // treeLeafNode remains the single "parent" the generic pipeline sees.
+    // same node, so they must agree. The (isRead()||isWrite()) widening is
+    // required for the CounterLightBmt/MacBmt write branches to function —
+    // a write registered at treeLeafNode would otherwise be looked up at
+    // macNode here and attemptXor would fire prematurely. !isMetadataRequest
+    // ensures metadata packets never land here. CounterLightMacBmt adds a
+    // separate MAC-fetch dependency tracked out-of-band via
+    // counterLightMacBmtMacPending — so the redirected treeLeafNode remains
+    // the single "parent" the generic pipeline sees.
     if ((readPathMode == enums::ReadPathMode::CounterLightBmt ||
          readPathMode == enums::ReadPathMode::CounterLightMacBmt) &&
-        pkt->isRead() &&
+        (pkt->isRead() || pkt->isWrite()) &&
         !pkt->isMetadataRequest())
     {
         size_t macNode = integrityTree->addressToBlockIndex(pkt->getAddr());
@@ -927,6 +931,55 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         return true;
     }
 
+    // Config 3 — CounterLight write path. Mirrors the read-side short-circuit
+    // above for LLC writebacks. Per ISCA 2024 §IV-D the per-line encryption
+    // counter is folded into the data block's ECC parity bits, so a writeback
+    //   (a) computes the new MAC over the new data, and
+    //   (b) re-encodes the new counter + MAC into the parity bits,
+    // both done locally — no integrity-tree walk, no Counter fetch, no MAC
+    // fetch, zero metadata-cache traffic. The pure-CounterLight model has no
+    // BMT (paper §V "Counter-Light w/o BMT"), so there is no replay-protection
+    // walk on the write side either.
+    //
+    // Latency charged: integrityHashingLatency (MAC compute, same role as on
+    // the read side and in FullBmt) + parityDecodeLatency (the paper treats
+    // parity encode / decode as the same handful of XOR gates, so we reuse
+    // the existing knob; if asymmetric encode cost is wanted later, add a
+    // parity_encode_latency Param.Cycles in IntegrityVerifier.py and use it
+    // here instead).
+    //
+    // Pipeline interaction: HashCompletionEvent → completeIntegrityHash
+    // removes pkt from outstandingIntegrityHashes and calls attemptXor.
+    // attemptXor's three guards now all pass — hashes empty (just removed),
+    // hasOutstandingMetadataRequest false (we never registered any parent),
+    // CounterLightMacBmt MAC-pending guard not our mode — so it schedules
+    // XorCompletionEvent → completeXor → completeIntegrityVerification.
+    // For a write packet, completeIntegrityVerification hits the isWrite()
+    // arm and calls schedReq(pkt). The fatal("Unimplemented metadata writes")
+    // lives in the isMetadataRequest() arm and is unreachable here (we never
+    // generate a metadata packet under CounterLight).
+    if (readPathMode == enums::ReadPathMode::CounterLight &&
+        !pkt->isMetadataRequest() &&
+        pkt->isWrite())
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CounterLight write short-circuit for pkt %s "
+            "(MAC compute + parity encode, no metadata fetch)\n",
+            __func__, pkt->print());
+        schedule(
+            new HashCompletionEvent(this, pkt),
+            clockEdge(parityDecodeLatency + integrityHashingLatency)
+        );
+        assert(outstandingIntegrityHashes.find(pkt->req) ==
+                outstandingIntegrityHashes.end());
+        assert(outstandingIntegrityVerification.find(pkt) ==
+                outstandingIntegrityVerification.end());
+        outstandingIntegrityHashes.insert(pkt->req);
+        outstandingIntegrityVerification.insert(pkt);
+        assert(packetLookup[pkt->req] == pkt);
+        return true;
+    }
+
     // Config 4 — CounterLightBmt. Layers the full BMT walk back on top of the
     // CounterLight read path to price the cost of adding replay protection to
     // Counter-light. Same parity-decode + MAC-check hash timing as
@@ -980,6 +1033,61 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         } else {
             DPRINTF(AbstractIntegrityVerifier,
                 "%s: CounterLightBmt batching on outstanding TreeLeaf "
+                "node %llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+        }
+        return true;
+    }
+
+    // Config 4 — CounterLightBmt write path. Mirrors the read-side branch
+    // above. Counter and MAC ride in the data block's ECC parity per
+    // CounterLight, so writes do (a) MAC compute + (b) parity encode locally
+    // — no MAC fetch, no Counter fetch. The BMT layer is added back
+    // specifically to backstop the counter against replay, so writes register
+    // a TreeLeaf-level metadata dependency and walk up via the standard
+    // cascade (cached ancestors short-circuit naturally via
+    // processMetadataResp). The data packet's parent-node abstraction is
+    // redirected to treeLeafNode by getParentNode (the redirect there has
+    // been widened to also fire for writes); attemptXor,
+    // hasOutstandingMetadataRequest, and parentNodeIsPendingEviction all see
+    // the same node we register on here.
+    if (readPathMode == enums::ReadPathMode::CounterLightBmt &&
+        !pkt->isMetadataRequest() &&
+        pkt->isWrite())
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CounterLightBmt write hash + TreeLeaf walk for pkt %s\n",
+            __func__, pkt->print());
+        schedule(
+            new HashCompletionEvent(this, pkt),
+            clockEdge(parityDecodeLatency + integrityHashingLatency)
+        );
+        assert(outstandingIntegrityHashes.find(pkt->req) ==
+                outstandingIntegrityHashes.end());
+        assert(outstandingIntegrityVerification.find(pkt) ==
+                outstandingIntegrityVerification.end());
+        outstandingIntegrityHashes.insert(pkt->req);
+        outstandingIntegrityVerification.insert(pkt);
+        assert(packetLookup[pkt->req] == pkt);
+
+        size_t macNode = integrityTree->addressToBlockIndex(pkt->getAddr());
+        size_t counterNode = integrityTree->parentBlockIndex(macNode);
+        size_t treeLeafNode = integrityTree->parentBlockIndex(counterNode);
+
+        bool needsRequest =
+            outstandingMetadataRequests.find(treeLeafNode) ==
+            outstandingMetadataRequests.end();
+        addToOutstandingMetadataRequests(treeLeafNode, pkt);
+        if (needsRequest) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightBmt write issuing TreeLeaf request for "
+                "node %llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+            PacketPtr md_pkt = generateMetadataRequest(treeLeafNode);
+            schedMetadataReq(md_pkt);
+        } else {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightBmt write batching on outstanding TreeLeaf "
                 "node %llu (pkt %s)\n",
                 __func__, treeLeafNode, pkt->print());
         }
@@ -1066,6 +1174,88 @@ AbstractIntegrityVerifier::handlePacket(PacketPtr pkt)
         } else {
             DPRINTF(AbstractIntegrityVerifier,
                 "%s: CounterLightMacBmt batching on outstanding MAC "
+                "node %llu (pkt %s)\n",
+                __func__, macNode, pkt->print());
+        }
+        return true;
+    }
+
+    // Config 5 — CounterLightMacBmt write path. Mirrors the read-side branch
+    // above. Counter rides in parity (no Counter fetch); MAC is stored in a
+    // separate DRAM block (MacBmt-style fetch); BMT walk from TreeLeaf
+    // backstops the counter against replay. Two independent dependencies
+    // block XOR:
+    //   (1) TreeLeaf walk via outstandingMetadataRequests (BMT replay).
+    //   (2) MAC fetch tracked out-of-band via counterLightMacBmtMacPending,
+    //       released through the MAC bridge in processMetadataResp (the
+    //       bridge's data-arrived check uses outstandingIntegrityHashes /
+    //       outstandingIntegrityVerification — both populated here before
+    //       any schedMetadataReq call, so an early MAC arrival hits the
+    //       attemptXor path correctly).
+    // Insert order matters (H5, synchronous cache-hit re-entry): pending
+    // bit → waiters map → reqs set, all BEFORE schedMetadataReq.
+    // attemptXor's MAC-pending guard has been widened to also gate on
+    // isWrite(), so writes correctly stall until both dependencies clear.
+    if (readPathMode == enums::ReadPathMode::CounterLightMacBmt &&
+        !pkt->isMetadataRequest() &&
+        pkt->isWrite())
+    {
+        DPRINTF(AbstractIntegrityVerifier,
+            "%s: CounterLightMacBmt write hash + TreeLeaf walk + MAC fetch "
+            "for pkt %s\n",
+            __func__, pkt->print());
+        schedule(
+            new HashCompletionEvent(this, pkt),
+            clockEdge(parityDecodeLatency + integrityHashingLatency)
+        );
+        assert(outstandingIntegrityHashes.find(pkt->req) ==
+                outstandingIntegrityHashes.end());
+        assert(outstandingIntegrityVerification.find(pkt) ==
+                outstandingIntegrityVerification.end());
+        outstandingIntegrityHashes.insert(pkt->req);
+        outstandingIntegrityVerification.insert(pkt);
+        assert(packetLookup[pkt->req] == pkt);
+
+        size_t macNode = integrityTree->addressToBlockIndex(pkt->getAddr());
+        size_t counterNode = integrityTree->parentBlockIndex(macNode);
+        size_t treeLeafNode = integrityTree->parentBlockIndex(counterNode);
+
+        // --- (1) BMT walk dependency (treeLeafNode). ---
+        bool needsTreeRequest =
+            outstandingMetadataRequests.find(treeLeafNode) ==
+            outstandingMetadataRequests.end();
+        addToOutstandingMetadataRequests(treeLeafNode, pkt);
+        if (needsTreeRequest) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt write issuing TreeLeaf request for "
+                "node %llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+            PacketPtr tree_pkt = generateMetadataRequest(treeLeafNode);
+            schedMetadataReq(tree_pkt);
+        } else {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt write batching on outstanding "
+                "TreeLeaf node %llu (pkt %s)\n",
+                __func__, treeLeafNode, pkt->print());
+        }
+
+        // --- (2) MAC fetch dependency (macNode). Insert order required. ---
+        counterLightMacBmtMacPending.insert(pkt->req);
+        bool needsMacRequest =
+            counterLightMacBmtMacWaiters.find(macNode) ==
+            counterLightMacBmtMacWaiters.end();
+        counterLightMacBmtMacWaiters.emplace(macNode, pkt->req);
+        if (needsMacRequest) {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt write issuing MAC request for node "
+                "%llu (pkt %s)\n",
+                __func__, macNode, pkt->print());
+            PacketPtr mac_pkt = generateMetadataRequest(macNode);
+            counterLightMacBmtMacReqs.insert(mac_pkt->req);
+            schedMetadataReq(mac_pkt);
+        } else {
+            DPRINTF(AbstractIntegrityVerifier,
+                "%s: CounterLightMacBmt write batching on outstanding MAC "
                 "node %llu (pkt %s)\n",
                 __func__, macNode, pkt->print());
         }
@@ -1251,7 +1441,7 @@ AbstractIntegrityVerifier::attemptXor(PacketPtr pkt)
             __func__, pkt->print());
         return false;
     } else if (readPathMode == enums::ReadPathMode::CounterLightMacBmt &&
-               pkt->isRead() &&
+               (pkt->isRead() || pkt->isWrite()) &&
                !pkt->isMetadataRequest() &&
                counterLightMacBmtMacPending.find(pkt->req) !=
                    counterLightMacBmtMacPending.end()) {
@@ -1259,9 +1449,11 @@ AbstractIntegrityVerifier::attemptXor(PacketPtr pkt)
         // treeLeafNode is already covered by hasOutstandingMetadataRequest
         // above; the MAC fetch is tracked separately and stalls XOR until
         // the MAC response arrives and the bridge in processMetadataResp
-        // clears this set. Triple-guarded on mode + isRead() +
-        // !isMetadataRequest() so writes and metadata packets never hit
-        // this check — other modes are unaffected.
+        // clears this set. Widened from isRead()-only to also cover writes
+        // because the CounterLightMacBmt write branch in handlePacket also
+        // pre-issues a MAC fetch via counterLightMacBmtMacPending — without
+        // this widening, write XOR would fire while MAC is still in flight.
+        // Other modes are unaffected.
         DPRINTF(AbstractIntegrityVerifier, "%s: Not ready to verify pkt %s, "
             "CounterLightMacBmt MAC still pending\n",
             __func__, pkt->print());
