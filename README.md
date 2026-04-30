@@ -27,6 +27,8 @@ cd gem5-counterlight-reprod
 scons build/X86/gem5.opt -j$(nproc)
 ```
 
+Building with all cores (`-j$(nproc)`) can occasionally lead to errors. If the build fails, retry with fewer jobs (e.g., `-j4` or `-j2`).
+
 ## Kernel and disk image
 
 The simulation requires a Linux disk image with GAPBS pre-installed and a matching x86 kernel. Both are too large for git and must be downloaded separately:
