@@ -9,7 +9,7 @@ A gem5-based reproduction of Counter-light Memory Encryption (ISCA 2024), with e
 
 ## Requirements
 
-Same as gem5. Recommended on Ubuntu 20.04 or 22.04:
+Same as gem5. Recommended on Ubuntu 20.04 or 22.04 or 24.04:
 
 ```bash
 sudo apt install build-essential git m4 scons zlib1g zlib1g-dev \
@@ -75,6 +75,12 @@ _FS_FILES = Path("/path/to/your/fs_files")
     --ff-insts 1000000000 \
     --exec-insts 500000000 \
     --read-path-mode=CounterLight
+```
+
+To monitor progress in another terminal:
+
+```bash
+tail -f m5out-bfs-counterlight/board.pc.com_1.device
 ```
 
 ## Reading results
