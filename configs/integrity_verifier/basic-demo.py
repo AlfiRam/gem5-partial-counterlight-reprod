@@ -3,6 +3,9 @@ Integrity-verifier demo: boots gapbs.img under KVM, fast-forwards a fixed
 number of retired instructions via KVM+perf, then measures a fixed-length
 Timing window using the GlobalInstTracker.
 
+Kernel and disk image are loaded from the hardcoded path in `_FS_FILES`
+below. That directory must contain `vmlinux-4.19.83` and `gapbs.img`.
+
 Canonical invocation:
 
     ./build/X86/gem5.opt \\
@@ -38,7 +41,6 @@ Handler also registered for safety:
 """
 
 import argparse
-import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -143,9 +145,7 @@ def _connect_things_with_read_path_override():
 
 board._connect_things = _connect_things_with_read_path_override
 
-_FS_FILES = Path(
-    os.environ.get("CXL_HAMMER_FS_FILES", "/home/malfiram/CXL-Hammer/fs_files")
-)
+_FS_FILES = Path("/home/alfi/gem5-counterlight-reprod/fs_files")
 
 # gapbs.img's /home/gem5/runscript.sh reads `workload arg size` then runs
 # `./$workload $arg $size`. `read` assigns the trailing words to the last
